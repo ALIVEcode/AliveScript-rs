@@ -17,8 +17,9 @@ pub enum Stmt {
     /// Conditionnel
     Si {
         cond: Box<Expr>,
-        true_br: Vec<Box<Stmt>>,
-        false_br: Option<Vec<Box<Stmt>>>,
+        then_br: Vec<Box<Stmt>>,
+        elif_brs: Vec<(Box<Expr>, Vec<Box<Stmt>>)>,
+        else_br: Option<Vec<Box<Stmt>>>,
     },
 
     /// Boucle tant que

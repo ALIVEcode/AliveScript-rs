@@ -38,8 +38,10 @@ pub Stmt: Box<Stmt> = {
     // Affectation
 
     // Conditionnels
-    "si" <cond:Expr> "alors"? "eos" <true_br:Stmt*> <false_br:("sinon" "eos" <Stmt*>)?> "fin" "si" "eos" => 
-        Box::new(Stmt::Si { <> }),
+    "si" <cond:Expr> "alors"? "eos" <then_br:Stmt*> 
+         <elif_brs:("sinon" "si" <Expr> "alors"? "eos" <Stmt*>)*>
+         <else_br:("sinon" "eos"? <Stmt*>)?> "fin" "si" "eos" 
+         => Box::new(Stmt::Si { <> }),
 
     // Boucles
     "tant que" <cond:Expr> "faire"? "eos" <body:Stmt*> "fin" "tant que" "eos" => 
