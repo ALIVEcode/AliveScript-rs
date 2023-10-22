@@ -1,0 +1,115 @@
+use crate::as_obj::{ASObj, ASType, ASVar};
+
+#[derive(Debug, PartialEq)]
+pub enum Stmt {
+    /// Expression seule
+    Expr(Box<Expr>),
+
+    /// Afficher
+    Afficher(Box<Expr>),
+
+    /// Déclaration
+    Decl { var: DeclVar, val: Box<Expr> },
+
+    /// Affectation
+    Assign { var: Expr, val: Box<Expr> },
+
+    /// Conditionnel
+    Si {
+        cond: Box<Expr>,
+        true_br: Vec<Box<Stmt>>,
+        false_br: Option<Vec<Box<Stmt>>>,
+    },
+
+    /// Boucle tant que
+    TantQue { cond: Box<Expr>, body: Vec<Box<Stmt>> },
+
+    /// Boucle pour
+    Pour {
+        var: DeclVar,    //
+        iter: Box<Expr>, // itérable
+        body: Box<Stmt>, //
+        is_const: bool,
+    },
+
+    /// Boucle faire tant que
+    FaireTantQue { cond: Box<Expr>, body: Vec<Stmt> },
+
+    /// Définition d'une fonction
+    DefFn {
+        name: String,
+        params: Vec<FnParam>,
+        body: Vec<Box<Stmt>>,
+        return_type: Option<ASType>,
+    },
+
+    Retourner(Box<Expr>),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct FnParam {
+    pub name: String,
+    pub static_type: Option<ASType>,
+    pub default_value: Option<Box<Expr>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum DeclVar {
+    Var {
+        name: String,
+        static_type: Option<ASType>,
+        is_const: bool,
+    },
+    ListUnpack(Vec<DeclVar>),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Expr {
+    Lit(ASObj),
+
+    List(Vec<Box<Expr>>),
+
+    Dict(Vec<(Box<Expr>, Box<Expr>)>),
+
+    Ident(String),
+
+    FnCall {
+        func: Box<Expr>,
+        args: Vec<Box<Expr>>,
+    },
+
+    BinOp {
+        lhs: Box<Expr>,
+        op: BinOpcode,
+        rhs: Box<Expr>,
+    },
+
+    BinComp {
+        lhs: Box<Expr>,
+        op: BinCompcode,
+        rhs: Box<Expr>,
+    },
+}
+
+#[derive(Debug, PartialEq)]
+pub enum BinOpcode {
+    Mul,
+    Div,
+    DivInt,
+    Add,
+    Sub,
+    Exp,
+    Mod,
+    BitwiseOr,
+    BitwiseAnd,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum BinCompcode {
+    Eq,
+    NotEq,
+    Lth,
+    Gth,
+    Geq,
+    Leq,
+}
