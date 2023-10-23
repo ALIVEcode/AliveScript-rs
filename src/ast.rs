@@ -9,10 +9,16 @@ pub enum Stmt {
     Afficher(Box<Expr>),
 
     /// Déclaration
-    Decl { var: DeclVar, val: Box<Expr> },
+    Decl {
+        var: DeclVar,
+        val: Box<Expr>,
+    },
 
     /// Affectation
-    Assign { var: Expr, val: Box<Expr> },
+    Assign {
+        var: Expr,
+        val: Box<Expr>,
+    },
 
     /// Conditionnel
     Si {
@@ -22,19 +28,33 @@ pub enum Stmt {
         else_br: Option<Vec<Box<Stmt>>>,
     },
 
+    /// Stmt Conditionnel
+    CondStmt {
+        cond: Box<Expr>,
+        then_stmt: Box<Stmt>,
+    },
+
+    /// Boucle repeter
+    Repeter {
+        n: Option<Box<Expr>>,
+        body: Vec<Box<Stmt>>,
+    },
+
     /// Boucle tant que
-    TantQue { cond: Box<Expr>, body: Vec<Box<Stmt>> },
+    TantQue {
+        cond: Box<Expr>,
+        body: Vec<Box<Stmt>>,
+    },
 
     /// Boucle pour
     Pour {
-        var: DeclVar,    //
-        iter: Box<Expr>, // itérable
-        body: Box<Stmt>, //
-        is_const: bool,
+        var: DeclVar,         //
+        iterable: Box<Expr>,  // itérable
+        body: Vec<Box<Stmt>>, //
     },
 
-    /// Boucle faire tant que
-    FaireTantQue { cond: Box<Expr>, body: Vec<Stmt> },
+    Continuer,
+    Sortir,
 
     /// Définition d'une fonction
     DefFn {
@@ -42,6 +62,11 @@ pub enum Stmt {
         params: Vec<FnParam>,
         body: Vec<Box<Stmt>>,
         return_type: Option<ASType>,
+    },
+
+    DefStruct {
+        name: String,
+        fields: Vec<StructField>,
     },
 
     Retourner(Box<Expr>),
@@ -52,6 +77,14 @@ pub struct FnParam {
     pub name: String,
     pub static_type: Option<ASType>,
     pub default_value: Option<Box<Expr>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct StructField {
+    pub name: String,
+    pub static_type: Option<ASType>,
+    pub default_value: Option<Box<Expr>>,
+    pub is_const: bool,
 }
 
 #[derive(Debug, PartialEq)]

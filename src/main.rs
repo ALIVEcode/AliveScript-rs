@@ -10,9 +10,10 @@ pub mod as_obj;
 pub mod ast;
 pub mod token;
 mod lexer;
+mod runner;
 
 fn main() {
-    let content = std::fs::read_to_string("./test2.als").unwrap();
+    let content = std::fs::read_to_string("./test3.als").unwrap();
     let lexer = Lexer::new(&content[..]);
     let result = alivescript::ScriptParser::new().parse(lexer).unwrap();
     println!("{:#?}", result)
