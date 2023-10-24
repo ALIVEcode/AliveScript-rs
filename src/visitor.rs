@@ -1,0 +1,43 @@
+use crate::ast::*;
+
+pub trait Visitor {
+    fn visit_generic_expr(&mut self, expr: &Expr);
+    fn visit_generic_stmt(&mut self, stmt: &Stmt);
+
+    // Expressions
+    fn visit_expr_lit(&mut self, expr: &Expr);
+    fn visit_expr_list(&mut self, expr: &Expr);
+    fn visit_expr_dict(&mut self, expr: &Expr);
+
+    fn visit_expr_ident(&mut self, expr: &Expr);
+
+    fn visit_expr_fncall(&mut self, expr: &Expr);
+
+    fn visit_expr_binop(&mut self, expr: &Expr);
+    fn visit_expr_bincomp(&mut self, expr: &Expr);
+
+    // Statements
+    fn visit_stmt_expr(&mut self, stmt: &Stmt);
+    fn visit_stmt_afficher(&mut self, stmt: &Stmt);
+
+    fn visit_stmt_decl(&mut self, stmt: &Stmt);
+    fn visit_stmt_assign(&mut self, stmt: &Stmt);
+
+    fn visit_stmt_si(&mut self, stmt: &Stmt);
+    fn visit_stmt_condstmt(&mut self, stmt: &Stmt);
+
+    fn visit_stmt_repeter(&mut self, stmt: &Stmt);
+    fn visit_stmt_pour(&mut self, stmt: &Stmt);
+    fn visit_stmt_tantque(&mut self, stmt: &Stmt);
+    fn visit_stmt_continuer(&mut self, stmt: &Stmt);
+    fn visit_stmt_sortir(&mut self, stmt: &Stmt);
+
+    fn visit_stmt_deffn(&mut self, stmt: &Stmt);
+    fn visit_stmt_retourner(&mut self, stmt: &Stmt);
+
+    fn visit_stmt_defstruct(&mut self, stmt: &Stmt);
+}
+
+pub trait Visitable {
+    fn accept<V: Visitor>(&self, visitor: &mut V);
+}

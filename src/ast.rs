@@ -1,6 +1,9 @@
-use crate::as_obj::{ASObj, ASType, ASVar};
+use crate::{
+    as_obj::{ASObj, ASType},
+    visitor::{Visitable, Visitor},
+};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Stmt {
     /// Expression seule
     Expr(Box<Expr>),
@@ -72,14 +75,14 @@ pub enum Stmt {
     Retourner(Box<Expr>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct FnParam {
     pub name: String,
     pub static_type: Option<ASType>,
     pub default_value: Option<Box<Expr>>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct StructField {
     pub name: String,
     pub static_type: Option<ASType>,
@@ -87,7 +90,7 @@ pub struct StructField {
     pub is_const: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum DeclVar {
     Var {
         name: String,
@@ -97,7 +100,7 @@ pub enum DeclVar {
     ListUnpack(Vec<DeclVar>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Lit(ASObj),
 
@@ -125,7 +128,7 @@ pub enum Expr {
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum BinOpcode {
     Mul,
     Div,
@@ -138,7 +141,7 @@ pub enum BinOpcode {
     BitwiseAnd,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum BinCompcode {
     Eq,
     NotEq,
@@ -146,4 +149,30 @@ pub enum BinCompcode {
     Gth,
     Geq,
     Leq,
+}
+
+// Visitors
+impl Visitable for Expr {
+    fn accept<V: Visitor>(&self, visitor: &mut V) {
+        use Expr::*;
+
+        match self {
+            BinOp { .. } => visitor.visit_expr_binop(self),
+            Lit(..) => visitor.visit_expr_lit(self),
+            Ident(..) => visitor.visit_expr_ident(self),
+            _ => todo!(),
+        }
+    }
+}
+
+impl Visitable for Stmt {
+    fn accept<V: Visitor>(&self, visitor: &mut V) {
+        use Stmt::*;
+
+        match self {
+            Afficher(..) => visitor.visit_stmt_afficher(self),
+            Decl { .. } => visitor.visit_stmt_decl(self),
+            _ => todo!(),
+        }
+    }
 }
