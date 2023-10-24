@@ -19,7 +19,7 @@ pub enum Stmt {
 
     /// Affectation
     Assign {
-        var: Expr,
+        var: Box<Expr>,
         val: Box<Expr>,
     },
 
@@ -172,6 +172,7 @@ impl Visitable for Stmt {
         match self {
             Afficher(..) => visitor.visit_stmt_afficher(self),
             Decl { .. } => visitor.visit_stmt_decl(self),
+            Assign { .. } => visitor.visit_stmt_assign(self),
             _ => todo!(),
         }
     }

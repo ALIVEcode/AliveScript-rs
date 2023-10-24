@@ -123,7 +123,21 @@ impl Visitor for Runner {
     }
 
     fn visit_stmt_assign(&mut self, stmt: &Stmt) {
-        todo!()
+        if let Stmt::Assign { var, val } = stmt {
+            (*val).accept(self);
+            let value = self.expr_results.pop().expect("Decl valeur");
+            if let Expr::Ident(var_name) = var.as_ref() {
+                if let Some((var, val)) = self.env.get(var_name) {
+                    if !var.type_match(&value.get_type()) {
+                        panic!("Type Invalide");
+                    }
+
+                    self.env.insert(var_name.clone(), (var.clone(), value));
+                } else {
+                    panic!("Variable inconnue '{}'", var_name);
+                }
+            }
+        }
     }
 
     fn visit_stmt_si(&mut self, stmt: &Stmt) {

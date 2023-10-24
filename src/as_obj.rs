@@ -164,6 +164,10 @@ impl ASVar {
             is_const,
         }
     }
+
+    pub fn type_match(&self, static_type: &ASType) -> bool {
+        self.static_type.is_none() || self.static_type.as_ref().unwrap() == static_type
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
