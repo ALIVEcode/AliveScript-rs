@@ -71,7 +71,7 @@ pub enum Token {
     #[regex(r"-?\d(_?\d)*", |lex| lex.slice().replace("_", "").parse())]
     Int(i64),
 
-    #[regex(r"-?(\d+\.\d*)|(\d*\.\d+)", |lex| lex.slice().parse())]
+    #[regex(r"-?\d+\.\d+", |lex| lex.slice().parse())]
     Float(f64),
 
     #[regex(r#""[^"]*"|'[^']*'"#, |lex| {
