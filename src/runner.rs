@@ -337,6 +337,7 @@ impl Visitor for Runner {
             let iter_obj = self.eval_expr(iterable).expect("Pour iterable");
             let iter: Vec<ASObj> = match iter_obj {
                 ASObj::ASTexte(s) => s.chars().map(|c| ASObj::ASTexte(String::from(c))).collect(),
+                ASObj::ASListe(ls) => ls,
                 _ => panic!("Pas itérable"),
             };
 
