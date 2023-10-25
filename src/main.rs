@@ -2,17 +2,17 @@
 
 use lalrpop_util::lalrpop_mod;
 
-use crate::{lexer::Lexer, visitor::Visitable};
+use crate::{lexer::Lexer, visitor::Visitor};
 
 lalrpop_mod!(pub alivescript);
 
 pub mod as_obj;
 pub mod ast;
-pub mod token;
+mod data;
 mod lexer;
 mod runner;
+pub mod token;
 mod visitor;
-mod data;
 
 fn main() {
     let content = std::fs::read_to_string("./real.als").unwrap();
@@ -20,9 +20,7 @@ fn main() {
     let stmts = alivescript::ScriptParser::new().parse(lexer).unwrap();
 
     let mut visitor = runner::Runner::new();
-    for stmt in stmts.iter() {
-        stmt.accept(&mut visitor);
-    }
+    visitor.visit_body(&stmts);
 
     println!("{:#?}", stmts);
 
@@ -32,10 +30,8 @@ fn main() {
 #[cfg(test)]
 mod test {
     #[test]
-    fn nombres() {
-    }
+    fn nombres() {}
 
     #[test]
-    fn texte() {
-    }
+    fn texte() {}
 }

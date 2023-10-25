@@ -47,7 +47,7 @@ SubStmt: Box<Stmt> = {
 
     "afficher" <Expr> => Box::new(Stmt::Afficher(<>)),
 
-    "retourner" <Expr> => Box::new(Stmt::Retourner(<>)),
+    "retourner" <Expr?> => Box::new(Stmt::Retourner(<>)),
 
     "continuer" => Box::new(Stmt::Continuer),
 

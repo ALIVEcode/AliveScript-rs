@@ -1,5 +1,5 @@
 use crate::{
-    as_obj::{ASObj, ASType},
+    as_obj::{ASObj, ASType, ASVar},
     visitor::{Visitable, Visitor},
 };
 
@@ -72,7 +72,7 @@ pub enum Stmt {
         fields: Vec<StructField>,
     },
 
-    Retourner(Box<Expr>),
+    Retourner(Option<Box<Expr>>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -80,6 +80,12 @@ pub struct FnParam {
     pub name: String,
     pub static_type: Option<ASType>,
     pub default_value: Option<Box<Expr>>,
+}
+
+impl FnParam {
+    pub fn to_asvar(&self) -> ASVar {
+        ASVar::new(self.name.clone(), self.static_type.clone(), false)
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -160,6 +166,7 @@ impl Visitable for Expr {
             BinOp { .. } => visitor.visit_expr_binop(self),
             Lit(..) => visitor.visit_expr_lit(self),
             Ident(..) => visitor.visit_expr_ident(self),
+            FnCall { .. } => visitor.visit_expr_fncall(self),
             _ => todo!(),
         }
     }
@@ -171,9 +178,11 @@ impl Visitable for Stmt {
 
         match self {
             Afficher(..) => visitor.visit_stmt_afficher(self),
+            Expr ( .. ) => visitor.visit_stmt_expr(self),
             Decl { .. } => visitor.visit_stmt_decl(self),
             Assign { .. } => visitor.visit_stmt_assign(self),
-            _ => todo!(),
+            DefFn { .. } => visitor.visit_stmt_deffn(self),
+            node => todo!("{:?}", node),
         }
     }
 }

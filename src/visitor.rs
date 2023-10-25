@@ -1,6 +1,9 @@
 use crate::ast::*;
 
 pub trait Visitor {
+    fn visit_body(&mut self, stmts: &Vec<Box<Stmt>>);
+
+
     fn visit_generic_expr(&mut self, expr: &Expr);
     fn visit_generic_stmt(&mut self, stmt: &Stmt);
 

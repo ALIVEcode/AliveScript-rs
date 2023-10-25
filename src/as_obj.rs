@@ -5,7 +5,10 @@ use std::{
     str::FromStr,
 };
 
-use crate::{ast::Stmt, lexer::LexicalError};
+use crate::{
+    ast::{FnParam, Stmt},
+    lexer::LexicalError,
+};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ASObj {
@@ -25,12 +28,8 @@ pub enum ASObj {
     ASDict(Vec<ASObj>),
 
     ASFonc {
-        name: String,
-        params: Vec<(
-            ASVar,         // Variable
-            Option<ASObj>, // Valeur par défaut
-        )>,
-        body: Vec<Stmt>,
+        params: Vec<FnParam>,
+        body: Vec<Box<Stmt>>,
         return_type: Option<ASType>,
     },
 
@@ -48,7 +47,20 @@ impl ASObj {
             ASEntier(..) => ASType::Entier,
             ASDecimal(..) => ASType::Decimal,
             ASTexte(..) => ASType::Texte,
+            ASNul => ASType::Nul,
             _ => todo!(),
+        }
+    }
+
+    pub fn div_int(&self, rhs: Self) -> ASObj {
+        use ASObj::*;
+
+        match (self, rhs) {
+            (ASEntier(x), ASEntier(y)) => ASEntier(x / y),
+            (ASDecimal(x), ASEntier(y)) => ASEntier(*x as i64 / y),
+            (ASEntier(x), ASDecimal(y)) => ASEntier(x / y as i64),
+            (ASDecimal(x), ASDecimal(y)) => ASEntier(*x as i64 / y as i64),
+            _ => unimplemented!(),
         }
     }
 }
@@ -165,8 +177,12 @@ impl ASVar {
         }
     }
 
+    pub fn is_const(&self) -> bool {
+        self.is_const
+    }
+
     pub fn type_match(&self, static_type: &ASType) -> bool {
-        self.static_type.is_none() || self.static_type.as_ref().unwrap() == static_type
+        ASType::type_match(&self.static_type, static_type)
     }
 }
 
@@ -175,8 +191,16 @@ pub enum ASType {
     Entier,
     Decimal,
     Texte,
+    Fonction,
+    Nul,
     Objet(String),
     Union(Vec<ASType>),
+}
+
+impl ASType {
+    pub fn type_match(type1: &Option<ASType>, type2: &ASType) -> bool {
+        type1.is_none() || type1.as_ref().unwrap() == type2
+    }
 }
 
 impl FromStr for ASType {
