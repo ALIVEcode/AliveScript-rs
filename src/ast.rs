@@ -203,6 +203,8 @@ impl Visitable for Stmt {
             Pour { .. } => visitor.visit_stmt_pour(self),
             DefFn { .. } => visitor.visit_stmt_deffn(self),
             Retourner(..) => visitor.visit_stmt_retourner(self),
+            Sortir => visitor.visit_stmt_sortir(self),
+            Continuer => visitor.visit_stmt_continuer(self),
             node => todo!("{:?}", node),
         }
     }
