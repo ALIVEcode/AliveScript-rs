@@ -164,6 +164,7 @@ impl Visitable for Expr {
 
         match self {
             BinOp { .. } => visitor.visit_expr_binop(self),
+            BinComp { .. } => visitor.visit_expr_bincomp(self),
             Lit(..) => visitor.visit_expr_lit(self),
             Ident(..) => visitor.visit_expr_ident(self),
             FnCall { .. } => visitor.visit_expr_fncall(self),
@@ -181,7 +182,10 @@ impl Visitable for Stmt {
             Expr ( .. ) => visitor.visit_stmt_expr(self),
             Decl { .. } => visitor.visit_stmt_decl(self),
             Assign { .. } => visitor.visit_stmt_assign(self),
+            Si { .. } => visitor.visit_stmt_si(self),
+            CondStmt { .. } => visitor.visit_stmt_condstmt(self),
             DefFn { .. } => visitor.visit_stmt_deffn(self),
+            Retourner(..) => visitor.visit_stmt_retourner(self),
             node => todo!("{:?}", node),
         }
     }

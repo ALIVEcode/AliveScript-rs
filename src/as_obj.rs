@@ -52,6 +52,18 @@ impl ASObj {
         }
     }
 
+    pub fn to_bool(&self) -> bool {
+        use ASObj::*;
+
+        match self {
+            ASEntier(x) => *x != 0,
+            ASDecimal(x) => *x != 0f64,
+            ASTexte(s) => !s.is_empty(),
+            ASBooleen(b) => *b,
+            _ => false,
+        }
+    }
+
     pub fn div_int(&self, rhs: Self) -> ASObj {
         use ASObj::*;
 
@@ -130,6 +142,22 @@ impl Div for ASObj {
             (ASDecimal(x), ASDecimal(y)) => ASDecimal(x / y),
             _ => unimplemented!(),
         }
+    }
+}
+
+impl PartialOrd for ASObj {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use ASObj::*;
+
+        let (x, y) = match (self, other) {
+            (ASEntier(x), ASEntier(y)) => (*x as f64, *y as f64),
+            (ASDecimal(x), ASEntier(y)) => (*x, *y as f64),
+            (ASEntier(x), ASDecimal(y)) => (*x as f64, *y),
+            (ASDecimal(x), ASDecimal(y)) => (*x, *y),
+            _ => unimplemented!(),
+        };
+
+        x.partial_cmp(&y)
     }
 }
 

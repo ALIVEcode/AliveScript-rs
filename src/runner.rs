@@ -116,7 +116,10 @@ impl Visitor for Runner {
                 self.envs.pop();
                 let type_returned = self.expr_results.last().unwrap().get_type();
                 if !ASType::type_match(&return_type, &type_returned) {
-                    panic!("Mauvais type de retour. Attendu: {:?}, Obtenu: {:?}", return_type, type_returned)
+                    panic!(
+                        "Mauvais type de retour. Attendu: {:?}, Obtenu: {:?}",
+                        return_type, type_returned
+                    )
                 }
             } else {
                 panic!("Impossible d'appeler '{:?}'", expr);
@@ -153,7 +156,11 @@ impl Visitor for Runner {
             use BinCompcode::*;
             self.expr_results.push(ASObj::ASBooleen(match op {
                 Eq => lhs_value == rhs_value,
-                _ => false,
+                NotEq => lhs_value != rhs_value,
+                Lth => lhs_value < rhs_value,
+                Gth => lhs_value > rhs_value,
+                Leq => lhs_value <= rhs_value,
+                Geq => lhs_value >= rhs_value,
             }));
         }
     }
@@ -211,11 +218,29 @@ impl Visitor for Runner {
     }
 
     fn visit_stmt_si(&mut self, stmt: &Stmt) {
-        todo!()
+        if let Stmt::Si {
+            cond,
+            then_br,
+            elif_brs,
+            else_br,
+        } = stmt
+        {
+            let cond_result = self.eval_expr(cond).expect("Si cond");
+            if cond_result.to_bool() {
+                self.visit_body(then_br);
+            } else if let Some(else_br) = else_br {
+                self.visit_body(else_br);
+            }
+        }
     }
 
     fn visit_stmt_condstmt(&mut self, stmt: &Stmt) {
-        todo!()
+        if let Stmt::CondStmt { cond, then_stmt } = stmt {
+            let cond_result = self.eval_expr(cond).expect("CondStmt cond");
+            if cond_result.to_bool() {
+                then_stmt.accept(self);
+            }
+        }
     }
 
     fn visit_stmt_repeter(&mut self, stmt: &Stmt) {
