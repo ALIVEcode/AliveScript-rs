@@ -68,7 +68,7 @@ pub enum Token {
     Ident(String),
 
     // Types de données
-    #[regex(r"-?\d+", |lex| lex.slice().parse())]
+    #[regex(r"-?\d(_?\d)*", |lex| lex.slice().replace("_", "").parse())]
     Int(i64),
 
     #[regex(r"-?(\d+\.\d*)|(\d*\.\d+)", |lex| lex.slice().parse())]
@@ -109,6 +109,29 @@ pub enum Token {
     #[token("**")]
     #[token("^")]
     OpExp,
+
+    // Opérateurs Binaires
+    #[token("+=")]
+    OpAddAssign,
+
+    #[token("-=")]
+    OpMinusAssign,
+
+    #[token("*=")]
+    OpTimesAssign,
+
+    #[token("/=")]
+    OpDivAssign,
+
+    #[token("//=")]
+    OpDivIntAssign,
+
+    #[token("%=")]
+    OpModAssign,
+
+    #[token("**=")]
+    #[token("^=")]
+    OpExpAssign,
 
     // Comparaisons Binaires
     #[token("==")]

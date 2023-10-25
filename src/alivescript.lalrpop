@@ -14,9 +14,10 @@ pub Stmt: Box<Stmt> = {
     // déclarations
     <var:DeclVar> "assign" <val:Expr> "eos" => Box::new(Stmt::Decl { <> }),
 
-    <var:Expr> "assign" <val:Expr> "eos" => Box::new(Stmt::Assign { <> }),
-
     // Affectation
+    <var:Expr> "assign" <val:Expr> "eos" => Box::new(Stmt::Assign { <> }),
+    <var:Expr> <op:BinOpcodeAssign> <val:Expr> "eos" => Box::new(Stmt::OpAssign { <> }),
+
 
     // Conditionnels
     "si" <cond:Expr> "alors"? "eos" <then_br:Stmt*> 
@@ -118,6 +119,25 @@ pub Expr: Box<Expr> = {
 
   #[precedence(level="5")]
   #[assoc(side="left")]
+  <start:Expr> ".." <end:Expr> => {
+    Box::new(Expr::Range {
+      start,
+      end,
+      step: None,
+      is_incl: false,
+    })
+  },
+  <start:Expr> "..=" <end:Expr> => {
+    Box::new(Expr::Range {
+      start,
+      end,
+      step: None,
+      is_incl: true,
+    })
+  },
+
+  #[precedence(level="6")]
+  #[assoc(side="left")]
   <lhs:Expr> "==" <rhs:Expr> => {
     Box::new(Expr::BinComp {
       lhs,
@@ -213,6 +233,15 @@ Type: ASType = {
     "ident" => ASType::from_str(<>.as_str()).unwrap()
 };
 
+BinOpcodeAssign: BinOpcode = {
+    "+=" => BinOpcode::Add,
+    "-=" => BinOpcode::Sub,
+    "*=" => BinOpcode::Mul,
+    "/=" => BinOpcode::Div,
+    "//=" => BinOpcode::DivInt,
+    "%=" => BinOpcode::Mod,
+    "exp=" => BinOpcode::Exp,
+}
 
 // Macros
 
@@ -268,6 +297,9 @@ extern {
         "<=" => Token::CompLeq,
         ">=" => Token::CompGeq,
 
+        ".." => Token::RangeExcl,
+        "..=" => Token::RangeIncl,
+
         "(" => Token::LParen,
         ")" => Token::RParen,
         "[" => Token::LBracket,
@@ -289,5 +321,13 @@ extern {
         "//" => Token::OpDivInt,
         "%" => Token::OpMod,
         "exp" => Token::OpExp,
+
+        "+=" => Token::OpAddAssign,
+        "-=" => Token::OpMinusAssign,
+        "*=" => Token::OpTimesAssign,
+        "/=" => Token::OpDivAssign,
+        "//=" => Token::OpDivIntAssign,
+        "%=" => Token::OpModAssign,
+        "exp=" => Token::OpExpAssign,
       }
 }

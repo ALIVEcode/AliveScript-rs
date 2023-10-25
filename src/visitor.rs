@@ -19,12 +19,16 @@ pub trait Visitor {
     fn visit_expr_binop(&mut self, expr: &Expr);
     fn visit_expr_bincomp(&mut self, expr: &Expr);
 
+    fn visit_expr_range(&mut self, expr: &Expr);
+    
     // Statements
     fn visit_stmt_expr(&mut self, stmt: &Stmt);
     fn visit_stmt_afficher(&mut self, stmt: &Stmt);
 
     fn visit_stmt_decl(&mut self, stmt: &Stmt);
     fn visit_stmt_assign(&mut self, stmt: &Stmt);
+
+    fn visit_stmt_opassign(&mut self, stmt: &Stmt);
 
     fn visit_stmt_si(&mut self, stmt: &Stmt);
     fn visit_stmt_condstmt(&mut self, stmt: &Stmt);

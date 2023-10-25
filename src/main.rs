@@ -15,7 +15,7 @@ pub mod token;
 mod visitor;
 
 fn main() {
-    let content = std::fs::read_to_string("./prime.als").unwrap();
+    let content = std::fs::read_to_string("./real.als").unwrap();
     let lexer = Lexer::new(&content[..]);
     let stmts = alivescript::ScriptParser::new().parse(lexer).unwrap();
 

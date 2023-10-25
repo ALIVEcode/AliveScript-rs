@@ -23,6 +23,12 @@ pub enum Stmt {
         val: Box<Expr>,
     },
 
+    OpAssign {
+        var: Box<Expr>,
+        op: BinOpcode,
+        val: Box<Expr>,
+    },
+
     /// Conditionnel
     Si {
         cond: Box<Expr>,
@@ -116,6 +122,13 @@ pub enum Expr {
 
     Ident(String),
 
+    Range {
+        start: Box<Expr>,
+        end: Box<Expr>,
+        step: Option<Box<Expr>>,
+        is_incl: bool,
+    },
+
     FnCall {
         func: Box<Expr>,
         args: Vec<Box<Expr>>,
@@ -168,6 +181,7 @@ impl Visitable for Expr {
             Lit(..) => visitor.visit_expr_lit(self),
             Ident(..) => visitor.visit_expr_ident(self),
             FnCall { .. } => visitor.visit_expr_fncall(self),
+            Range { .. } => visitor.visit_expr_range(self),
             _ => todo!(),
         }
     }
@@ -179,9 +193,10 @@ impl Visitable for Stmt {
 
         match self {
             Afficher(..) => visitor.visit_stmt_afficher(self),
-            Expr ( .. ) => visitor.visit_stmt_expr(self),
+            Expr(..) => visitor.visit_stmt_expr(self),
             Decl { .. } => visitor.visit_stmt_decl(self),
             Assign { .. } => visitor.visit_stmt_assign(self),
+            OpAssign { .. } => visitor.visit_stmt_opassign(self),
             Si { .. } => visitor.visit_stmt_si(self),
             CondStmt { .. } => visitor.visit_stmt_condstmt(self),
             TantQue { .. } => visitor.visit_stmt_tantque(self),
