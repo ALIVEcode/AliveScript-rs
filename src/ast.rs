@@ -184,6 +184,7 @@ impl Visitable for Stmt {
             Assign { .. } => visitor.visit_stmt_assign(self),
             Si { .. } => visitor.visit_stmt_si(self),
             CondStmt { .. } => visitor.visit_stmt_condstmt(self),
+            TantQue { .. } => visitor.visit_stmt_tantque(self),
             DefFn { .. } => visitor.visit_stmt_deffn(self),
             Retourner(..) => visitor.visit_stmt_retourner(self),
             node => todo!("{:?}", node),

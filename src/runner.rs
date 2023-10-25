@@ -141,6 +141,7 @@ impl Visitor for Runner {
                 Mul => lhs_value * rhs_value,
                 Div => lhs_value / rhs_value,
                 DivInt => lhs_value.div_int(rhs_value),
+                Mod => lhs_value % rhs_value,
                 _ => todo!(),
             });
         }
@@ -252,7 +253,14 @@ impl Visitor for Runner {
     }
 
     fn visit_stmt_tantque(&mut self, stmt: &Stmt) {
-        todo!()
+        if let Stmt::TantQue { cond, body } = stmt {
+            while self.eval_expr(cond).expect("Si cond").to_bool() {
+                self.visit_body(body);
+                if self.should_early_exit() {
+                    break;
+                }
+            }
+        }
     }
 
     fn visit_stmt_continuer(&mut self, stmt: &Stmt) {

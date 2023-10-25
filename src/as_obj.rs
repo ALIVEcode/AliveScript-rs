@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fmt::Display,
-    ops::{Add, Div, Mul, Sub},
+    ops::{Add, Div, Mul, Rem, Sub},
     str::FromStr,
 };
 
@@ -48,6 +48,7 @@ impl ASObj {
             ASDecimal(..) => ASType::Decimal,
             ASTexte(..) => ASType::Texte,
             ASNul => ASType::Nul,
+            ASBooleen(..) => ASType::Booleen,
             _ => todo!(),
         }
     }
@@ -145,6 +146,22 @@ impl Div for ASObj {
     }
 }
 
+impl Rem for ASObj {
+    type Output = ASObj;
+
+    fn rem(self, rhs: Self) -> Self::Output {
+        use ASObj::*;
+
+        match (self, rhs) {
+            (ASEntier(x), ASEntier(y)) => ASEntier(x % y),
+            (ASDecimal(x), ASEntier(y)) => ASDecimal(x % y as f64),
+            (ASEntier(x), ASDecimal(y)) => ASDecimal(x as f64 % y),
+            (ASDecimal(x), ASDecimal(y)) => ASDecimal(x % y),
+            _ => unimplemented!(),
+        }
+    }
+}
+
 impl PartialOrd for ASObj {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         use ASObj::*;
@@ -218,6 +235,7 @@ impl ASVar {
 pub enum ASType {
     Entier,
     Decimal,
+    Booleen,
     Texte,
     Fonction,
     Nul,
