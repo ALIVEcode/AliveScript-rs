@@ -1,0 +1,6 @@
+[book]
+authors = ["Mathis"]
+language = "fr"
+multilingual = true
+src = "src"
+title = "Documentation AliveScript"
