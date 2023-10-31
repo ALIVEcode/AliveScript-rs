@@ -95,7 +95,7 @@ pub enum Token {
     OpMinus,
 
     #[token("*")]
-    OpTimes,
+    Star,
 
     #[token("/")]
     OpDiv,
@@ -194,6 +194,7 @@ pub enum Token {
     RCurly,
 
     #[regex(r"\n+")]
+    #[token(";")]
     EoS,
 
     #[regex(r"[ \t\f]+", logos::skip)]

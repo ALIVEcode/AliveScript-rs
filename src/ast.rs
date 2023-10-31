@@ -1,5 +1,5 @@
 use crate::{
-    as_obj::{ASObj, ASType, ASVar},
+    as_obj::{ASObj, ASType, ASVar, ASEnv},
     visitor::{Visitable, Visitor},
 };
 
@@ -7,6 +7,12 @@ use crate::{
 pub enum Stmt {
     /// Expression seule
     Expr(Box<Expr>),
+
+    Utiliser {
+        module: String,
+        alias: Option<String>,     // None signifie utiliser le nom du module
+        vars: Option<Vec<String>>, // None signifie tout utiliser
+    },
 
     /// Afficher
     Afficher(Box<Expr>),
@@ -145,6 +151,8 @@ pub enum Expr {
         op: BinCompcode,
         rhs: Box<Expr>,
     },
+
+    CallRust(fn(&mut ASEnv) -> ASObj),
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -182,6 +190,7 @@ impl Visitable for Expr {
             Ident(..) => visitor.visit_expr_ident(self),
             FnCall { .. } => visitor.visit_expr_fncall(self),
             Range { .. } => visitor.visit_expr_range(self),
+            CallRust(..) => visitor.visit_expr_callrust(self),
             _ => todo!(),
         }
     }
@@ -193,6 +202,7 @@ impl Visitable for Stmt {
 
         match self {
             Afficher(..) => visitor.visit_stmt_afficher(self),
+            Utiliser { .. } => visitor.visit_stmt_utiliser(self),
             Expr(..) => visitor.visit_stmt_expr(self),
             Decl { .. } => visitor.visit_stmt_decl(self),
             Assign { .. } => visitor.visit_stmt_assign(self),

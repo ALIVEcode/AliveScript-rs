@@ -11,7 +11,13 @@ pub Script: Vec<Box<Stmt>> = Stmt*;
 pub Stmt: Box<Stmt> = {
     <SubStmt> "eos",
 
-    // déclarations
+    // Utiliser
+    "utiliser" <module:"ident"> <alias:(<"ident"> ".")?> <vars:("{" <Comma<"ident">> "}")?> "eos" => 
+        Box::new(Stmt::Utiliser { <> } ),
+    "utiliser" <module:"ident"> <alias:(<"ident"> ".")?> "{" "*" "}" "eos" => 
+        Box::new(Stmt::Utiliser { module, alias, vars: None }),
+
+    // Déclarations
     <var:DeclVar> "assign" <val:Expr> "eos" => Box::new(Stmt::Decl { <> }),
 
     // Affectation
@@ -262,6 +268,8 @@ extern {
 
 
     enum Token {
+        "utiliser" => Token::KwUtiliser,
+
         "var" => Token::KwVar,
         "const" => Token::KwConst,
 
@@ -313,10 +321,11 @@ extern {
 
         ":" => Token::Colon,
         "," => Token::Comma,
+        "." => Token::Dot,
 
         "+" => Token::OpAdd,
         "-" => Token::OpMinus,
-        "*" => Token::OpTimes,
+        "*" => Token::Star,
         "/" => Token::OpDiv,
         "//" => Token::OpDivInt,
         "%" => Token::OpMod,

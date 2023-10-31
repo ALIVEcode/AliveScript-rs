@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    ast::{FnParam, Stmt},
+    ast::{FnParam, Stmt, StructField},
     lexer::LexicalError,
 };
 
@@ -33,9 +33,9 @@ pub enum ASObj {
         return_type: Option<ASType>,
     },
 
-    ASFoncInstance {
-        base: Box<ASObj>, // ASFonc
-        env: HashMap<String, (ASVar, ASObj)>,
+    ASStrructure {
+        name: String,
+        fields: Vec<StructField>,
     },
 }
 
@@ -222,6 +222,10 @@ impl ASVar {
         }
     }
 
+    pub fn get_name(&self) -> &String {
+        &self.name
+    }
+
     pub fn is_const(&self) -> bool {
         self.is_const
     }
@@ -260,5 +264,64 @@ impl FromStr for ASType {
             "texte" => Ok(Self::Texte),
             _ => Err(LexicalError::InvalidToken),
         }
+    }
+}
+
+pub struct ASScope(HashMap<String, (ASVar, ASObj)>);
+
+impl ASScope {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    pub fn from(vars: Vec<(ASVar, ASObj)>) -> Self {
+        Self(HashMap::from_iter(
+            vars.into_iter()
+                .map(|(var, val)| (var.get_name().clone(), (var, val))),
+        ))
+    }
+
+    pub fn get(&self, var_name: &String) -> Option<&(ASVar, ASObj)> {
+        self.0.get(var_name)
+    }
+
+    pub fn insert(&mut self, var: ASVar, val: ASObj) -> Option<(ASVar, ASObj)> {
+        self.0.insert(var.get_name().clone(), (var, val))
+    }
+}
+
+pub struct ASEnv(Vec<ASScope>);
+
+impl ASEnv {
+    pub fn new() -> Self {
+        Self(vec![ASScope::new()])
+    }
+
+    fn get_env_for(&mut self, var_name: &String) -> &mut ASScope {
+        self.0
+            .iter_mut()
+            .rev()
+            .find(|env| env.get(var_name).is_some())
+            .unwrap()
+    }
+
+    pub fn push_scope(&mut self, scope: ASScope) {
+        self.0.push(scope);
+    }
+
+    pub fn pop_scope(&mut self) -> Option<ASScope> {
+        self.0.pop()
+    }
+
+    pub fn get_var(&self, var_name: &String) -> Option<&(ASVar, ASObj)> {
+        self.0.iter().rev().find_map(|env| env.get(var_name))
+    }
+
+    pub fn declare(&mut self, var: ASVar, val: ASObj) -> Option<(ASVar, ASObj)> {
+        self.0.last_mut().unwrap().insert(var, val)
+    }
+
+    pub fn assign(&mut self, var: ASVar, val: ASObj) -> Option<(ASVar, ASObj)> {
+        self.get_env_for(var.get_name()).insert(var, val)
     }
 }

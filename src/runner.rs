@@ -1,13 +1,9 @@
-use std::collections::HashMap;
-
 use crate::{
-    as_obj::{ASObj, ASType, ASVar},
+    as_obj::{ASEnv, ASObj, ASScope, ASType, ASVar},
     ast::{BinCompcode, BinOpcode, DeclVar, Expr, Stmt},
     data::Data,
     visitor::{Visitable, Visitor},
 };
-
-type RunnerEnv = HashMap<String, (ASVar, ASObj)>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum EarlyExit {
@@ -19,7 +15,7 @@ enum EarlyExit {
 pub struct Runner {
     expr_results: Vec<ASObj>,
     datas: Vec<Data>,
-    envs: Vec<RunnerEnv>,
+    env: ASEnv,
     early_exit: Option<EarlyExit>,
 }
 
@@ -28,17 +24,13 @@ impl Runner {
         Self {
             expr_results: vec![],
             datas: vec![],
-            envs: vec![HashMap::new()],
+            env: ASEnv::new(),
             early_exit: None,
         }
     }
 
     pub fn get_datas(&self) -> Vec<Data> {
         self.datas.clone()
-    }
-
-    fn get_env(&mut self) -> &mut RunnerEnv {
-        self.envs.last_mut().unwrap()
     }
 
     fn should_early_exit(&self) -> bool {
@@ -104,7 +96,7 @@ impl Visitor for Runner {
 
     fn visit_expr_ident(&mut self, expr: &Expr) {
         if let Expr::Ident(var_name) = expr {
-            if let Some((var, val)) = self.envs.iter().rev().find_map(|env| env.get(var_name)) {
+            if let Some((var, val)) = self.env.get_var(var_name) {
                 self.expr_results.push(val.clone());
             } else {
                 panic!("Variable inconnue '{}'", var_name);
@@ -121,7 +113,7 @@ impl Visitor for Runner {
                 return_type,
             } = expr
             {
-                let mut env = HashMap::new();
+                let mut env = ASScope::new();
                 let mut args_iter = args.iter();
 
                 // Set params dans env local de la fonction
@@ -129,18 +121,18 @@ impl Visitor for Runner {
                     let arg = args_iter.next();
                     if let Some(arg_expr) = arg {
                         let arg_val = self.eval_expr(arg_expr).expect("FnCall arg");
-                        env.insert(param.name.clone(), (param.to_asvar(), arg_val));
+                        env.insert(param.to_asvar(), arg_val);
                     } else if let Some(default_expr) = param.default_value.clone() {
                         let default_val =
                             self.eval_expr(&default_expr).expect("FnCall default param");
-                        env.insert(param.name.clone(), (param.to_asvar(), default_val));
+                        env.insert(param.to_asvar(), default_val);
                     } else {
                         panic!("Paramètre sans valeur")
                     }
                 }
 
                 // Exec Body
-                self.envs.push(env);
+                self.env.push_scope(env);
                 self.visit_body(body);
 
                 if !self.should_early_exit() {
@@ -151,7 +143,7 @@ impl Visitor for Runner {
 
                 // Clean up
                 self.early_exit = None;
-                self.envs.pop();
+                self.env.pop_scope();
 
                 // Retourner
                 let type_returned = self.expr_results.last().unwrap().get_type();
@@ -164,6 +156,12 @@ impl Visitor for Runner {
             } else {
                 panic!("Impossible d'appeler '{:?}'", expr);
             }
+        }
+    }
+
+    fn visit_expr_callrust(&mut self, expr: &Expr) {
+        if let Expr::CallRust(proc) = expr {
+            self.expr_results.push(proc(&mut self.env));
         }
     }
 
@@ -240,6 +238,17 @@ impl Visitor for Runner {
         }
     }
 
+    fn visit_stmt_utiliser(&mut self, stmt: &Stmt) {
+        if let Stmt::Utiliser {
+            module,
+            alias,
+            vars,
+        } = stmt
+        {
+            println!("{module:?} {alias:?} {vars:?}")
+        }
+    }
+
     fn visit_stmt_decl(&mut self, stmt: &Stmt) {
         if let Stmt::Decl { var, val } = stmt {
             let value = self.eval_expr(val).expect("Decl valeur");
@@ -248,7 +257,7 @@ impl Visitor for Runner {
                 panic!("Type Invalide");
             }
             let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
-            if self.get_env().insert(name.clone(), (var, value)).is_some() {
+            if self.env.declare(var, value).is_some() {
                 panic!("Variable redéclarée {:?}", name);
             };
         }
@@ -258,8 +267,7 @@ impl Visitor for Runner {
         if let Stmt::Assign { var, val } = stmt {
             let value = self.eval_expr(val).expect("Assign valeur");
             if let Expr::Ident(var_name) = var.as_ref() {
-                let env = self.get_env();
-                if let Some((var, _old_val)) = env.get(var_name) {
+                if let Some((var, _old_val)) = self.env.get_var(var_name) {
                     if var.is_const() {
                         panic!("Impossible de changer la valeur d'une constante")
                     }
@@ -267,7 +275,7 @@ impl Visitor for Runner {
                         panic!("Type Invalide");
                     }
 
-                    env.insert(var_name.clone(), (var.clone(), value));
+                    self.env.assign(var.clone(), value);
                 } else {
                     panic!("Variable inconnue '{}'", var_name);
                 }
@@ -279,17 +287,16 @@ impl Visitor for Runner {
         if let Stmt::OpAssign { var, op, val } = stmt {
             let value = self.eval_expr(val).expect("Assign valeur");
             if let Expr::Ident(var_name) = var.as_ref() {
-                let env = self.get_env();
-                if let Some((var, old_val)) = env.get(var_name) {
+                if let Some((var, old_val)) = self.env.get_var(var_name) {
                     if var.is_const() {
                         panic!("Impossible de changer la valeur d'une constante")
                     }
-                    if !var.type_match(&value.get_type()) {
+                    let new_value = Runner::do_op(old_val.clone(), op, value.clone());
+                    if !var.type_match(&new_value.get_type()) {
                         panic!("Type Invalide");
                     }
-                    let new_value = Runner::do_op(old_val.clone(), op, value);
 
-                    env.insert(var_name.clone(), (var.clone(), new_value));
+                    self.env.assign(var.clone(), new_value);
                 } else {
                     panic!("Variable inconnue '{}'", var_name);
                 }
@@ -345,10 +352,9 @@ impl Visitor for Runner {
             let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
 
             for val in iter {
-                self.envs
-                    .push(HashMap::from([(name.clone(), (var.clone(), val))]));
+                self.env.push_scope(ASScope::from(vec![(var.clone(), val)]));
                 self.visit_body(body);
-                self.envs.pop();
+                self.env.pop_scope();
                 match self.early_exit {
                     Some(EarlyExit::Retourner) => break,
                     Some(EarlyExit::Continuer) => self.early_exit = None,
@@ -365,9 +371,9 @@ impl Visitor for Runner {
     fn visit_stmt_tantque(&mut self, stmt: &Stmt) {
         if let Stmt::TantQue { cond, body } = stmt {
             while self.eval_expr(cond).expect("Si cond").to_bool() {
-                self.envs.push(HashMap::new());
+                self.env.push_scope(ASScope::new());
                 self.visit_body(body);
-                self.envs.pop();
+                self.env.pop_scope();
                 match self.early_exit {
                     Some(EarlyExit::Retourner) => break,
                     Some(EarlyExit::Continuer) => self.early_exit = None,
@@ -405,7 +411,7 @@ impl Visitor for Runner {
 
             let func_var = ASVar::new(name.clone(), Some(ASType::Fonction), true);
 
-            self.get_env().insert(name.clone(), (func_var, func));
+            self.env.declare(func_var, func);
         }
     }
 
