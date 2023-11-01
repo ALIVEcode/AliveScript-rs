@@ -25,12 +25,24 @@ impl ASModuleBuiltin {
             // Some() => mod_scope.iter().for_each(|(_name, (var, val))| {
             //     env.declare(var.clone(), val.clone());
             // }),
-            Some(alias_name) => match vars {
+            Some(alias_name) => match vars.as_deref() {
                 None => {
                     env.declare(
                         ASVar::new(alias_name.clone(), Some(ASType::Module), true),
                         ASObj::ASModule {
                             env: Arc::clone(mod_scope),
+                        },
+                    );
+                }
+                Some([x]) if x == "*" => {
+                    let mut mod_env = ASScope::new();
+                    mod_scope.iter().for_each(|(_name, (var, val))| {
+                        mod_env.insert(var.clone(), val.clone());
+                    });
+                    env.declare(
+                        ASVar::new(alias_name.clone(), Some(ASType::Module), true),
+                        ASObj::ASModule {
+                            env: Arc::new(mod_env),
                         },
                     );
                 }
@@ -51,7 +63,7 @@ impl ASModuleBuiltin {
                     );
                 }
             },
-            None => match vars {
+            None => match vars.as_deref() {
                 None => {
                     env.declare(
                         ASVar::new(self.name(), Some(ASType::Module), true),
@@ -59,6 +71,11 @@ impl ASModuleBuiltin {
                             env: Arc::clone(mod_scope),
                         },
                     );
+                }
+                Some([x]) if x == "*" => {
+                    mod_scope.iter().for_each(|(_name, (var, val))| {
+                        env.declare(var.clone(), val.clone());
+                    });
                 }
                 Some(used_vars) => {
                     used_vars.iter().for_each(|var_name| {

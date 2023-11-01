@@ -24,7 +24,7 @@ pub Stmt: Box<Stmt> = {
     "utiliser" <module:"ident"> <alias:ModuleIdent?> <vars:("{" <Comma<"ident">> "}")> "eos" => 
         Box::new(Stmt::Utiliser { module, alias, vars: Some(vars) } ),
     "utiliser" <module:"ident"> <alias:ModuleIdent?> "{" "*" "}" "eos" => 
-        Box::new(Stmt::Utiliser { module, alias, vars: None }),
+        Box::new(Stmt::Utiliser { module, alias, vars: Some(vec![String::from("*")]) }),
 
     // Déclarations
     <var:DeclVar> "assign" <val:Expr> "eos" => Box::new(Stmt::Decl { <> }),
