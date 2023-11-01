@@ -3,6 +3,7 @@ use std::{
     fmt::Display,
     ops::{Add, Div, Mul, Rem, Sub},
     str::FromStr,
+    sync::Arc,
 };
 
 use crate::{
@@ -30,16 +31,28 @@ pub enum ASObj {
     ASFonc {
         params: Vec<FnParam>,
         body: Vec<Box<Stmt>>,
-        return_type: Option<ASType>,
+        return_type: ASType,
     },
 
-    ASStrructure {
+    ASStructure {
         name: String,
         fields: Vec<StructField>,
+    },
+
+    ASModule {
+        env: Arc<ASScope>,
     },
 }
 
 impl ASObj {
+    pub fn asfonc(params: Vec<FnParam>, body: Vec<Box<Stmt>>, return_type: Option<ASType>) -> Self {
+        Self::ASFonc {
+            params,
+            body,
+            return_type: return_type.into(),
+        }
+    }
+
     pub fn get_type(&self) -> ASType {
         use ASObj::*;
 
@@ -203,7 +216,7 @@ impl Display for ASObj {
 #[derive(Debug, Hash, Eq, Clone, PartialEq)]
 pub struct ASVar {
     name: String,
-    static_type: Option<ASType>,
+    static_type: ASType,
     is_const: bool,
 }
 
@@ -217,9 +230,18 @@ impl ASVar {
     pub fn new(name: String, static_type: Option<ASType>, is_const: bool) -> Self {
         Self {
             name,
-            static_type,
+            static_type: static_type.into(),
             is_const,
         }
+    }
+
+    pub fn new_with_value(
+        name: impl ToString,
+        static_type: Option<ASType>,
+        is_const: bool,
+        value: ASObj,
+    ) -> (Self, ASObj) {
+        (Self::new(name.to_string(), static_type, is_const), value)
     }
 
     pub fn get_name(&self) -> &String {
@@ -237,19 +259,49 @@ impl ASVar {
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum ASType {
+    Tout,
     Entier,
     Decimal,
     Booleen,
     Texte,
     Fonction,
     Nul,
+    Module,
     Objet(String),
-    Union(Vec<ASType>),
+    Union(Arc<[ASType]>),
 }
 
 impl ASType {
-    pub fn type_match(type1: &Option<ASType>, type2: &ASType) -> bool {
-        type1.is_none() || type1.as_ref().unwrap() == type2
+    pub fn nombre() -> ASType {
+        ASType::Union(Arc::new([Self::Entier, Self::Decimal]))
+    }
+
+    fn is_tout(&self) -> bool {
+        use ASType::*;
+
+        match self {
+            Union(types) => types.contains(&ASType::Tout),
+            _ => self == &ASType::Tout,
+        }
+    }
+
+    pub fn type_match(type1: &ASType, type2: &ASType) -> bool {
+        use ASType::*;
+
+        if type1.is_tout() || type2.is_tout() || type1 == type2 {
+            return true;
+        }
+
+        match (type1, type2) {
+            (Union(types), other) | (other, Union(types)) => types.contains(&other),
+            _ => false,
+        }
+    }
+}
+
+impl From<Option<ASType>> for ASType {
+    fn from(value: Option<ASType>) -> Self {
+        value.unwrap_or(ASType::Tout)
     }
 }
 
@@ -260,13 +312,14 @@ impl FromStr for ASType {
         match s {
             "entier" => Ok(Self::Entier),
             "decimal" => Ok(Self::Decimal),
-            "nombre" => Ok(Self::Union(vec![Self::Entier, Self::Decimal])),
+            "nombre" => Ok(Self::nombre()),
             "texte" => Ok(Self::Texte),
             _ => Err(LexicalError::InvalidToken),
         }
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct ASScope(HashMap<String, (ASVar, ASObj)>);
 
 impl ASScope {
@@ -288,8 +341,17 @@ impl ASScope {
     pub fn insert(&mut self, var: ASVar, val: ASObj) -> Option<(ASVar, ASObj)> {
         self.0.insert(var.get_name().clone(), (var, val))
     }
+
+    pub fn iter(&self) -> std::collections::hash_map::Iter<'_, String, (ASVar, ASObj)> {
+        self.0.iter()
+    }
+
+    pub fn into_iter(self) -> std::collections::hash_map::IntoIter<String, (ASVar, ASObj)> {
+        self.0.into_iter()
+    }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct ASEnv(Vec<ASScope>);
 
 impl ASEnv {
@@ -297,12 +359,16 @@ impl ASEnv {
         Self(vec![ASScope::new()])
     }
 
-    fn get_env_for(&mut self, var_name: &String) -> &mut ASScope {
+    fn get_env_of_var(&mut self, var_name: &String) -> &mut ASScope {
         self.0
             .iter_mut()
             .rev()
             .find(|env| env.get(var_name).is_some())
             .unwrap()
+    }
+
+    pub fn get_curr_scope(&mut self) -> &mut ASScope {
+        self.0.last_mut().unwrap()
     }
 
     pub fn push_scope(&mut self, scope: ASScope) {
@@ -322,6 +388,6 @@ impl ASEnv {
     }
 
     pub fn assign(&mut self, var: ASVar, val: ASObj) -> Option<(ASVar, ASObj)> {
-        self.get_env_for(var.get_name()).insert(var, val)
+        self.get_env_of_var(var.get_name()).insert(var, val)
     }
 }

@@ -1,4 +1,5 @@
 use crate::{
+    as_modules::ASModuleBuiltin,
     as_obj::{ASEnv, ASObj, ASScope, ASType, ASVar},
     ast::{BinCompcode, BinOpcode, DeclVar, Expr, Stmt},
     data::Data,
@@ -101,6 +102,17 @@ impl Visitor for Runner {
             } else {
                 panic!("Variable inconnue '{}'", var_name);
             }
+        }
+    }
+
+    fn visit_expr_accessprop(&mut self, expr: &Expr) {
+        if let Expr::AccessProp { obj, prop } = expr {
+            let obj_val = self.eval_expr(obj).expect("AccessProp obj");
+
+            self.expr_results.push(match obj_val {
+                ASObj::ASModule { env } => env.get(prop).unwrap().1.clone(),
+                _ => todo!(),
+            });
         }
     }
 
@@ -245,7 +257,7 @@ impl Visitor for Runner {
             vars,
         } = stmt
         {
-            println!("{module:?} {alias:?} {vars:?}")
+            ASModuleBuiltin::from(module.as_str()).load(alias, vars, &mut self.env);
         }
     }
 
@@ -403,11 +415,7 @@ impl Visitor for Runner {
             return_type,
         } = stmt
         {
-            let func = ASObj::ASFonc {
-                params: params.clone(),
-                body: body.clone(),
-                return_type: return_type.clone(),
-            };
+            let func = ASObj::asfonc(params.clone(), body.clone(), return_type.clone());
 
             let func_var = ASVar::new(name.clone(), Some(ASType::Fonction), true);
 

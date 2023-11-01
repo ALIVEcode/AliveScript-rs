@@ -13,6 +13,7 @@ pub trait Visitor {
     fn visit_expr_dict(&mut self, expr: &Expr);
 
     fn visit_expr_ident(&mut self, expr: &Expr);
+    fn visit_expr_accessprop(&mut self, expr: &Expr);
 
     fn visit_expr_fncall(&mut self, expr: &Expr);
     fn visit_expr_callrust(&mut self, expr: &Expr);

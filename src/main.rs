@@ -16,13 +16,12 @@ mod visitor;
 mod as_modules;
 
 fn main() {
-    let content = std::fs::read_to_string("./prime.als").unwrap();
+    let content = std::fs::read_to_string("./utiliser.als").unwrap();
     let lexer = Lexer::new(&content[..]);
     let stmts = alivescript::ScriptParser::new().parse(lexer).unwrap();
 
     let mut visitor = runner::Runner::new();
     visitor.visit_body(&stmts);
-
 
     println!("{:#?}", visitor.get_datas());
 }

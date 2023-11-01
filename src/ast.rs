@@ -1,5 +1,5 @@
 use crate::{
-    as_obj::{ASObj, ASType, ASVar, ASEnv},
+    as_obj::{ASEnv, ASObj, ASType, ASVar},
     visitor::{Visitable, Visitor},
 };
 
@@ -10,8 +10,10 @@ pub enum Stmt {
 
     Utiliser {
         module: String,
-        alias: Option<String>,     // None signifie utiliser le nom du module
-        vars: Option<Vec<String>>, // None signifie tout utiliser
+        /// None signifie utiliser le nom du module. "*" signifie pas de nom
+        alias: Option<String>,
+        // None signifie tout utiliser
+        vars: Option<Vec<String>>,
     },
 
     /// Afficher
@@ -87,16 +89,35 @@ pub enum Stmt {
     Retourner(Option<Box<Expr>>),
 }
 
+impl Stmt {
+    /// Body en rust d'une fonction
+    pub fn native_fn(body: fn(&mut ASEnv) -> ASObj) -> Box<Self> {
+        Box::new(Stmt::Retourner(Some(Box::new(Expr::CallRust(body)))))
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct FnParam {
     pub name: String,
-    pub static_type: Option<ASType>,
+    pub static_type: ASType,
     pub default_value: Option<Box<Expr>>,
 }
 
 impl FnParam {
+    pub fn new(
+        name: impl ToString,
+        static_type: Option<ASType>,
+        default_value: Option<Box<Expr>>,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            static_type: static_type.into(),
+            default_value,
+        }
+    }
+
     pub fn to_asvar(&self) -> ASVar {
-        ASVar::new(self.name.clone(), self.static_type.clone(), false)
+        ASVar::new(self.name.clone(), Some(self.static_type.clone()), false)
     }
 }
 
@@ -127,6 +148,11 @@ pub enum Expr {
     Dict(Vec<(Box<Expr>, Box<Expr>)>),
 
     Ident(String),
+
+    AccessProp {
+        obj: Box<Expr>,
+        prop: String,
+    },
 
     Range {
         start: Box<Expr>,
@@ -188,6 +214,7 @@ impl Visitable for Expr {
             BinComp { .. } => visitor.visit_expr_bincomp(self),
             Lit(..) => visitor.visit_expr_lit(self),
             Ident(..) => visitor.visit_expr_ident(self),
+            AccessProp{..} => visitor.visit_expr_accessprop(self),
             FnCall { .. } => visitor.visit_expr_fncall(self),
             Range { .. } => visitor.visit_expr_range(self),
             CallRust(..) => visitor.visit_expr_callrust(self),

@@ -1,5 +1,12 @@
 use std::str::FromStr;
-use crate::ast::{Stmt, Expr, BinOpcode, DeclVar, BinCompcode, FnParam};
+use crate::ast::{
+    Stmt, 
+    Expr, 
+    BinOpcode,
+    DeclVar, 
+    BinCompcode,
+    FnParam, 
+};
 use crate::as_obj::{ASObj, ASType};
 use crate::token::Token;
 use crate::lexer::LexicalError;
@@ -12,9 +19,11 @@ pub Stmt: Box<Stmt> = {
     <SubStmt> "eos",
 
     // Utiliser
-    "utiliser" <module:"ident"> <alias:(<"ident"> ".")?> <vars:("{" <Comma<"ident">> "}")?> "eos" => 
-        Box::new(Stmt::Utiliser { <> } ),
-    "utiliser" <module:"ident"> <alias:(<"ident"> ".")?> "{" "*" "}" "eos" => 
+    "utiliser" <module:"ident"> "eos" => 
+        Box::new(Stmt::Utiliser { module, alias: None, vars: None } ),
+    "utiliser" <module:"ident"> <alias:ModuleIdent?> <vars:("{" <Comma<"ident">> "}")> "eos" => 
+        Box::new(Stmt::Utiliser { module, alias, vars: Some(vars) } ),
+    "utiliser" <module:"ident"> <alias:ModuleIdent?> "{" "*" "}" "eos" => 
         Box::new(Stmt::Utiliser { module, alias, vars: None }),
 
     // Déclarations
@@ -193,6 +202,8 @@ pub Term: Box<Expr> = {
 
   <func:Term> "(" <args:Comma<Expr>> ")" => Box::new(Expr::FnCall{<>}),
 
+  <obj:Term> "." <prop:"ident"> => Box::new(Expr::AccessProp{<>}),
+
   "ident" => Box::new(Expr::Ident(<>)),
 
   "(" <Expr> ")",
@@ -232,7 +243,7 @@ Lit: Expr = {
 
 FnParam: FnParam = {
     <name:"ident"> <static_type:(":" <Type>)?> <default_value:("assign" <Expr>)?> 
-        => FnParam{ <> },
+        => FnParam::new( <> ),
 };
 
 Type: ASType = {
@@ -247,6 +258,10 @@ BinOpcodeAssign: BinOpcode = {
     "//=" => BinOpcode::DivInt,
     "%=" => BinOpcode::Mod,
     "exp=" => BinOpcode::Exp,
+}
+
+ModuleIdent: String = {
+    <"ident"> ".",
 }
 
 // Macros
