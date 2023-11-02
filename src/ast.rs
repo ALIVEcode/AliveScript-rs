@@ -1,5 +1,6 @@
 use crate::{
-    as_obj::{ASEnv, ASObj, ASType, ASVar},
+    as_obj::{ASObj, ASType, ASVar},
+    runner::Runner,
     visitor::{Visitable, Visitor},
 };
 
@@ -18,6 +19,13 @@ pub enum Stmt {
 
     /// Afficher
     Afficher(Box<Expr>),
+
+    /// Lire
+    Lire {
+        factory: Option<Box<Expr>>,
+        var: LireVar,
+        prompt: Option<Box<Expr>>,
+    },
 
     /// Déclaration
     Decl {
@@ -91,7 +99,7 @@ pub enum Stmt {
 
 impl Stmt {
     /// Body en rust d'une fonction
-    pub fn native_fn(body: fn(&mut ASEnv) -> ASObj) -> Box<Self> {
+    pub fn native_fn(body: fn(&mut Runner) -> ASObj) -> Box<Self> {
         Box::new(Stmt::Retourner(Some(Box::new(Expr::CallRust(body)))))
     }
 }
@@ -140,6 +148,12 @@ pub enum DeclVar {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum LireVar {
+    Decl(DeclVar),
+    Assign(String),
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Lit(ASObj),
 
@@ -152,6 +166,11 @@ pub enum Expr {
     AccessProp {
         obj: Box<Expr>,
         prop: String,
+    },
+
+    Idx {
+        obj: Box<Expr>,
+        idx: Box<Expr>,
     },
 
     Range {
@@ -178,7 +197,13 @@ pub enum Expr {
         rhs: Box<Expr>,
     },
 
-    CallRust(fn(&mut ASEnv) -> ASObj),
+    CallRust(fn(&mut Runner) -> ASObj),
+}
+
+impl Expr {
+    pub fn literal(obj: ASObj) -> Box<Expr> {
+        Box::new(Expr::Lit(obj))
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -213,12 +238,14 @@ impl Visitable for Expr {
             BinOp { .. } => visitor.visit_expr_binop(self),
             BinComp { .. } => visitor.visit_expr_bincomp(self),
             Lit(..) => visitor.visit_expr_lit(self),
+            List(..) => visitor.visit_expr_list(self),
             Ident(..) => visitor.visit_expr_ident(self),
-            AccessProp{..} => visitor.visit_expr_accessprop(self),
+            AccessProp { .. } => visitor.visit_expr_accessprop(self),
             FnCall { .. } => visitor.visit_expr_fncall(self),
             Range { .. } => visitor.visit_expr_range(self),
+            Idx { .. } => visitor.visit_expr_idx(self),
             CallRust(..) => visitor.visit_expr_callrust(self),
-            _ => todo!(),
+            node => todo!("{:?}", node),
         }
     }
 }

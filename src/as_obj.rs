@@ -62,7 +62,9 @@ impl ASObj {
             ASTexte(..) => ASType::Texte,
             ASNul => ASType::Nul,
             ASBooleen(..) => ASType::Booleen,
-            _ => todo!(),
+            ASListe(..) => ASType::Liste,
+            ASFonc { .. } => ASType::Fonction,
+            as_type => todo!("Type inconnue {:?}", as_type),
         }
     }
 
@@ -248,6 +250,10 @@ impl ASVar {
         &self.name
     }
 
+    pub fn get_type(&self) -> &ASType {
+        &self.static_type
+    }
+
     pub fn is_const(&self) -> bool {
         self.is_const
     }
@@ -266,14 +272,20 @@ pub enum ASType {
     Texte,
     Fonction,
     Nul,
+    Liste,
+    Dict,
     Module,
     Objet(String),
-    Union(Arc<[ASType]>),
+    Union(Vec<ASType>),
 }
 
 impl ASType {
     pub fn nombre() -> ASType {
-        ASType::Union(Arc::new([Self::Entier, Self::Decimal]))
+        ASType::Union(vec![Self::Entier, Self::Decimal])
+    }
+
+    pub fn iterable() -> ASType {
+        ASType::Union(vec![Self::Liste, Self::Texte])
     }
 
     fn is_tout(&self) -> bool {
@@ -293,7 +305,10 @@ impl ASType {
         }
 
         match (type1, type2) {
-            (Union(types), other) | (other, Union(types)) => types.contains(&other),
+            (Union(types), other) | (other, Union(types)) => {
+                types.iter().any(|t| ASType::type_match(t, &other))
+            }
+            (Entier, Decimal) => true,
             _ => false,
         }
     }
@@ -313,7 +328,12 @@ impl FromStr for ASType {
             "entier" => Ok(Self::Entier),
             "decimal" => Ok(Self::Decimal),
             "nombre" => Ok(Self::nombre()),
+            "iterable" => Ok(Self::iterable()),
             "texte" => Ok(Self::Texte),
+            "liste" => Ok(Self::Liste),
+            "rien" => Ok(Self::Nul),
+            "nul" => Ok(Self::Nul),
+            "tout" => Ok(Self::Tout),
             _ => Err(LexicalError::InvalidToken),
         }
     }
@@ -381,6 +401,10 @@ impl ASEnv {
 
     pub fn get_var(&self, var_name: &String) -> Option<&(ASVar, ASObj)> {
         self.0.iter().rev().find_map(|env| env.get(var_name))
+    }
+
+    pub fn get_value(&self, var_name: &String) -> Option<&ASObj> {
+        Some(&self.0.iter().rev().find_map(|env| env.get(var_name))?.1)
     }
 
     pub fn declare(&mut self, var: ASVar, val: ASObj) -> Option<(ASVar, ASObj)> {

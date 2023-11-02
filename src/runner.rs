@@ -1,7 +1,7 @@
 use crate::{
     as_modules::ASModuleBuiltin,
     as_obj::{ASEnv, ASObj, ASScope, ASType, ASVar},
-    ast::{BinCompcode, BinOpcode, DeclVar, Expr, Stmt},
+    ast::{BinCompcode, BinOpcode, DeclVar, Expr, LireVar, Stmt},
     data::Data,
     visitor::{Visitable, Visitor},
 };
@@ -28,6 +28,14 @@ impl Runner {
             env: ASEnv::new(),
             early_exit: None,
         }
+    }
+
+    pub fn get_env(&mut self) -> &mut ASEnv {
+        &mut self.env
+    }
+
+    pub fn pop_value(&mut self) -> Option<ASObj> {
+        self.expr_results.pop()
     }
 
     pub fn get_datas(&self) -> Vec<Data> {
@@ -88,7 +96,15 @@ impl Visitor for Runner {
     }
 
     fn visit_expr_list(&mut self, expr: &Expr) {
-        todo!()
+        if let Expr::List(exprs) = expr {
+            let liste = ASObj::ASListe(
+                exprs
+                    .iter()
+                    .map(|expr| self.eval_expr(expr).unwrap())
+                    .collect(),
+            );
+            self.expr_results.push(liste);
+        }
     }
 
     fn visit_expr_dict(&mut self, expr: &Expr) {
@@ -110,9 +126,28 @@ impl Visitor for Runner {
             let obj_val = self.eval_expr(obj).expect("AccessProp obj");
 
             self.expr_results.push(match obj_val {
-                ASObj::ASModule { env } => env.get(prop).unwrap().1.clone(),
+                ASObj::ASModule { env } => env.get(prop).expect("AccessProp prop").1.clone(),
                 _ => todo!(),
             });
+        }
+    }
+
+    fn visit_expr_idx(&mut self, expr: &Expr) {
+        if let Expr::Idx { obj, idx } = expr {
+            let obj_val = self.eval_expr(obj).expect("Idx obj");
+            let idx = self.eval_expr(idx).expect("Idx idx");
+
+            self.expr_results.push(match obj_val {
+                ASObj::ASListe(lst) => {
+                    let ASObj::ASEntier(i) = idx else { panic!() };
+                    lst[i as usize].clone()
+                }
+                ASObj::ASTexte(txt) => {
+                    let ASObj::ASEntier(i) = idx else { panic!() };
+                    ASObj::ASTexte(txt[i as usize..i as usize + 1].into())
+                }
+                _ => todo!(),
+            })
         }
     }
 
@@ -133,6 +168,13 @@ impl Visitor for Runner {
                     let arg = args_iter.next();
                     if let Some(arg_expr) = arg {
                         let arg_val = self.eval_expr(arg_expr).expect("FnCall arg");
+                        if !ASType::type_match(&param.static_type, &arg_val.get_type()) {
+                            panic!(
+                                "Type de l'argument invalide. Attendu: {:?}, obtenu: {:?}",
+                                param.static_type,
+                                arg_val.get_type()
+                            );
+                        }
                         env.insert(param.to_asvar(), arg_val);
                     } else if let Some(default_expr) = param.default_value.clone() {
                         let default_val =
@@ -173,7 +215,8 @@ impl Visitor for Runner {
 
     fn visit_expr_callrust(&mut self, expr: &Expr) {
         if let Expr::CallRust(proc) = expr {
-            self.expr_results.push(proc(&mut self.env));
+            let result = proc(self);
+            self.expr_results.push(result);
         }
     }
 
@@ -250,6 +293,25 @@ impl Visitor for Runner {
         }
     }
 
+    fn visit_stmt_lire(&mut self, stmt: &Stmt) {
+        if let Stmt::Lire {
+            factory,
+            var,
+            prompt,
+        } = stmt
+        {
+            match var {
+                LireVar::Decl(DeclVar::Var {
+                    name,
+                    static_type,
+                    is_const,
+                }) => {}
+                LireVar::Assign(name) => {}
+                LireVar::Decl(DeclVar::ListUnpack(_)) => todo!(),
+            }
+        }
+    }
+
     fn visit_stmt_utiliser(&mut self, stmt: &Stmt) {
         if let Stmt::Utiliser {
             module,
@@ -266,7 +328,11 @@ impl Visitor for Runner {
             let value = self.eval_expr(val).expect("Decl valeur");
             let DeclVar::Var { name, static_type, is_const } = var else { panic!() };
             if static_type.is_some() && static_type.as_ref().unwrap() != &value.get_type() {
-                panic!("Type Invalide");
+                panic!(
+                    "Type invalide. Attendu: {:?}, obtenu: {:?}",
+                    static_type,
+                    value.get_type(),
+                );
             }
             let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
             if self.env.declare(var, value).is_some() {
@@ -284,7 +350,11 @@ impl Visitor for Runner {
                         panic!("Impossible de changer la valeur d'une constante")
                     }
                     if !var.type_match(&value.get_type()) {
-                        panic!("Type Invalide");
+                        panic!(
+                            "Type invalide. Attendu: {:?}, obtenu: {:?}",
+                            var.get_type(),
+                            value.get_type()
+                        );
                     }
 
                     self.env.assign(var.clone(), value);
@@ -305,7 +375,11 @@ impl Visitor for Runner {
                     }
                     let new_value = Runner::do_op(old_val.clone(), op, value.clone());
                     if !var.type_match(&new_value.get_type()) {
-                        panic!("Type Invalide");
+                        panic!(
+                            "Type invalide. Attendu: {:?}, obtenu: {:?}",
+                            var.get_type(),
+                            new_value.get_type()
+                        );
                     }
 
                     self.env.assign(var.clone(), new_value);

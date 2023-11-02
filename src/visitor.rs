@@ -3,7 +3,6 @@ use crate::ast::*;
 pub trait Visitor {
     fn visit_body(&mut self, stmts: &Vec<Box<Stmt>>);
 
-
     fn visit_generic_expr(&mut self, expr: &Expr);
     fn visit_generic_stmt(&mut self, stmt: &Stmt);
 
@@ -14,6 +13,7 @@ pub trait Visitor {
 
     fn visit_expr_ident(&mut self, expr: &Expr);
     fn visit_expr_accessprop(&mut self, expr: &Expr);
+    fn visit_expr_idx(&mut self, expr: &Expr);
 
     fn visit_expr_fncall(&mut self, expr: &Expr);
     fn visit_expr_callrust(&mut self, expr: &Expr);
@@ -22,10 +22,12 @@ pub trait Visitor {
     fn visit_expr_bincomp(&mut self, expr: &Expr);
 
     fn visit_expr_range(&mut self, expr: &Expr);
-    
+
     // Statements
     fn visit_stmt_expr(&mut self, stmt: &Stmt);
     fn visit_stmt_afficher(&mut self, stmt: &Stmt);
+    fn visit_stmt_lire(&mut self, stmt: &Stmt);
+
     fn visit_stmt_utiliser(&mut self, stmt: &Stmt);
 
     fn visit_stmt_decl(&mut self, stmt: &Stmt);

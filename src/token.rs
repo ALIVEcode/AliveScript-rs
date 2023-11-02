@@ -110,6 +110,9 @@ pub enum Token {
     #[token("^")]
     OpExp,
 
+    #[token("|")]
+    OpPipe,
+
     // Opérateurs Binaires
     #[token("+=")]
     OpAddAssign,

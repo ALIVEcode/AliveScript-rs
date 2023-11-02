@@ -6,6 +6,7 @@ use crate::ast::{
     DeclVar, 
     BinCompcode,
     FnParam, 
+    LireVar,
 };
 use crate::as_obj::{ASObj, ASType};
 use crate::token::Token;
@@ -32,7 +33,6 @@ pub Stmt: Box<Stmt> = {
     // Affectation
     <var:Expr> "assign" <val:Expr> "eos" => Box::new(Stmt::Assign { <> }),
     <var:Expr> <op:BinOpcodeAssign> <val:Expr> "eos" => Box::new(Stmt::OpAssign { <> }),
-
 
     // Conditionnels
     "si" <cond:Expr> "alors"? "eos" <then_br:Stmt*> 
@@ -62,6 +62,20 @@ SubStmt: Box<Stmt> = {
     Expr => Box::new(Stmt::Expr(<>)),
 
     "afficher" <Expr> => Box::new(Stmt::Afficher(<>)),
+
+    // Lire
+    "lire" <factory:(<Expr> "dans")?> <var:DeclVar> <prompt:("," <Expr>)?> => 
+        Box::new(Stmt::Lire {
+                    factory,
+                    var: LireVar::Decl(var),
+                    prompt,
+                }),
+    "lire" <factory:(<Expr> "dans")?> <var:"ident"> <prompt:("," <Expr>)?> => 
+        Box::new(Stmt::Lire {
+                    factory,
+                    var: LireVar::Assign(var),
+                    prompt,
+                }),
 
     "retourner" <Expr?> => Box::new(Stmt::Retourner(<>)),
 
@@ -204,6 +218,8 @@ pub Term: Box<Expr> = {
 
   <obj:Term> "." <prop:"ident"> => Box::new(Expr::AccessProp{<>}),
 
+  <obj:Term> "[" <idx:Expr> "]" => Box::new(Expr::Idx{<>}),
+
   "ident" => Box::new(Expr::Ident(<>)),
 
   "(" <Expr> ")",
@@ -247,7 +263,17 @@ FnParam: FnParam = {
 };
 
 Type: ASType = {
-    "ident" => ASType::from_str(<>.as_str()).unwrap()
+    <types:Pipe<TypeTerm>> => if types.len() > 1 {
+        ASType::Union(types)
+    } else {
+        types[0].clone()
+    }
+};
+
+TypeTerm: ASType = {
+    "ident" => ASType::from_str(<>.as_str()).unwrap(),
+    "fonction" => ASType::from_str("fonction").unwrap(),
+    "nul" => ASType::from_str("nul").unwrap(),
 };
 
 BinOpcodeAssign: BinOpcode = {
@@ -276,6 +302,12 @@ Comma<T>: Vec<T> = {
     }
 };
 
+Pipe<T>: Vec<T> = {
+    <mut v:(<T> "|")*> <e:T> => {
+        v.push(e);
+        v
+    }
+};
 
 extern {
     type Location = usize;
@@ -289,6 +321,7 @@ extern {
         "const" => Token::KwConst,
 
         "afficher" => Token::KwAfficher,
+        "lire" => Token::KwLire,
         
         "fin" => Token::KwFin,
         "si" => Token::KwSi,
@@ -345,6 +378,7 @@ extern {
         "//" => Token::OpDivInt,
         "%" => Token::OpMod,
         "exp" => Token::OpExp,
+        "|" => Token::OpPipe,
 
         "+=" => Token::OpAddAssign,
         "-=" => Token::OpMinusAssign,

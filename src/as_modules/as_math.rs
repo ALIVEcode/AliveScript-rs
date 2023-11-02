@@ -19,7 +19,8 @@ pub static MATH_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                     static_type: ASType::nombre(),
                     default_value: None,
                 }],
-                body: vec![Stmt::native_fn(|env| {
+                body: vec![Stmt::native_fn(|runner| {
+                    let env = runner.get_env();
                     match env.get_var(&"x".into()).unwrap() {
                         (_, ASObj::ASDecimal(n)) => ASObj::ASDecimal(n.sin()),
                         (_, ASObj::ASEntier(i)) => ASObj::ASDecimal((*i as f64).sin()),
@@ -35,7 +36,8 @@ pub static MATH_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
             true,
             ASObj::ASFonc {
                 params: vec![FnParam::new("x", None, None)],
-                body: vec![Stmt::native_fn(|env| {
+                body: vec![Stmt::native_fn(|runner| {
+                    let env = runner.get_env();
                     match env.get_var(&"x".into()).unwrap() {
                         (_, ASObj::ASDecimal(n)) => ASObj::ASDecimal(n.cos()),
                         (_, ASObj::ASEntier(i)) => ASObj::ASDecimal((*i as f64).cos()),
