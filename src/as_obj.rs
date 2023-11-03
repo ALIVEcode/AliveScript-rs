@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    ast::{FnParam, Stmt, StructField},
+    ast::{Expr, Stmt, StructField},
     lexer::LexicalError,
 };
 
@@ -29,7 +29,7 @@ pub enum ASObj {
     ASDict(Vec<ASObj>),
 
     ASFonc {
-        params: Vec<FnParam>,
+        params: Vec<ASFnParam>,
         body: Vec<Box<Stmt>>,
         return_type: ASType,
     },
@@ -45,7 +45,11 @@ pub enum ASObj {
 }
 
 impl ASObj {
-    pub fn asfonc(params: Vec<FnParam>, body: Vec<Box<Stmt>>, return_type: Option<ASType>) -> Self {
+    pub fn asfonc(
+        params: Vec<ASFnParam>,
+        body: Vec<Box<Stmt>>,
+        return_type: Option<ASType>,
+    ) -> Self {
         Self::ASFonc {
             params,
             body,
@@ -215,6 +219,31 @@ impl Display for ASObj {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct ASFnParam {
+    pub name: String,
+    pub static_type: ASType,
+    pub default_value: Option<Box<Expr>>,
+}
+
+impl ASFnParam {
+    pub fn new(
+        name: impl ToString,
+        static_type: Option<ASType>,
+        default_value: Option<Box<Expr>>,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            static_type: static_type.into(),
+            default_value,
+        }
+    }
+
+    pub fn to_asvar(&self) -> ASVar {
+        ASVar::new(self.name.clone(), Some(self.static_type.clone()), false)
+    }
+}
+
 #[derive(Debug, Hash, Eq, Clone, PartialEq)]
 pub struct ASVar {
     name: String,
@@ -265,17 +294,28 @@ impl ASVar {
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum ASType {
+    /// Type englobant tous les autres types, sauf [`ASType::Rien`] et [`ASType::Nul`]
     Tout,
+    /// Type de retour d'une fonction qui ne retourne rien.
+    /// Peut seulement être placé sur un retour de fonction.
+    Rien,
+
+    /// Type représentant l'absence d'une valeur.
+    Nul,
+
     Entier,
     Decimal,
     Booleen,
     Texte,
-    Fonction,
-    Nul,
+
     Liste,
     Dict,
+
+    Fonction,
+
     Module,
     Objet(String),
+
     Union(Vec<ASType>),
 }
 
@@ -286,6 +326,26 @@ impl ASType {
 
     pub fn iterable() -> ASType {
         ASType::Union(vec![Self::Liste, Self::Texte])
+    }
+
+    pub fn union(types: Vec<ASType>) -> ASType {
+        if types.len() == 1 {
+            types.into_iter().nth(0).unwrap()
+        } else {
+            ASType::Union(
+                types
+                    .into_iter()
+                    .flat_map(|t| match t {
+                        ASType::Union(as_types) => as_types,
+                        t => vec![t],
+                    })
+                    .collect(),
+            )
+        }
+    }
+
+    pub fn union_of(type1: ASType, type2: ASType) -> ASType {
+        ASType::union(vec![type1, type2])
     }
 
     fn is_tout(&self) -> bool {
@@ -334,8 +394,34 @@ impl FromStr for ASType {
             "rien" => Ok(Self::Nul),
             "nul" => Ok(Self::Nul),
             "tout" => Ok(Self::Tout),
-            _ => Err(LexicalError::InvalidToken),
+            other => Ok(Self::Objet(other.into())),
         }
+    }
+}
+
+impl Display for ASType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ASType::*;
+
+        let to_string = match self {
+            Tout => "tout".into(),
+            Nul => "nul".into(),
+            Entier => "entier".into(),
+            Decimal => "decimal".into(),
+            Texte => "texte".into(),
+            Liste => "liste".into(),
+            Fonction => "fonction".into(),
+            Union(types) if types.len() == 2 && types[1] == Nul => {
+                format!("{}?", types[0])
+            }
+            Union(types) => types
+                .iter()
+                .map(Self::to_string)
+                .collect::<Vec<String>>()
+                .join(" | "),
+            _ => todo!(),
+        };
+        write!(f, "{}", to_string)
     }
 }
 

@@ -48,6 +48,11 @@ pub trait Visitor {
     fn visit_stmt_retourner(&mut self, stmt: &Stmt);
 
     fn visit_stmt_defstruct(&mut self, stmt: &Stmt);
+
+    // Types
+    fn visit_type_lit(&mut self, t: &Type);
+    fn visit_type_binop(&mut self, t: &Type);
+    fn visit_type_opt(&mut self, t: &Type);
 }
 
 pub trait Visitable {

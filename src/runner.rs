@@ -1,7 +1,7 @@
 use crate::{
     as_modules::ASModuleBuiltin,
-    as_obj::{ASEnv, ASObj, ASScope, ASType, ASVar},
-    ast::{BinCompcode, BinOpcode, DeclVar, Expr, LireVar, Stmt},
+    as_obj::{ASEnv, ASFnParam, ASObj, ASScope, ASType, ASVar},
+    ast::{BinCompcode, BinOpcode, DeclVar, Expr, LireVar, Stmt, Type, TypeBinOpcode},
     data::Data,
     visitor::{Visitable, Visitor},
 };
@@ -15,6 +15,7 @@ enum EarlyExit {
 
 pub struct Runner {
     expr_results: Vec<ASObj>,
+    type_results: Vec<ASType>,
     datas: Vec<Data>,
     env: ASEnv,
     early_exit: Option<EarlyExit>,
@@ -22,12 +23,15 @@ pub struct Runner {
 
 impl Runner {
     pub fn new() -> Self {
-        Self {
+        let mut new = Self {
             expr_results: vec![],
+            type_results: vec![],
             datas: vec![],
             env: ASEnv::new(),
             early_exit: None,
-        }
+        };
+        ASModuleBuiltin::Builtin.load(&None, &Some(vec!["*".into()]), &mut new.env);
+        new
     }
 
     pub fn get_env(&mut self) -> &mut ASEnv {
@@ -53,6 +57,11 @@ impl Runner {
     fn eval_expr(&mut self, expr: &Expr) -> Option<ASObj> {
         expr.accept(self);
         self.expr_results.pop()
+    }
+
+    fn eval_type(&mut self, t: &Type) -> Option<ASType> {
+        t.accept(self);
+        self.type_results.pop()
     }
 
     fn do_op(lhs: ASObj, op: &BinOpcode, rhs: ASObj) -> ASObj {
@@ -327,10 +336,13 @@ impl Visitor for Runner {
         if let Stmt::Decl { var, val } = stmt {
             let value = self.eval_expr(val).expect("Decl valeur");
             let DeclVar::Var { name, static_type, is_const } = var else { panic!() };
-            if static_type.is_some() && static_type.as_ref().unwrap() != &value.get_type() {
+            let static_type = static_type
+                .as_ref()
+                .map(|t| self.eval_type(t).expect("Decl var type"));
+            if static_type.is_some() && !ASType::type_match(static_type.as_ref().unwrap(), &value.get_type()) {
                 panic!(
                     "Type invalide. Attendu: {:?}, obtenu: {:?}",
-                    static_type,
+                    static_type.unwrap(),
                     value.get_type(),
                 );
             }
@@ -435,6 +447,9 @@ impl Visitor for Runner {
             };
 
             let DeclVar::Var { name, static_type, is_const } = var else { panic!() };
+            let static_type = static_type
+                .as_ref()
+                .map(|t| self.eval_type(t).expect("Pour var type"));
             let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
 
             for val in iter {
@@ -489,7 +504,27 @@ impl Visitor for Runner {
             return_type,
         } = stmt
         {
-            let func = ASObj::asfonc(params.clone(), body.clone(), return_type.clone());
+            let return_type = return_type
+                .as_ref()
+                .map(|t| self.eval_type(t).expect("Return func type"));
+
+            let func = ASObj::asfonc(
+                params
+                    .iter()
+                    .map(|param| {
+                        ASFnParam::new(
+                            param.name.clone(),
+                            param
+                                .static_type
+                                .clone()
+                                .map(|t| self.eval_type(&t).expect("Param type")),
+                            param.default_value.clone(),
+                        )
+                    })
+                    .collect(),
+                body.clone(),
+                return_type.clone(),
+            );
 
             let func_var = ASVar::new(name.clone(), Some(ASType::Fonction), true);
 
@@ -512,5 +547,42 @@ impl Visitor for Runner {
 
     fn visit_stmt_defstruct(&mut self, stmt: &Stmt) {
         todo!()
+    }
+
+    fn visit_type_lit(&mut self, t: &Type) {
+        if let Type::Lit(t) = t {
+            self.type_results.push(match t.as_str() {
+                "entier" => ASType::Entier,
+                "decimal" => ASType::Decimal,
+                "nombre" => ASType::nombre(),
+                "iterable" => ASType::iterable(),
+                "texte" => ASType::Texte,
+                "liste" => ASType::Liste,
+                "rien" => ASType::Rien,
+                "fonction" => ASType::Fonction,
+                "nul" => ASType::Nul,
+                "tout" => ASType::Tout,
+                other => todo!("Check si le type existe {:?}", other),
+            });
+        }
+    }
+
+    fn visit_type_binop(&mut self, t: &Type) {
+        if let Type::BinOp { lhs, op, rhs } = t {
+            let lhs_value = self.eval_type(lhs).expect("Lhs de type binop");
+            let rhs_value = self.eval_type(rhs).expect("Rhs de type binop");
+            self.type_results.push(match op {
+                TypeBinOpcode::Union => ASType::union_of(lhs_value, rhs_value),
+                TypeBinOpcode::Intersection => todo!(),
+            });
+        }
+    }
+
+    fn visit_type_opt(&mut self, t: &Type) {
+        if let Type::Opt(t) = t {
+            let type_val = self.eval_type(t).expect("Opt type");
+            self.type_results
+                .push(ASType::union_of(type_val, ASType::Nul));
+        }
     }
 }

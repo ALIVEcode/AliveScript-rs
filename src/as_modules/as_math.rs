@@ -3,8 +3,8 @@ use std::sync::Arc;
 use once_cell::sync::Lazy;
 
 use crate::{
-    as_obj::{ASObj, ASScope, ASType, ASVar},
-    ast::{FnParam, Stmt},
+    as_obj::{ASFnParam, ASObj, ASScope, ASType, ASVar},
+    ast::Stmt,
 };
 
 pub static MATH_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
@@ -14,7 +14,7 @@ pub static MATH_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
             Some(ASType::Fonction),
             true,
             ASObj::ASFonc {
-                params: vec![FnParam {
+                params: vec![ASFnParam {
                     name: "x".into(),
                     static_type: ASType::nombre(),
                     default_value: None,
@@ -35,7 +35,7 @@ pub static MATH_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
             Some(ASType::Fonction),
             true,
             ASObj::ASFonc {
-                params: vec![FnParam::new("x", None, None)],
+                params: vec![ASFnParam::new("x", None, None)],
                 body: vec![Stmt::native_fn(|runner| {
                     let env = runner.get_env();
                     match env.get_var(&"x".into()).unwrap() {

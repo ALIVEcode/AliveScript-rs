@@ -1,5 +1,5 @@
 use crate::{
-    as_obj::{ASObj, ASType, ASVar},
+    as_obj::ASObj,
     runner::Runner,
     visitor::{Visitable, Visitor},
 };
@@ -86,7 +86,7 @@ pub enum Stmt {
         name: String,
         params: Vec<FnParam>,
         body: Vec<Box<Stmt>>,
-        return_type: Option<ASType>,
+        return_type: Option<Box<Type>>,
     },
 
     DefStruct {
@@ -107,32 +107,32 @@ impl Stmt {
 #[derive(Debug, PartialEq, Clone)]
 pub struct FnParam {
     pub name: String,
-    pub static_type: ASType,
+    pub static_type: Option<Box<Type>>,
     pub default_value: Option<Box<Expr>>,
 }
 
-impl FnParam {
-    pub fn new(
-        name: impl ToString,
-        static_type: Option<ASType>,
-        default_value: Option<Box<Expr>>,
-    ) -> Self {
-        Self {
-            name: name.to_string(),
-            static_type: static_type.into(),
-            default_value,
-        }
-    }
-
-    pub fn to_asvar(&self) -> ASVar {
-        ASVar::new(self.name.clone(), Some(self.static_type.clone()), false)
-    }
-}
+// impl FnParam {
+//     pub fn new(
+//         name: impl ToString,
+//         static_type: Option<Type>,
+//         default_value: Option<Box<Expr>>,
+//     ) -> Self {
+//         Self {
+//             name: name.to_string(),
+//             static_type: static_type.into(),
+//             default_value,
+//         }
+//     }
+//
+//     pub fn to_asvar(&self) -> ASVar {
+//         ASVar::new(self.name.clone(), Some(self.static_type.clone()), false)
+//     }
+// }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct StructField {
     pub name: String,
-    pub static_type: Option<ASType>,
+    pub static_type: Option<Box<Type>>,
     pub default_value: Option<Box<Expr>>,
     pub is_const: bool,
 }
@@ -141,7 +141,7 @@ pub struct StructField {
 pub enum DeclVar {
     Var {
         name: String,
-        static_type: Option<ASType>,
+        static_type: Option<Box<Type>>,
         is_const: bool,
     },
     ListUnpack(Vec<DeclVar>),
@@ -229,6 +229,25 @@ pub enum BinCompcode {
     Leq,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum Type {
+    Lit(String),
+
+    Opt(Box<Type>),
+
+    BinOp {
+        lhs: Box<Type>,
+        op: TypeBinOpcode,
+        rhs: Box<Type>,
+    },
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum TypeBinOpcode {
+    Union,
+    Intersection, // TODO:
+}
+
 // Visitors
 impl Visitable for Expr {
     fn accept<V: Visitor>(&self, visitor: &mut V) {
@@ -270,6 +289,18 @@ impl Visitable for Stmt {
             Sortir => visitor.visit_stmt_sortir(self),
             Continuer => visitor.visit_stmt_continuer(self),
             node => todo!("{:?}", node),
+        }
+    }
+}
+
+impl Visitable for Type {
+    fn accept<V: Visitor>(&self, visitor: &mut V) {
+        use Type::*;
+
+        match self {
+            Lit(..) => visitor.visit_type_lit(self),
+            BinOp { .. } => visitor.visit_type_binop(self),
+            Opt(..) => visitor.visit_type_opt(self),
         }
     }
 }

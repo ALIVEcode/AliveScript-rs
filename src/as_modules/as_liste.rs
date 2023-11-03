@@ -3,8 +3,8 @@ use std::sync::Arc;
 use once_cell::sync::Lazy;
 
 use crate::{
-    as_obj::{ASObj, ASScope, ASType, ASVar},
-    ast::{Expr, FnParam, Stmt},
+    as_obj::{ASFnParam, ASObj, ASScope, ASType, ASVar},
+    ast::{Expr, Stmt},
     visitor::Visitable,
 };
 
@@ -15,12 +15,12 @@ pub static LISTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
         true,
         ASObj::ASFonc {
             params: vec![
-                FnParam {
+                ASFnParam {
                     name: "lst".into(),
                     static_type: ASType::Liste,
                     default_value: None,
                 },
-                FnParam {
+                ASFnParam {
                     name: "clef".into(),
                     static_type: ASType::Fonction,
                     default_value: Some(Box::new(Expr::Lit(ASObj::ASNul))),

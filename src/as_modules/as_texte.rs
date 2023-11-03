@@ -3,8 +3,8 @@ use std::sync::Arc;
 use once_cell::sync::Lazy;
 
 use crate::{
-    as_obj::{ASObj, ASScope, ASType, ASVar},
-    ast::{Expr, FnParam, Stmt},
+    as_obj::{ASFnParam, ASObj, ASScope, ASType, ASVar},
+    ast::{Expr, Stmt},
 };
 
 pub static TEXTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
@@ -14,7 +14,7 @@ pub static TEXTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
             Some(ASType::Fonction),
             true,
             ASObj::ASFonc {
-                params: vec![FnParam {
+                params: vec![ASFnParam {
                     name: "txt".into(),
                     static_type: ASType::Texte,
                     default_value: None,
@@ -32,7 +32,7 @@ pub static TEXTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
             Some(ASType::Fonction),
             true,
             ASObj::ASFonc {
-                params: vec![FnParam {
+                params: vec![ASFnParam {
                     name: "txt".into(),
                     static_type: ASType::Texte,
                     default_value: None,
@@ -51,12 +51,12 @@ pub static TEXTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
             true,
             ASObj::ASFonc {
                 params: vec![
-                    FnParam {
+                    ASFnParam {
                         name: "txt".into(),
                         static_type: ASType::Texte,
                         default_value: None,
                     },
-                    FnParam {
+                    ASFnParam {
                         name: "subtxt".into(),
                         static_type: ASType::Texte,
                         default_value: None,
@@ -81,22 +81,22 @@ pub static TEXTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
             true,
             ASObj::ASFonc {
                 params: vec![
-                    FnParam {
+                    ASFnParam {
                         name: "txt".into(),
                         static_type: ASType::Texte,
                         default_value: None,
                     },
-                    FnParam {
+                    ASFnParam {
                         name: "pattern".into(),
                         static_type: ASType::Texte,
                         default_value: None,
                     },
-                    FnParam {
+                    ASFnParam {
                         name: "remplacement".into(),
                         static_type: ASType::Texte,
                         default_value: None,
                     },
-                    FnParam {
+                    ASFnParam {
                         name: "n".into(),
                         static_type: ASType::Entier,
                         default_value: Some(Expr::literal(ASObj::ASNul)),

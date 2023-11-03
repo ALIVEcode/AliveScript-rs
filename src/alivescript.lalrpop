@@ -1,14 +1,15 @@
-use std::str::FromStr;
 use crate::ast::{
-    Stmt, 
-    Expr, 
+    Stmt,
+    Expr,
+    Type,
     BinOpcode,
-    DeclVar, 
+    DeclVar,
     BinCompcode,
-    FnParam, 
+    TypeBinOpcode,
+    FnParam,
     LireVar,
 };
-use crate::as_obj::{ASObj, ASType};
+use crate::as_obj::ASObj;
 use crate::token::Token;
 use crate::lexer::LexicalError;
 
@@ -259,21 +260,28 @@ Lit: Expr = {
 
 FnParam: FnParam = {
     <name:"ident"> <static_type:(":" <Type>)?> <default_value:("assign" <Expr>)?> 
-        => FnParam::new( <> ),
+        => FnParam { <> },
 };
 
-Type: ASType = {
-    <types:Pipe<TypeTerm>> => if types.len() > 1 {
-        ASType::Union(types)
-    } else {
-        types[0].clone()
-    }
+Type: Box<Type> = {
+  #[precedence(level="1")]
+  TypeTerm,
+  <TypeTerm> "?" => Box::new(Type::Opt(<>)),
+
+  #[precedence(level="2")]
+  #[assoc(side="left")]
+  <lhs:Type> "|" <rhs:Type> => 
+    Box::new(Type::BinOp {
+        lhs,
+        op: TypeBinOpcode::Union,
+        rhs,
+    }),
 };
 
-TypeTerm: ASType = {
-    "ident" => ASType::from_str(<>.as_str()).unwrap(),
-    "fonction" => ASType::from_str("fonction").unwrap(),
-    "nul" => ASType::from_str("nul").unwrap(),
+TypeTerm: Box<Type> = {
+    "ident" => Box::new(Type::Lit(<>)),
+    "fonction" => Box::new(Type::Lit("fonction".into())),
+    "nul" => Box::new(Type::Lit("nul".into())),
 };
 
 BinOpcodeAssign: BinOpcode = {
@@ -302,12 +310,6 @@ Comma<T>: Vec<T> = {
     }
 };
 
-Pipe<T>: Vec<T> = {
-    <mut v:(<T> "|")*> <e:T> => {
-        v.push(e);
-        v
-    }
-};
 
 extern {
     type Location = usize;
@@ -370,6 +372,8 @@ extern {
         ":" => Token::Colon,
         "," => Token::Comma,
         "." => Token::Dot,
+
+        "?" => Token::QuestionMark,
 
         "+" => Token::OpAdd,
         "-" => Token::OpMinus,

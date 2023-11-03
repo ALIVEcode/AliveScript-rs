@@ -166,6 +166,9 @@ pub enum Token {
     #[token(".")]
     Dot,
 
+    #[token("?")]
+    QuestionMark,
+
     #[token("..")]
     RangeExcl,
 

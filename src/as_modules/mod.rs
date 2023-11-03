@@ -1,18 +1,21 @@
 mod as_math;
 mod as_liste;
 mod as_texte;
+mod as_builtin;
 
 use once_cell::sync::Lazy;
 use std::{collections::HashMap, sync::Arc};
 
 use crate::as_obj::{ASEnv, ASObj, ASScope, ASType, ASVar};
 
+use self::as_builtin::BUILTIN_MOD;
 use self::as_math::MATH_MOD;
 use self::as_liste::LISTE_MOD;
 use self::as_texte::TEXTE_MOD;
 
 static AS_MODULES: Lazy<HashMap<ASModuleBuiltin, Arc<ASScope>>> = Lazy::new(|| {
     let mut modules = HashMap::new();
+    modules.insert(ASModuleBuiltin::Builtin, Arc::clone(&*BUILTIN_MOD));
     modules.insert(ASModuleBuiltin::Math, Arc::clone(&*MATH_MOD));
     modules.insert(ASModuleBuiltin::Liste, Arc::clone(&*LISTE_MOD));
     modules.insert(ASModuleBuiltin::Texte, Arc::clone(&*TEXTE_MOD));
