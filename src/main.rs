@@ -1,5 +1,8 @@
 #![allow(dead_code, unused_variables)]
 
+use std::env;
+
+use data::Data;
 use lalrpop_util::lalrpop_mod;
 
 use crate::{lexer::Lexer, visitor::Visitor};
@@ -16,14 +19,25 @@ mod visitor;
 mod as_modules;
 
 fn main() {
-    let content = std::fs::read_to_string("./test5.als").unwrap();
+    let file = env::args().nth(1).expect("File to execute");
+    let content = std::fs::read_to_string(file).unwrap();
     let lexer = Lexer::new(&content[..]);
     let stmts = alivescript::ScriptParser::new().parse(lexer).unwrap();
 
     let mut visitor = runner::Runner::new();
     visitor.visit_body(&stmts);
 
-    println!("{:#?}", visitor.get_datas());
+    let datas = visitor.get_datas();
+    // println!("{:#?}", visitor.get_datas());
+    exec(datas);
+}
+
+fn exec(datas: Vec<Data>) {
+    for data in datas {
+        match data {
+            Data::Afficher(obj) => println!("{}", obj),
+        }
+    }
 }
 
 #[cfg(test)]
