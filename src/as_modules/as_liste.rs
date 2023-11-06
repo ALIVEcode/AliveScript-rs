@@ -4,7 +4,7 @@ use once_cell::sync::Lazy;
 
 use crate::{
     as_obj::{ASFnParam, ASObj, ASScope, ASType, ASVar},
-    ast::{Expr, Stmt},
+    ast::Expr,
     visitor::Visitable,
 };
 
@@ -13,8 +13,10 @@ pub static LISTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
         "trier",
         Some(ASType::Fonction),
         true,
-        ASObj::ASFonc {
-            params: vec![
+        ASObj::native_fn(
+            "trier",
+            None,
+            vec![
                 ASFnParam {
                     name: "lst".into(),
                     static_type: ASType::Liste,
@@ -26,11 +28,11 @@ pub static LISTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                     default_value: Some(Box::new(Expr::Lit(ASObj::ASNul))),
                 },
             ],
-            body: vec![Stmt::native_fn(|runner| {
+            |runner| {
                 let env = runner.get_env();
                 let ASObj::ASListe(lst) = env.get_value(&"lst".into()).unwrap() else { unreachable!() };
                 let mut lst = lst.clone();
-                match env.get_value(&"clef".into()).unwrap() {
+                Some(match env.get_value(&"clef".into()).unwrap() {
                     ASObj::ASNul => {
                         lst.sort_by(|a, b| a.partial_cmp(b).expect("Comparable"));
                         ASObj::ASListe(lst)
@@ -49,9 +51,9 @@ pub static LISTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                         ASObj::ASListe(lst)
                     }
                     _ => unreachable!(),
-                }
-            })],
-            return_type: ASType::Liste,
-        },
+                })
+            },
+            ASType::Liste,
+        ),
     )]))
 });

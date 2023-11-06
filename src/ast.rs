@@ -99,7 +99,7 @@ pub enum Stmt {
 
 impl Stmt {
     /// Body en rust d'une fonction
-    pub fn native_fn(body: fn(&mut Runner) -> ASObj) -> Box<Self> {
+    pub fn native_fn(body: fn(&mut Runner) -> Option<ASObj>) -> Box<Self> {
         Box::new(Stmt::Retourner(Some(Box::new(Expr::CallRust(body)))))
     }
 }
@@ -159,7 +159,12 @@ pub enum Expr {
 
     List(Vec<Box<Expr>>),
 
-    Dict(Vec<(Box<Expr>, Box<Expr>)>),
+    Paire {
+        clef: Box<Expr>,
+        val: Box<Expr>,
+    },
+
+    Dict(Vec<Box<Expr>>), // Expr est garanti d'être Expr::Paire
 
     Ident(String),
 
@@ -197,7 +202,7 @@ pub enum Expr {
         rhs: Box<Expr>,
     },
 
-    CallRust(fn(&mut Runner) -> ASObj),
+    CallRust(fn(&mut Runner) -> Option<ASObj>),
 }
 
 impl Expr {
@@ -258,13 +263,14 @@ impl Visitable for Expr {
             BinComp { .. } => visitor.visit_expr_bincomp(self),
             Lit(..) => visitor.visit_expr_lit(self),
             List(..) => visitor.visit_expr_list(self),
+            Dict(..) => visitor.visit_expr_dict(self),
+            Paire { .. } => visitor.visit_expr_paire(self),
             Ident(..) => visitor.visit_expr_ident(self),
             AccessProp { .. } => visitor.visit_expr_accessprop(self),
             FnCall { .. } => visitor.visit_expr_fncall(self),
             Range { .. } => visitor.visit_expr_range(self),
             Idx { .. } => visitor.visit_expr_idx(self),
             CallRust(..) => visitor.visit_expr_callrust(self),
-            node => todo!("{:?}", node),
         }
     }
 }

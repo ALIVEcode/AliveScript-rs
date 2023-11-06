@@ -199,11 +199,16 @@ pub enum Token {
     #[token("}")]
     RCurly,
 
-    #[regex(r"\n+")]
+    #[regex(r"\n")]
     #[token(";")]
     EoS,
 
+    #[regex(r"\(-:([^:]|:[^-]|:-[^\)])*:-\)")]
+    ASDocs,
+
     #[regex(r"[ \t\f]+", logos::skip)]
+    #[regex(r"#[^\n]*\n", logos::skip)]
+    #[regex(r"\(:([^:]|:[^\)])*:\)", logos::skip)]
     #[error]
     Error,
 }

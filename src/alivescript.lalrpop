@@ -15,7 +15,7 @@ use crate::lexer::LexicalError;
 
 grammar;
 
-pub Script: Vec<Box<Stmt>> = Stmt*;
+pub Script: Vec<Box<Stmt>> = <("eos"* <Stmt>)*> "eos"*;
 
 pub Stmt: Box<Stmt> = {
     <SubStmt> "eos",
@@ -62,7 +62,12 @@ pub Stmt: Box<Stmt> = {
 SubStmt: Box<Stmt> = {
     Expr => Box::new(Stmt::Expr(<>)),
 
-    "afficher" <Expr> => Box::new(Stmt::Afficher(<>)),
+    "afficher" <arg:Expr> => 
+        Box::new(Stmt::Expr(Box::new(
+            Expr::FnCall{
+                func: Box::new(Expr::Ident("afficher".into())),
+                args: vec![arg],
+            }))),
 
     // Lire
     "lire" <factory:(<Expr> "dans")?> <var:DeclVar> <prompt:("," <Expr>)?> => 
@@ -85,9 +90,19 @@ SubStmt: Box<Stmt> = {
     "sortir" => Box::new(Stmt::Sortir),
 };
 
+pub StmtExpr: Box<Expr> = {
+  <func:"ident"> <arg:Expr> => 
+      Box::new(Expr::FnCall{
+          func: Box::new(Expr::Ident(func)),
+          args: vec![arg],
+      }),
+  // <func:Term> "(" <args:Comma<Expr>> ")" => Box::new(Expr::FnCall{<>}),
+}
+
 pub Expr: Box<Expr> = {
   #[precedence(level="1")]
   Term,
+  Paire,
 
   #[precedence(level="2")]
   #[assoc(side="left")]
@@ -223,12 +238,18 @@ pub Term: Box<Expr> = {
 
   "ident" => Box::new(Expr::Ident(<>)),
 
+  //"afficher" => Box::new(Expr::Ident("afficher".into())),
+
   "(" <Expr> ")",
 
   "[" <Comma<Expr>> "]" => Box::new(Expr::List(<>)),
 
-  "{" <Comma<(<Expr> ":" <Expr>)>> "}" => Box::new(Expr::Dict(<>)),
+  "{" <Comma<Paire>> "}" => Box::new(Expr::Dict(<>)),
 };
+
+pub Paire: Box<Expr> = {
+    <clef:Term> ":" <val:Term> => Box::new(Expr::Paire{ <> }),
+}
 
 DeclVar: DeclVar = {
     "var" <var_name:"ident"> <static_type:(":" <Type>)?> =>

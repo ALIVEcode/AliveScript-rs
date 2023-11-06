@@ -16,7 +16,7 @@ mod visitor;
 mod as_modules;
 
 fn main() {
-    let content = std::fs::read_to_string("./test4.alive").unwrap();
+    let content = std::fs::read_to_string("./test5.als").unwrap();
     let lexer = Lexer::new(&content[..]);
     let stmts = alivescript::ScriptParser::new().parse(lexer).unwrap();
 

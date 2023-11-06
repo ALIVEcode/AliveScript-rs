@@ -38,6 +38,10 @@ impl Runner {
         &mut self.env
     }
 
+    pub fn push_data(&mut self, data: Data) {
+        self.datas.push(data)
+    }
+
     pub fn pop_value(&mut self) -> Option<ASObj> {
         self.expr_results.pop()
     }
@@ -106,18 +110,33 @@ impl Visitor for Runner {
 
     fn visit_expr_list(&mut self, expr: &Expr) {
         if let Expr::List(exprs) = expr {
-            let liste = ASObj::ASListe(
-                exprs
-                    .iter()
-                    .map(|expr| self.eval_expr(expr).unwrap())
-                    .collect(),
-            );
-            self.expr_results.push(liste);
+            let liste = exprs
+                .iter()
+                .map(|expr| self.eval_expr(expr).unwrap())
+                .collect();
+            self.expr_results.push(ASObj::ASListe(liste));
+        }
+    }
+
+    fn visit_expr_paire(&mut self, expr: &Expr) {
+        if let Expr::Paire { clef, val } = expr {
+            let clef_val = self.eval_expr(clef).expect("Paire clef");
+            let val_val = self.eval_expr(val).expect("Paire val");
+            self.expr_results.push(ASObj::ASPaire {
+                key: Box::new(clef_val),
+                val: Box::new(val_val),
+            });
         }
     }
 
     fn visit_expr_dict(&mut self, expr: &Expr) {
-        todo!()
+        if let Expr::Dict(exprs) = expr {
+            let dict = exprs
+                .iter()
+                .map(|expr| self.eval_expr(expr).unwrap())
+                .collect();
+            self.expr_results.push(ASObj::ASDict(dict));
+        }
     }
 
     fn visit_expr_ident(&mut self, expr: &Expr) {
@@ -164,6 +183,8 @@ impl Visitor for Runner {
         if let Expr::FnCall { func, args } = expr {
             let expr = self.eval_expr(func).expect("FnCall Fonc");
             if let ASObj::ASFonc {
+                name,
+                docs,
                 params,
                 ref body,
                 return_type,
@@ -209,7 +230,11 @@ impl Visitor for Runner {
                 self.env.pop_scope();
 
                 // Retourner
-                let type_returned = self.expr_results.last().unwrap().get_type();
+                let type_returned = if let Some(returned_value) = self.expr_results.last() {
+                    returned_value.get_type()
+                } else {
+                    ASType::Rien
+                };
                 if !ASType::type_match(&return_type, &type_returned) {
                     panic!(
                         "Mauvais type de retour. Attendu: {:?}, Obtenu: {:?}",
@@ -225,7 +250,9 @@ impl Visitor for Runner {
     fn visit_expr_callrust(&mut self, expr: &Expr) {
         if let Expr::CallRust(proc) = expr {
             let result = proc(self);
-            self.expr_results.push(result);
+            if let Some(value) = result {
+                self.expr_results.push(value);
+            }
         }
     }
 
@@ -339,7 +366,9 @@ impl Visitor for Runner {
             let static_type = static_type
                 .as_ref()
                 .map(|t| self.eval_type(t).expect("Decl var type"));
-            if static_type.is_some() && !ASType::type_match(static_type.as_ref().unwrap(), &value.get_type()) {
+            if static_type.is_some()
+                && !ASType::type_match(static_type.as_ref().unwrap(), &value.get_type())
+            {
                 panic!(
                     "Type invalide. Attendu: {:?}, obtenu: {:?}",
                     static_type.unwrap(),
@@ -356,23 +385,26 @@ impl Visitor for Runner {
     fn visit_stmt_assign(&mut self, stmt: &Stmt) {
         if let Stmt::Assign { var, val } = stmt {
             let value = self.eval_expr(val).expect("Assign valeur");
-            if let Expr::Ident(var_name) = var.as_ref() {
-                if let Some((var, _old_val)) = self.env.get_var(var_name) {
-                    if var.is_const() {
-                        panic!("Impossible de changer la valeur d'une constante")
-                    }
-                    if !var.type_match(&value.get_type()) {
-                        panic!(
-                            "Type invalide. Attendu: {:?}, obtenu: {:?}",
-                            var.get_type(),
-                            value.get_type()
-                        );
-                    }
+            match var.as_ref() {
+                Expr::Ident(var_name) => {
+                    if let Some((var, _old_val)) = self.env.get_var(var_name) {
+                        if var.is_const() {
+                            panic!("Impossible de changer la valeur d'une constante")
+                        }
+                        if !var.type_match(&value.get_type()) {
+                            panic!(
+                                "Type invalide. Attendu: {:?}, obtenu: {:?}",
+                                var.get_type(),
+                                value.get_type()
+                            );
+                        }
 
-                    self.env.assign(var.clone(), value);
-                } else {
-                    panic!("Variable inconnue '{}'", var_name);
+                        self.env.assign(var.clone(), value);
+                    } else {
+                        panic!("Variable inconnue '{}'", var_name);
+                    }
                 }
+                _ => todo!(),
             }
         }
     }
@@ -509,6 +541,8 @@ impl Visitor for Runner {
                 .map(|t| self.eval_type(t).expect("Return func type"));
 
             let func = ASObj::asfonc(
+                Some(name.clone()),
+                None,
                 params
                     .iter()
                     .map(|param| {

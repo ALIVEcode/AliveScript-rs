@@ -9,6 +9,7 @@ use std::{
 use crate::{
     ast::{Expr, Stmt, StructField},
     lexer::LexicalError,
+    runner::Runner,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -25,10 +26,12 @@ pub enum ASObj {
 
     ASTexte(String),
     ASListe(Vec<ASObj>),
-
+    /// Les éléments du vecteur sont tous garanti d'être des [`ASObj::ASPaire`]
     ASDict(Vec<ASObj>),
 
     ASFonc {
+        name: Option<String>,
+        docs: Option<String>,
         params: Vec<ASFnParam>,
         body: Vec<Box<Stmt>>,
         return_type: ASType,
@@ -46,14 +49,34 @@ pub enum ASObj {
 
 impl ASObj {
     pub fn asfonc(
+        name: Option<String>,
+        docs: Option<String>,
         params: Vec<ASFnParam>,
         body: Vec<Box<Stmt>>,
         return_type: Option<ASType>,
     ) -> Self {
         Self::ASFonc {
+            name,
+            docs,
             params,
             body,
             return_type: return_type.into(),
+        }
+    }
+
+    pub fn native_fn(
+        name: &str,
+        docs: Option<String>,
+        params: Vec<ASFnParam>,
+        body: fn(&mut Runner) -> Option<ASObj>,
+        return_type: ASType,
+    ) -> ASObj {
+        Self::ASFonc {
+            name: Some(name.into()),
+            docs,
+            params,
+            body: vec![Stmt::native_fn(body)],
+            return_type,
         }
     }
 
@@ -68,6 +91,8 @@ impl ASObj {
             ASBooleen(..) => ASType::Booleen,
             ASListe(..) => ASType::Liste,
             ASFonc { .. } => ASType::Fonction,
+            ASPaire { .. } => ASType::Paire,
+            ASDict(..) => ASType::Dict,
             as_type => todo!("Type inconnue {:?}", as_type),
         }
     }
@@ -93,6 +118,17 @@ impl ASObj {
             (ASEntier(x), ASDecimal(y)) => ASEntier(x / y as i64),
             (ASDecimal(x), ASDecimal(y)) => ASEntier(*x as i64 / y as i64),
             _ => unimplemented!(),
+        }
+    }
+
+    pub fn repr(&self) -> String {
+        use ASObj::*;
+
+        match self {
+            ASEntier(i) => i.to_string(),
+            ASDecimal(d) => d.to_string(),
+            ASTexte(s) => format!("\"{}\"", s),
+            o => o.to_string(),
         }
     }
 }
@@ -205,14 +241,33 @@ impl Display for ASObj {
             ASEntier(i) => i.to_string(),
             ASDecimal(d) => d.to_string(),
             ASTexte(s) => s.clone(),
+            ASPaire { key, val } => format!("{}: {}", key.repr(), val.repr()),
             ASListe(v) => format!(
                 "[{}]",
-                v.iter()
-                    .map(Self::to_string)
-                    .collect::<Vec<String>>()
-                    .join(", ")
+                v.iter().map(Self::repr).collect::<Vec<String>>().join(", ")
             ),
-
+            ASDict(v) => format!(
+                "{{{}}}",
+                v.iter().map(Self::repr).collect::<Vec<String>>().join(", ")
+            ),
+            ASFonc {
+                name,
+                docs,
+                params,
+                body,
+                return_type,
+            } => {
+                format!(
+                    "{}({}) -> {}",
+                    name.as_ref().unwrap_or(&"".to_string()),
+                    params
+                        .iter()
+                        .map(ASFnParam::to_string)
+                        .collect::<Vec<String>>()
+                        .join(", "),
+                    return_type
+                )
+            }
             _ => String::from("ASObj sans to_string"),
         };
         write!(f, "{}", to_string)
@@ -241,6 +296,12 @@ impl ASFnParam {
 
     pub fn to_asvar(&self) -> ASVar {
         ASVar::new(self.name.clone(), Some(self.static_type.clone()), false)
+    }
+}
+
+impl Display for ASFnParam {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.name, self.static_type)
     }
 }
 
@@ -309,6 +370,7 @@ pub enum ASType {
     Texte,
 
     Liste,
+    Paire,
     Dict,
 
     Fonction,
