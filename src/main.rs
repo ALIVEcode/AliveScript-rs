@@ -5,10 +5,9 @@ use std::env;
 use data::Data;
 use lalrpop_util::lalrpop_mod;
 
-use crate::{lexer::Lexer, visitor::Visitor};
+lalrpop_mod!(alivescript, "/src/alivescript.rs");
 
-lalrpop_mod!(pub alivescript);
-
+mod as_modules;
 pub mod as_obj;
 pub mod ast;
 mod data;
@@ -16,7 +15,8 @@ mod lexer;
 mod runner;
 pub mod token;
 mod visitor;
-mod as_modules;
+
+use crate::{lexer::Lexer, visitor::Visitor};
 
 fn main() {
     let file = env::args().nth(1).expect("File to execute");

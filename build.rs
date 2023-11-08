@@ -1,4 +1,6 @@
+use lalrpop;
+
 fn main() {
-    lalrpop::process_root_unconditionally().unwrap();
+    lalrpop::Configuration::new().process_dir("./src/").unwrap()
 }
 
