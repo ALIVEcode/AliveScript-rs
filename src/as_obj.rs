@@ -6,8 +6,11 @@ use std::{
     sync::Arc,
 };
 
+use derive_new::new;
+
 use crate::{
     ast::{Expr, Stmt, StructField},
+    data::Data,
     lexer::LexicalError,
     runner::Runner,
 };
@@ -561,5 +564,58 @@ impl ASEnv {
 
     pub fn assign(&mut self, var: ASVar, val: ASObj) -> Option<(ASVar, ASObj)> {
         self.get_env_of_var(var.get_name()).insert(var, val)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, new)]
+pub enum ASErreurType {
+    VariableInconnue {
+        var_name: String,
+    },
+    ErreurType {
+        type_attendu: ASType,
+        type_obtenu: ASType,
+    },
+    SuiteInvalide {
+        start: ASObj,
+        end: ASObj,
+        step: ASObj,
+    },
+}
+
+impl Display for ASErreurType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ASErreurType::*;
+
+        let to_string = match self {
+            VariableInconnue { var_name } => format!("Variable inconnue '{}'", var_name),
+            ErreurType {
+                type_obtenu,
+                type_attendu,
+            } => format!(
+                "Erreur de type. Type attendu: '{}', type obtenu: '{}'",
+                type_attendu, type_obtenu,
+            ),
+            SuiteInvalide { start, end, step } => {
+                format!("Suite invalide: {} .. {} bond {}", start, end, step)
+            }
+        };
+
+        write!(f, "{}", to_string)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, new)]
+pub struct ASErreur {
+    err_type: ASErreurType,
+    ligne: usize,
+}
+
+impl Into<Data> for ASErreur {
+    fn into(self) -> Data {
+        Data::Erreur {
+            texte: self.err_type.to_string(),
+            ligne: self.ligne,
+        }
     }
 }

@@ -173,9 +173,9 @@ pub enum Expr {
         prop: String,
     },
 
-    Idx {
+    Slice {
         obj: Box<Expr>,
-        idx: Box<Expr>,
+        slice: Box<Expr>,
     },
 
     Range {
@@ -269,7 +269,7 @@ impl Visitable for Expr {
             AccessProp { .. } => visitor.visit_expr_accessprop(self),
             FnCall { .. } => visitor.visit_expr_fncall(self),
             Range { .. } => visitor.visit_expr_range(self),
-            Idx { .. } => visitor.visit_expr_idx(self),
+            Slice { .. } => visitor.visit_expr_slice(self),
             CallRust(..) => visitor.visit_expr_callrust(self),
         }
     }

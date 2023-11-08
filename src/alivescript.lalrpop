@@ -164,19 +164,19 @@ pub Expr: Box<Expr> = {
 
   #[precedence(level="5")]
   #[assoc(side="left")]
-  <start:Expr> ".." <end:Expr> => {
+  <start:Expr> ".." <end:Expr> <step:("bond" <Expr>)?> => {
     Box::new(Expr::Range {
       start,
       end,
-      step: None,
+      step,
       is_incl: false,
     })
   },
-  <start:Expr> "..=" <end:Expr> => {
+  <start:Expr> "..=" <end:Expr> <step:("bond" <Expr>)?> => {
     Box::new(Expr::Range {
       start,
       end,
-      step: None,
+      step,
       is_incl: true,
     })
   },
@@ -234,7 +234,12 @@ pub Term: Box<Expr> = {
 
   <obj:Term> "." <prop:"ident"> => Box::new(Expr::AccessProp{<>}),
 
-  <obj:Term> "[" <idx:Expr> "]" => Box::new(Expr::Idx{<>}),
+  <obj:Term> "[" <slice:Expr> "]" => Box::new(Expr::Slice{<>}),
+
+  <obj:Term> "[" <first:Expr> "," <mut slice:Comma<Expr>> "]" => {
+      slice.push(first.clone());
+      Box::new(Expr::Slice{obj, slice: Box::new(Expr::List(slice)) })
+  },
 
   "ident" => Box::new(Expr::Ident(<>)),
 
@@ -378,6 +383,7 @@ extern {
 
         ".." => Token::RangeExcl,
         "..=" => Token::RangeIncl,
+        "bond" => Token::KwBond,
 
         "(" => Token::LParen,
         ")" => Token::RParen,

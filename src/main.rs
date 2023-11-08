@@ -36,6 +36,8 @@ fn exec(datas: Vec<Data>) {
     for data in datas {
         match data {
             Data::Afficher(obj) => println!("{}", obj),
+            Data::Erreur { texte, ligne } => println!("{}", texte),
+            Data::Demander { prompt } => todo!(),
         }
     }
 }

@@ -50,6 +50,9 @@ pub enum Token {
     #[token("dans")]
     KwDans,
 
+    #[token("bond")]
+    KwBond,
+
     #[token("sortir")]
     KwSortir,
 
@@ -98,12 +101,15 @@ pub enum Token {
     Star,
 
     #[token("/")]
+    #[token("÷")]
     OpDiv,
 
     #[token("//")]
+    #[token("div")]
     OpDivInt,
 
     #[token("%")]
+    #[token("mod")]
     OpMod,
 
     #[token("**")]
@@ -158,6 +164,7 @@ pub enum Token {
     // Symboles
     #[token("=")]
     #[token("<-")]
+    #[token("←")]
     Assign,
 
     #[token("->")]

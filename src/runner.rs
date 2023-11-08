@@ -1,6 +1,6 @@
 use crate::{
     as_modules::ASModuleBuiltin,
-    as_obj::{ASEnv, ASFnParam, ASObj, ASScope, ASType, ASVar},
+    as_obj::{ASEnv, ASErreur, ASErreurType, ASFnParam, ASObj, ASScope, ASType, ASVar},
     ast::{BinCompcode, BinOpcode, DeclVar, Expr, LireVar, Stmt, Type, TypeBinOpcode},
     data::Data,
     visitor::{Visitable, Visitor},
@@ -11,6 +11,53 @@ enum EarlyExit {
     Retourner, // retourner d'une fonctionc
     Continuer, // remonter au début d'une boucle
     Sortir,    // sortir d'une boucle
+    Erreur,    // Erreur
+}
+
+macro_rules! eval {
+    (expr, $runner:ident, $expr:expr, $expect:literal) => {{
+        ($expr).accept($runner);
+        if $runner.error_thrown() {
+            return;
+        } else {
+            $runner.expr_results.pop().expect($expect)
+        }
+    }};
+
+    (opt_expr, $runner:ident, $expr:expr, $expect:literal) => {{
+        if let Some(e) = $expr {
+            e.accept($runner);
+            if $runner.error_thrown() {
+                return;
+            } else {
+                Some($runner.expr_results.pop().expect($expect))
+            }
+        } else {
+            None
+        }
+    }};
+
+    (type, $runner:ident, $expr:expr, $expect:literal) => {{
+        ($expr).accept($runner);
+        if $runner.error_thrown() {
+            return;
+        } else {
+            $runner.type_results.pop().expect($expect)
+        }
+    }};
+
+    (opt_type, $runner:ident, $expr:expr, $expect:literal) => {{
+        if let Some(t) = $expr {
+            t.accept($runner);
+            if $runner.error_thrown() {
+                return;
+            } else {
+                Some($runner.type_results.pop().expect($expect))
+            }
+        } else {
+            None
+        }
+    }};
 }
 
 pub struct Runner {
@@ -50,23 +97,15 @@ impl Runner {
         self.datas.clone()
     }
 
-    fn should_early_exit(&self) -> bool {
-        self.early_exit.is_some()
-    }
+    // fn eval_expr(&mut self, expr: &Expr) -> Option<ASObj> {
+    //     expr.accept(self);
+    //     self.expr_results.pop()
+    // }
 
-    fn early_exit_matches(&self, early_exit: EarlyExit) -> bool {
-        self.should_early_exit() && self.early_exit.unwrap() == early_exit
-    }
-
-    fn eval_expr(&mut self, expr: &Expr) -> Option<ASObj> {
-        expr.accept(self);
-        self.expr_results.pop()
-    }
-
-    fn eval_type(&mut self, t: &Type) -> Option<ASType> {
-        t.accept(self);
-        self.type_results.pop()
-    }
+    // fn eval_type(&mut self, t: &Type) -> Option<ASType> {
+    //     t.accept(self);
+    //     self.type_results.pop()
+    // }
 
     fn do_op(lhs: ASObj, op: &BinOpcode, rhs: ASObj) -> ASObj {
         use BinOpcode::*;
@@ -80,6 +119,34 @@ impl Runner {
             Mod => lhs % rhs,
             _ => todo!(),
         }
+    }
+
+    fn throw_err(&mut self, err: ASErreurType) {
+        let error = ASErreur::new(err, 0);
+        self.push_data(error.into());
+        self.early_exit = Some(EarlyExit::Erreur);
+    }
+
+    fn set_early_exit(&mut self, early_exit: Option<EarlyExit>) {
+        if !self.early_exit_matches(EarlyExit::Erreur) {
+            self.early_exit = early_exit;
+        }
+    }
+
+    fn clear_early_exit(&mut self) {
+        self.set_early_exit(None);
+    }
+
+    fn should_early_exit(&self) -> bool {
+        self.early_exit.is_some()
+    }
+
+    fn error_thrown(&self) -> bool {
+        self.early_exit_matches(EarlyExit::Erreur)
+    }
+
+    fn early_exit_matches(&self, early_exit: EarlyExit) -> bool {
+        matches!(self.early_exit, Some(reason) if reason == early_exit)
     }
 }
 
@@ -110,18 +177,21 @@ impl Visitor for Runner {
 
     fn visit_expr_list(&mut self, expr: &Expr) {
         if let Expr::List(exprs) = expr {
-            let liste = exprs
-                .iter()
-                .map(|expr| self.eval_expr(expr).unwrap())
-                .collect();
+            let mut liste = Vec::with_capacity(exprs.len());
+            for expr in exprs {
+                let val = eval!(expr, self, expr, "Element de liste");
+                liste.push(val);
+            }
             self.expr_results.push(ASObj::ASListe(liste));
         }
     }
 
     fn visit_expr_paire(&mut self, expr: &Expr) {
         if let Expr::Paire { clef, val } = expr {
-            let clef_val = self.eval_expr(clef).expect("Paire clef");
-            let val_val = self.eval_expr(val).expect("Paire val");
+            // let clef_val = self.eval_expr(clef).expect("Paire clef");
+            // let val_val = self.eval_expr(val).expect("Paire val");
+            let clef_val = eval!(expr, self, clef, "Paire clef");
+            let val_val = eval!(expr, self, val, "Paire val");
             self.expr_results.push(ASObj::ASPaire {
                 key: Box::new(clef_val),
                 val: Box::new(val_val),
@@ -131,10 +201,11 @@ impl Visitor for Runner {
 
     fn visit_expr_dict(&mut self, expr: &Expr) {
         if let Expr::Dict(exprs) = expr {
-            let dict = exprs
-                .iter()
-                .map(|expr| self.eval_expr(expr).unwrap())
-                .collect();
+            let mut dict = Vec::with_capacity(exprs.len());
+            for expr in exprs {
+                let val = eval!(expr, self, expr, "Element de dict");
+                dict.push(val);
+            }
             self.expr_results.push(ASObj::ASDict(dict));
         }
     }
@@ -144,14 +215,15 @@ impl Visitor for Runner {
             if let Some((var, val)) = self.env.get_var(var_name) {
                 self.expr_results.push(val.clone());
             } else {
-                panic!("Variable inconnue '{}'", var_name);
+                self.throw_err(ASErreurType::new_variable_inconnue(var_name.clone()));
+                return;
             }
         }
     }
 
     fn visit_expr_accessprop(&mut self, expr: &Expr) {
         if let Expr::AccessProp { obj, prop } = expr {
-            let obj_val = self.eval_expr(obj).expect("AccessProp obj");
+            let obj_val = eval!(expr, self, obj, "AccessProp obj");
 
             self.expr_results.push(match obj_val {
                 ASObj::ASModule { env } => env.get(prop).expect("AccessProp prop").1.clone(),
@@ -160,28 +232,56 @@ impl Visitor for Runner {
         }
     }
 
-    fn visit_expr_idx(&mut self, expr: &Expr) {
-        if let Expr::Idx { obj, idx } = expr {
-            let obj_val = self.eval_expr(obj).expect("Idx obj");
-            let idx = self.eval_expr(idx).expect("Idx idx");
+    fn visit_expr_slice(&mut self, expr: &Expr) {
+        if let Expr::Slice { obj, slice } = expr {
+            let obj_val = eval!(expr, self, obj, "Idx obj");
+            let slice = eval!(expr, self, slice, "Idx idx");
 
-            self.expr_results.push(match obj_val {
-                ASObj::ASListe(lst) => {
-                    let ASObj::ASEntier(i) = idx else { panic!() };
-                    lst[i as usize].clone()
+            let result = match (obj_val, slice) {
+                (ASObj::ASListe(lst), ASObj::ASEntier(i)) => lst[i as usize].clone(),
+                (ASObj::ASListe(lst), ASObj::ASListe(range)) => {
+                    let mut lst_final = Vec::with_capacity(range.len());
+                    for obj in range {
+                        if let ASObj::ASEntier(i) = obj {
+                            lst_final.push(lst[i as usize].clone());
+                        } else {
+                            self.throw_err(ASErreurType::new_erreur_type(
+                                ASType::Entier,
+                                obj.get_type(),
+                            ));
+                            return;
+                        }
+                    }
+                    ASObj::ASListe(lst_final)
                 }
-                ASObj::ASTexte(txt) => {
-                    let ASObj::ASEntier(i) = idx else { panic!() };
+                (ASObj::ASTexte(txt), ASObj::ASEntier(i)) => {
                     ASObj::ASTexte(txt[i as usize..i as usize + 1].into())
                 }
+                (ASObj::ASTexte(txt), ASObj::ASListe(range)) => {
+                    let mut txt_final = String::with_capacity(range.len());
+                    for obj in range {
+                        if let ASObj::ASEntier(i) = obj {
+                            txt_final.push(txt.chars().nth(i as usize).unwrap());
+                        } else {
+                            self.throw_err(ASErreurType::new_erreur_type(
+                                ASType::Entier,
+                                obj.get_type(),
+                            ));
+                            return;
+                        }
+                    }
+                    ASObj::ASTexte(txt_final)
+                }
                 _ => todo!(),
-            })
+            };
+
+            self.expr_results.push(result);
         }
     }
 
     fn visit_expr_fncall(&mut self, expr: &Expr) {
         if let Expr::FnCall { func, args } = expr {
-            let expr = self.eval_expr(func).expect("FnCall Fonc");
+            let expr = eval!(expr, self, func, "FnCall Fonc");
             if let ASObj::ASFonc {
                 name,
                 docs,
@@ -197,7 +297,7 @@ impl Visitor for Runner {
                 for param in params.iter() {
                     let arg = args_iter.next();
                     if let Some(arg_expr) = arg {
-                        let arg_val = self.eval_expr(arg_expr).expect("FnCall arg");
+                        let arg_val = eval!(expr, self, arg_expr, "FnCall arg");
                         if !ASType::type_match(&param.static_type, &arg_val.get_type()) {
                             panic!(
                                 "Type de l'argument invalide. Attendu: {:?}, obtenu: {:?}",
@@ -207,8 +307,7 @@ impl Visitor for Runner {
                         }
                         env.insert(param.to_asvar(), arg_val);
                     } else if let Some(default_expr) = param.default_value.clone() {
-                        let default_val =
-                            self.eval_expr(&default_expr).expect("FnCall default param");
+                        let default_val = eval!(expr, self, default_expr, "FnCall default param");
                         env.insert(param.to_asvar(), default_val);
                     } else {
                         panic!("Paramètre sans valeur")
@@ -226,7 +325,7 @@ impl Visitor for Runner {
                 }
 
                 // Clean up
-                self.early_exit = None;
+                self.clear_early_exit();
                 self.env.pop_scope();
 
                 // Retourner
@@ -264,33 +363,52 @@ impl Visitor for Runner {
             is_incl,
         } = expr
         {
-            let start = self.eval_expr(start).expect("Range start");
-            let end = self.eval_expr(end).expect("Range end");
-            let (mut start, mut end) = match (start, end) {
-                (ASObj::ASEntier(s), ASObj::ASEntier(e)) => (s, e),
-                (s, e) => {
-                    panic!("Range invalide: {:?}, {:?}", s, e);
+            let start = eval!(expr, self, start, "Range start");
+            let end = eval!(expr, self, end, "Range end");
+            let step = eval!(opt_expr, self, step, "Range step").unwrap_or(ASObj::ASEntier(1));
+
+            let (mut start_val, mut end_val, step_val) = match (&start, &end, &step) {
+                (ASObj::ASEntier(s), ASObj::ASEntier(e), ASObj::ASEntier(step)) if *step != 0 => {
+                    (*s, *e, *step)
+                }
+                (s, e, step) => {
+                    self.throw_err(ASErreurType::new_suite_invalide(s.clone(), e.clone(), step.clone()));
+                    return;
                 }
             };
-            if start > end {
-                (start, end) = (end + 1, start + 1);
-                let range = if *is_incl { start - 1..end } else { start..end };
-                let range = range.map(|i| ASObj::ASEntier(i)).rev().collect();
+
+            if start_val > end_val && step_val < 0 {
+                (start_val, end_val) = (end_val + 1, start_val + 1);
+                let range = if *is_incl {
+                    start_val - 1..end_val
+                } else {
+                    start_val..end_val
+                };
+                let range = range
+                    .rev()
+                    .step_by(step_val.abs() as usize)
+                    .map(|i| ASObj::ASEntier(i))
+                    .collect();
+                self.expr_results.push(ASObj::ASListe(range));
+            } else if start_val < end_val && step_val > 0 {
+                let range = if *is_incl {
+                    start_val..end_val + 1
+                } else {
+                    start_val..end_val
+                };
+                let range = range.step_by(step_val as usize).map(|i| ASObj::ASEntier(i)).collect();
                 self.expr_results.push(ASObj::ASListe(range));
             } else {
-                let range = if *is_incl { start..end + 1 } else { start..end };
-                let range = range.map(|i| ASObj::ASEntier(i)).collect();
-                self.expr_results.push(ASObj::ASListe(range));
+                self.throw_err(ASErreurType::new_suite_invalide(start, end, step));
+                return;
             }
         }
     }
 
     fn visit_expr_binop(&mut self, expr: &Expr) {
         if let Expr::BinOp { lhs, op, rhs } = expr {
-            (*lhs).accept(self);
-            let lhs_value = self.expr_results.pop().expect("Lhs de binop");
-            (*rhs).accept(self);
-            let rhs_value = self.expr_results.pop().expect("Rhs de binop");
+            let lhs_value = eval!(expr, self, lhs, "Lhs de binop");
+            let rhs_value = eval!(expr, self, rhs, "Rhs de binop");
 
             self.expr_results
                 .push(Runner::do_op(lhs_value, op, rhs_value));
@@ -299,10 +417,8 @@ impl Visitor for Runner {
 
     fn visit_expr_bincomp(&mut self, expr: &Expr) {
         if let Expr::BinComp { lhs, op, rhs } = expr {
-            (*lhs).accept(self);
-            let lhs_value = self.expr_results.pop().expect("Lhs de bincomp");
-            (*rhs).accept(self);
-            let rhs_value = self.expr_results.pop().expect("Rhs de bincomp");
+            let lhs_value = eval!(expr, self, lhs, "Lhs de binop");
+            let rhs_value = eval!(expr, self, rhs, "Rhs de binop");
 
             use BinCompcode::*;
             self.expr_results.push(ASObj::ASBooleen(match op {
@@ -318,13 +434,14 @@ impl Visitor for Runner {
 
     fn visit_stmt_expr(&mut self, stmt: &Stmt) {
         if let Stmt::Expr(expr) = stmt {
-            self.eval_expr(expr);
+            expr.accept(self);
+            self.expr_results.pop();
         }
     }
 
     fn visit_stmt_afficher(&mut self, stmt: &Stmt) {
         if let Stmt::Afficher(expr) = stmt {
-            let value = self.eval_expr(expr).expect("Afficher prend un argument");
+            let value = eval!(expr, self, expr, "Afficher prend un argument");
             self.datas.push(Data::Afficher(value.to_string()));
         }
     }
@@ -361,11 +478,9 @@ impl Visitor for Runner {
 
     fn visit_stmt_decl(&mut self, stmt: &Stmt) {
         if let Stmt::Decl { var, val } = stmt {
-            let value = self.eval_expr(val).expect("Decl valeur");
+            let value = eval!(expr, self, val, "Decl valeur");
             let DeclVar::Var { name, static_type, is_const } = var else { panic!() };
-            let static_type = static_type
-                .as_ref()
-                .map(|t| self.eval_type(t).expect("Decl var type"));
+            let static_type = eval!(opt_type, self, static_type, "Decl var type");
             if static_type.is_some()
                 && !ASType::type_match(static_type.as_ref().unwrap(), &value.get_type())
             {
@@ -384,7 +499,7 @@ impl Visitor for Runner {
 
     fn visit_stmt_assign(&mut self, stmt: &Stmt) {
         if let Stmt::Assign { var, val } = stmt {
-            let value = self.eval_expr(val).expect("Assign valeur");
+            let value = eval!(expr, self, val, "Assign valeur");
             match var.as_ref() {
                 Expr::Ident(var_name) => {
                     if let Some((var, _old_val)) = self.env.get_var(var_name) {
@@ -411,7 +526,7 @@ impl Visitor for Runner {
 
     fn visit_stmt_opassign(&mut self, stmt: &Stmt) {
         if let Stmt::OpAssign { var, op, val } = stmt {
-            let value = self.eval_expr(val).expect("Assign valeur");
+            let value = eval!(expr, self, val, "Op Assign valeur");
             if let Expr::Ident(var_name) = var.as_ref() {
                 if let Some((var, old_val)) = self.env.get_var(var_name) {
                     if var.is_const() {
@@ -442,7 +557,7 @@ impl Visitor for Runner {
             else_br,
         } = stmt
         {
-            let cond_result = self.eval_expr(cond).expect("Si cond");
+            let cond_result = eval!(expr, self, cond, "Si cond");
             if cond_result.to_bool() {
                 self.visit_body(then_br);
             } else if let Some(else_br) = else_br {
@@ -453,7 +568,7 @@ impl Visitor for Runner {
 
     fn visit_stmt_condstmt(&mut self, stmt: &Stmt) {
         if let Stmt::CondStmt { cond, then_stmt } = stmt {
-            let cond_result = self.eval_expr(cond).expect("CondStmt cond");
+            let cond_result = eval!(expr, self, cond, "CondStmt cond");
             if cond_result.to_bool() {
                 then_stmt.accept(self);
             }
@@ -471,7 +586,8 @@ impl Visitor for Runner {
             body,
         } = stmt
         {
-            let iter_obj = self.eval_expr(iterable).expect("Pour iterable");
+            let iter_obj = eval!(expr, self, iterable, "Pour iterable");
+
             let iter: Vec<ASObj> = match iter_obj {
                 ASObj::ASTexte(s) => s.chars().map(|c| ASObj::ASTexte(String::from(c))).collect(),
                 ASObj::ASListe(ls) => ls,
@@ -479,9 +595,8 @@ impl Visitor for Runner {
             };
 
             let DeclVar::Var { name, static_type, is_const } = var else { panic!() };
-            let static_type = static_type
-                .as_ref()
-                .map(|t| self.eval_type(t).expect("Pour var type"));
+            let static_type = eval!(opt_type, self, static_type, "Pour var type");
+
             let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
 
             for val in iter {
@@ -489,10 +604,10 @@ impl Visitor for Runner {
                 self.visit_body(body);
                 self.env.pop_scope();
                 match self.early_exit {
-                    Some(EarlyExit::Retourner) => break,
-                    Some(EarlyExit::Continuer) => self.early_exit = None,
+                    Some(EarlyExit::Retourner | EarlyExit::Erreur) => break,
+                    Some(EarlyExit::Continuer) => self.clear_early_exit(),
                     Some(EarlyExit::Sortir) => {
-                        self.early_exit = None;
+                        self.clear_early_exit();
                         break;
                     }
                     None => {}
@@ -503,15 +618,15 @@ impl Visitor for Runner {
 
     fn visit_stmt_tantque(&mut self, stmt: &Stmt) {
         if let Stmt::TantQue { cond, body } = stmt {
-            while self.eval_expr(cond).expect("Si cond").to_bool() {
+            while eval!(expr, self, cond, "Si cond").to_bool() {
                 self.env.push_scope(ASScope::new());
                 self.visit_body(body);
                 self.env.pop_scope();
                 match self.early_exit {
-                    Some(EarlyExit::Retourner) => break,
-                    Some(EarlyExit::Continuer) => self.early_exit = None,
+                    Some(EarlyExit::Retourner | EarlyExit::Erreur) => break,
+                    Some(EarlyExit::Continuer) => self.clear_early_exit(),
                     Some(EarlyExit::Sortir) => {
-                        self.early_exit = None;
+                        self.clear_early_exit();
                         break;
                     }
                     None => {}
@@ -521,11 +636,11 @@ impl Visitor for Runner {
     }
 
     fn visit_stmt_continuer(&mut self, stmt: &Stmt) {
-        self.early_exit = Some(EarlyExit::Continuer);
+        self.set_early_exit(Some(EarlyExit::Continuer));
     }
 
     fn visit_stmt_sortir(&mut self, stmt: &Stmt) {
-        self.early_exit = Some(EarlyExit::Sortir);
+        self.set_early_exit(Some(EarlyExit::Sortir));
     }
 
     fn visit_stmt_deffn(&mut self, stmt: &Stmt) {
@@ -536,28 +651,25 @@ impl Visitor for Runner {
             return_type,
         } = stmt
         {
-            let return_type = return_type
-                .as_ref()
-                .map(|t| self.eval_type(t).expect("Return func type"));
+            let return_type = eval!(opt_type, self, return_type, "Return Func type");
+
+            let mut params_fonc = Vec::with_capacity(params.len());
+            for param in params {
+                let param_type = eval!(opt_type, self, &param.static_type, "Param type");
+
+                params_fonc.push(ASFnParam::new(
+                    param.name.clone(),
+                    param_type,
+                    param.default_value.clone(),
+                ))
+            }
 
             let func = ASObj::asfonc(
                 Some(name.clone()),
                 None,
-                params
-                    .iter()
-                    .map(|param| {
-                        ASFnParam::new(
-                            param.name.clone(),
-                            param
-                                .static_type
-                                .clone()
-                                .map(|t| self.eval_type(&t).expect("Param type")),
-                            param.default_value.clone(),
-                        )
-                    })
-                    .collect(),
+                params_fonc,
                 body.clone(),
-                return_type.clone(),
+                return_type,
             );
 
             let func_var = ASVar::new(name.clone(), Some(ASType::Fonction), true);
@@ -575,7 +687,7 @@ impl Visitor for Runner {
                 // retourner
                 self.expr_results.push(ASObj::ASNul);
             }
-            self.early_exit = Some(EarlyExit::Retourner);
+            self.set_early_exit(Some(EarlyExit::Retourner));
         }
     }
 
@@ -603,8 +715,8 @@ impl Visitor for Runner {
 
     fn visit_type_binop(&mut self, t: &Type) {
         if let Type::BinOp { lhs, op, rhs } = t {
-            let lhs_value = self.eval_type(lhs).expect("Lhs de type binop");
-            let rhs_value = self.eval_type(rhs).expect("Rhs de type binop");
+            let lhs_value = eval!(type, self, lhs, "Lhs de type binop");
+            let rhs_value = eval!(type, self, rhs, "Rhs de type binop");
             self.type_results.push(match op {
                 TypeBinOpcode::Union => ASType::union_of(lhs_value, rhs_value),
                 TypeBinOpcode::Intersection => todo!(),
@@ -614,7 +726,7 @@ impl Visitor for Runner {
 
     fn visit_type_opt(&mut self, t: &Type) {
         if let Type::Opt(t) = t {
-            let type_val = self.eval_type(t).expect("Opt type");
+            let type_val = eval!(type, self, t, "Opt type");
             self.type_results
                 .push(ASType::union_of(type_val, ASType::Nul));
         }
