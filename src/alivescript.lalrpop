@@ -236,9 +236,10 @@ pub Term: Box<Expr> = {
 
   <obj:Term> "[" <slice:Expr> "]" => Box::new(Expr::Slice{<>}),
 
-  <obj:Term> "[" <first:Expr> "," <mut slice:Comma<Expr>> "]" => {
-      slice.push(first.clone());
-      Box::new(Expr::Slice{obj, slice: Box::new(Expr::List(slice)) })
+  <obj:Term> "[" <first:Expr> "," <slice:Comma<Expr>> "]" => {
+      let mut slice_final = vec![first.clone()];
+      slice_final.extend(slice.into_iter());
+      Box::new(Expr::Slice{obj, slice: Box::new(Expr::List(slice_final)) })
   },
 
   "ident" => Box::new(Expr::Ident(<>)),
