@@ -10,3 +10,8 @@ impl Data {
         matches!(self, Data::Erreur { .. })
     }
 }
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Response {
+    Text(String)
+}

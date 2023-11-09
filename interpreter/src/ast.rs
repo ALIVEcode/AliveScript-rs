@@ -281,6 +281,7 @@ impl Visitable for Stmt {
 
         match self {
             Afficher(..) => visitor.visit_stmt_afficher(self),
+            Lire { .. } => visitor.visit_stmt_lire(self),
             Utiliser { .. } => visitor.visit_stmt_utiliser(self),
             Expr(..) => visitor.visit_stmt_expr(self),
             Decl { .. } => visitor.visit_stmt_decl(self),

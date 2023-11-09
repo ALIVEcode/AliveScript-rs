@@ -1,0 +1,12 @@
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+derive-new = "0.6.0"
+alivescript_rust = { path = "../interpreter/" }
+serde_json = { version = "1.0.108", features = ["std"] }
+serde = { version = "1.0.192", features = ["derive"] }

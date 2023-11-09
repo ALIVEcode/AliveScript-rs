@@ -71,7 +71,7 @@ pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                         let env = runner.get_env();
                         env.get_value(&"obj".into()).unwrap().to_string()
                     };
-                    runner.push_data(Data::Afficher(obj));
+                    runner.send_data(Data::Afficher(obj));
                     None
                 },
                 ASType::Rien,

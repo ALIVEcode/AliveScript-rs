@@ -1,2 +1,3 @@
-/target
-/asdoc/book/
+**/target
+**/asdoc/book/
+**/*.als

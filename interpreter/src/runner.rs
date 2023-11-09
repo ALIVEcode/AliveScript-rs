@@ -2,7 +2,8 @@ use crate::{
     as_modules::ASModuleBuiltin,
     as_obj::{ASEnv, ASErreur, ASErreurType, ASFnParam, ASObj, ASScope, ASType, ASVar},
     ast::{BinCompcode, BinOpcode, DeclVar, Expr, LireVar, Stmt, Type, TypeBinOpcode},
-    data::Data,
+    data::{Data, Response},
+    io::InterpretorIO,
     visitor::{Visitable, Visitor},
 };
 
@@ -60,20 +61,20 @@ macro_rules! eval {
     }};
 }
 
-pub struct Runner {
+pub struct Runner<'a> {
     expr_results: Vec<ASObj>,
     type_results: Vec<ASType>,
-    datas: Vec<Data>,
+    io: &'a mut dyn InterpretorIO,
     env: ASEnv,
     early_exit: Option<EarlyExit>,
 }
 
-impl Runner {
-    pub fn new() -> Self {
+impl<'a> Runner<'a> {
+    pub fn new<IO: InterpretorIO + 'a>(intepretor_io: &'a mut IO) -> Self {
         let mut new = Self {
             expr_results: vec![],
             type_results: vec![],
-            datas: vec![],
+            io: intepretor_io,
             env: ASEnv::new(),
             early_exit: None,
         };
@@ -85,27 +86,17 @@ impl Runner {
         &mut self.env
     }
 
-    pub fn push_data(&mut self, data: Data) {
-        self.datas.push(data)
+    pub fn send_data(&mut self, data: Data) {
+        self.io.send(data);
+    }
+
+    pub fn request_data(&mut self, data: Data) -> Option<Response> {
+        self.io.request(data)
     }
 
     pub fn pop_value(&mut self) -> Option<ASObj> {
         self.expr_results.pop()
     }
-
-    pub fn get_datas(&self) -> Vec<Data> {
-        self.datas.clone()
-    }
-
-    // fn eval_expr(&mut self, expr: &Expr) -> Option<ASObj> {
-    //     expr.accept(self);
-    //     self.expr_results.pop()
-    // }
-
-    // fn eval_type(&mut self, t: &Type) -> Option<ASType> {
-    //     t.accept(self);
-    //     self.type_results.pop()
-    // }
 
     fn do_op(lhs: ASObj, op: &BinOpcode, rhs: ASObj) -> ASObj {
         use BinOpcode::*;
@@ -123,7 +114,7 @@ impl Runner {
 
     fn throw_err(&mut self, err: ASErreurType) {
         let error = ASErreur::new(err, 0);
-        self.push_data(error.into());
+        self.send_data(error.into());
         self.early_exit = Some(EarlyExit::Erreur);
     }
 
@@ -150,7 +141,7 @@ impl Runner {
     }
 }
 
-impl Visitor for Runner {
+impl Visitor for Runner<'_> {
     fn visit_body(&mut self, stmts: &Vec<Box<Stmt>>) {
         for stmt in stmts.iter() {
             if self.should_early_exit() {
@@ -372,7 +363,11 @@ impl Visitor for Runner {
                     (*s, *e, *step)
                 }
                 (s, e, step) => {
-                    self.throw_err(ASErreurType::new_suite_invalide(s.clone(), e.clone(), step.clone()));
+                    self.throw_err(ASErreurType::new_suite_invalide(
+                        s.clone(),
+                        e.clone(),
+                        step.clone(),
+                    ));
                     return;
                 }
             };
@@ -396,7 +391,10 @@ impl Visitor for Runner {
                 } else {
                     start_val..end_val
                 };
-                let range = range.step_by(step_val as usize).map(|i| ASObj::ASEntier(i)).collect();
+                let range = range
+                    .step_by(step_val as usize)
+                    .map(|i| ASObj::ASEntier(i))
+                    .collect();
                 self.expr_results.push(ASObj::ASListe(range));
             } else {
                 self.throw_err(ASErreurType::new_suite_invalide(start, end, step));
@@ -442,7 +440,7 @@ impl Visitor for Runner {
     fn visit_stmt_afficher(&mut self, stmt: &Stmt) {
         if let Stmt::Afficher(expr) = stmt {
             let value = eval!(expr, self, expr, "Afficher prend un argument");
-            self.datas.push(Data::Afficher(value.to_string()));
+            self.send_data(Data::Afficher(value.to_string()));
         }
     }
 
@@ -458,7 +456,36 @@ impl Visitor for Runner {
                     name,
                     static_type,
                     is_const,
-                }) => {}
+                }) => {
+                    let prompt_obj = eval!(opt_expr, self, prompt, "Prompt lire")
+                        .unwrap_or(ASObj::ASTexte("Entrez une valeur: ".into()));
+                    let ASObj::ASTexte(prompt) = prompt_obj else {
+                        self.throw_err(ASErreurType::new_erreur_type(ASType::Texte, prompt_obj.get_type()));
+                            return;
+                    };
+                    let Response::Text(reponse) = self
+                        .request_data(Data::Demander {
+                            prompt: Some(prompt),
+                        })
+                        .unwrap();
+
+                    let value = ASObj::ASTexte(reponse);
+
+                    let static_type = eval!(opt_type, self, static_type, "Decl var type");
+                    if static_type.is_some()
+                        && !ASType::type_match(static_type.as_ref().unwrap(), &value.get_type())
+                    {
+                        panic!(
+                            "Type invalide. Attendu: {:?}, obtenu: {:?}",
+                            static_type.unwrap(),
+                            value.get_type(),
+                        );
+                    }
+                    let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
+                    if self.env.declare(var, value).is_some() {
+                        panic!("Variable redéclarée {:?}", name);
+                    };
+                }
                 LireVar::Assign(name) => {}
                 LireVar::Decl(DeclVar::ListUnpack(_)) => todo!(),
             }

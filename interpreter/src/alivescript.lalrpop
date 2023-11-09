@@ -62,12 +62,13 @@ pub Stmt: Box<Stmt> = {
 SubStmt: Box<Stmt> = {
     Expr => Box::new(Stmt::Expr(<>)),
 
-    "afficher" <arg:Expr> => 
-        Box::new(Stmt::Expr(Box::new(
-            Expr::FnCall{
-                func: Box::new(Expr::Ident("afficher".into())),
-                args: vec![arg],
-            }))),
+    //"afficher" <arg:Expr> => 
+    //    Box::new(Stmt::Expr(Box::new(
+    //        Expr::FnCall{
+    //            func: Box::new(Expr::Ident("afficher".into())),
+    //            args: vec![arg],
+    //        }))),
+    "afficher" <arg:Expr> => Box::new(Stmt::Afficher(arg)),
 
     // Lire
     "lire" <factory:(<Expr> "dans")?> <var:DeclVar> <prompt:("," <Expr>)?> => 
