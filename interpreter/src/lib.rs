@@ -1,7 +1,5 @@
 #![allow(dead_code, unused_variables)]
 
-use std::env;
-
 use data::Data;
 use io::InterpretorIO;
 use lalrpop_util::lalrpop_mod;

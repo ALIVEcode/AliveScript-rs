@@ -27,6 +27,8 @@ pub enum ASObj {
         val: Box<ASObj>,
     },
 
+    ASTuple(Vec<ASObj>),
+
     ASTexte(String),
     ASListe(Vec<ASObj>),
     /// Les éléments du vecteur sont tous garanti d'être des [`ASObj::ASPaire`]
@@ -244,6 +246,14 @@ impl Display for ASObj {
             ASEntier(i) => i.to_string(),
             ASDecimal(d) => d.to_string(),
             ASTexte(s) => s.clone(),
+            ASBooleen(b) => {
+                if *b {
+                    "vrai".to_string()
+                } else {
+                    "faux".to_string()
+                }
+            }
+            ASNul => "nul".into(),
             ASPaire { key, val } => format!("{}: {}", key.repr(), val.repr()),
             ASListe(v) => format!(
                 "[{}]",
@@ -382,6 +392,8 @@ pub enum ASType {
     Objet(String),
 
     Union(Vec<ASType>),
+    Tuple(Vec<ASType>),
+    Optional(Box<ASType>),
 }
 
 impl ASType {
@@ -413,11 +425,20 @@ impl ASType {
         ASType::union(vec![type1, type2])
     }
 
+    pub fn optional(type1: ASType) -> ASType {
+        ASType::Optional(Box::new(type1))
+    }
+
+    pub fn any() -> ASType {
+        ASType::optional(ASType::Tout)
+    }
+
     fn is_tout(&self) -> bool {
         use ASType::*;
 
         match self {
             Union(types) => types.contains(&ASType::Tout),
+            Optional(t) => t.is_tout(),
             _ => self == &ASType::Tout,
         }
     }
@@ -425,15 +446,19 @@ impl ASType {
     pub fn type_match(type1: &ASType, type2: &ASType) -> bool {
         use ASType::*;
 
-        if type1.is_tout() || type2.is_tout() || type1 == type2 {
-            return true;
-        }
-
         match (type1, type2) {
+            (t1, t2) if t1 == t2 => true,
+            (Tout, other) | (other, Tout) => other != &Rien && other != &Nul,
+
+            (Optional(t), other) | (other, Optional(t)) => {
+                other == &Nul || ASType::type_match(t.as_ref(), other)
+            }
+
             (Union(types), other) | (other, Union(types)) => {
                 types.iter().any(|t| ASType::type_match(t, &other))
             }
-            (Entier, Decimal) => true,
+
+            (Decimal, Entier) => true,
             _ => false,
         }
     }
@@ -441,7 +466,8 @@ impl ASType {
 
 impl From<Option<ASType>> for ASType {
     fn from(value: Option<ASType>) -> Self {
-        value.unwrap_or(ASType::Tout)
+        use ASType::*;
+        value.unwrap_or(ASType::optional(Tout))
     }
 }
 
@@ -451,9 +477,9 @@ impl FromStr for ASType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "entier" => Ok(Self::Entier),
-            "decimal" => Ok(Self::Decimal),
+            "decimal" | "décimal" => Ok(Self::Decimal),
             "nombre" => Ok(Self::nombre()),
-            "iterable" => Ok(Self::iterable()),
+            "iterable" | "itérable" => Ok(Self::iterable()),
             "texte" => Ok(Self::Texte),
             "liste" => Ok(Self::Liste),
             "rien" => Ok(Self::Nul),
@@ -470,21 +496,39 @@ impl Display for ASType {
 
         let to_string = match self {
             Tout => "tout".into(),
+            Rien => "rien".into(),
+
             Nul => "nul".into(),
+            Optional(t) => format!("{}?", t),
+
             Entier => "entier".into(),
-            Decimal => "decimal".into(),
+            Decimal => "décimal".into(),
+            Booleen => "booléen".into(),
             Texte => "texte".into(),
+
             Liste => "liste".into(),
+            Dict => "dict".into(),
+            Paire => "paire".into(),
+
+            Module => "module".into(),
+            Objet(o) => o.clone(),
+
             Fonction => "fonction".into(),
-            Union(types) if types.len() == 2 && types[1] == Nul => {
-                format!("{}?", types[0])
-            }
+
             Union(types) => types
                 .iter()
                 .map(Self::to_string)
                 .collect::<Vec<String>>()
                 .join(" | "),
-            _ => todo!(),
+
+            Tuple(types) => format!(
+                "({})",
+                types
+                    .iter()
+                    .map(Self::to_string)
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
         };
         write!(f, "{}", to_string)
     }
@@ -572,7 +616,20 @@ pub enum ASErreurType {
     VariableInconnue {
         var_name: String,
     },
+    AffectationConstante {
+        var_name: String,
+    },
     ErreurType {
+        type_attendu: ASType,
+        type_obtenu: ASType,
+    },
+    ErreurTypeRetour {
+        type_attendu: ASType,
+        type_obtenu: ASType,
+    },
+    ErreurTypeAppel {
+        func_name: Option<String>,
+        param_name: String,
         type_attendu: ASType,
         type_obtenu: ASType,
     },
@@ -589,12 +646,32 @@ impl Display for ASErreurType {
 
         let to_string = match self {
             VariableInconnue { var_name } => format!("Variable inconnue '{}'", var_name),
+            AffectationConstante { var_name } => format!("Impossible de changer la valeur d'une constante: '{}'", var_name),
             ErreurType {
                 type_obtenu,
                 type_attendu,
             } => format!(
                 "Erreur de type. Type attendu: '{}', type obtenu: '{}'",
                 type_attendu, type_obtenu,
+            ),
+            ErreurTypeRetour {
+                type_obtenu,
+                type_attendu,
+            } => format!(
+                "Mauvais type de retour. Attendu: {}, Obtenu: {}",
+                type_attendu, type_obtenu
+            ),
+            ErreurTypeAppel {
+                func_name,
+                param_name,
+                type_obtenu,
+                type_attendu,
+            } => format!(
+                "Dans la fonction {}: Type de l'argument invalide pour le paramètre {}. Attendu: {}, obtenu: {}",
+                func_name.as_ref().unwrap_or(&"<sans-nom>".to_string()), 
+                param_name,
+                type_attendu, 
+                type_obtenu,
             ),
             SuiteInvalide { start, end, step } => {
                 format!("Suite invalide: {} .. {} bond {}", start, end, step)

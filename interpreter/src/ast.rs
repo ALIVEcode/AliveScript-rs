@@ -35,7 +35,7 @@ pub enum Stmt {
 
     /// Affectation
     Assign {
-        var: Box<Expr>,
+        var: AssignVar,
         val: Box<Expr>,
     },
 
@@ -145,6 +145,15 @@ pub enum DeclVar {
         is_const: bool,
     },
     ListUnpack(Vec<DeclVar>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum AssignVar {
+    Decl(DeclVar),
+    Slice {
+        obj: Box<Expr>,
+        slice: Box<Expr>,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]

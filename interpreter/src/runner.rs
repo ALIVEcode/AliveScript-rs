@@ -1,7 +1,9 @@
+use std::ops::IndexMut;
+
 use crate::{
     as_modules::ASModuleBuiltin,
     as_obj::{ASEnv, ASErreur, ASErreurType, ASFnParam, ASObj, ASScope, ASType, ASVar},
-    ast::{BinCompcode, BinOpcode, DeclVar, Expr, LireVar, Stmt, Type, TypeBinOpcode},
+    ast::{AssignVar, BinCompcode, BinOpcode, DeclVar, Expr, LireVar, Stmt, Type, TypeBinOpcode},
     data::{Data, Response},
     io::InterpretorIO,
     visitor::{Visitable, Visitor},
@@ -58,6 +60,13 @@ macro_rules! eval {
         } else {
             None
         }
+    }};
+}
+
+macro_rules! throw_err {
+    ($self:expr, $err:expr) => {{
+        $self.throw_err($err);
+        return;
     }};
 }
 
@@ -206,8 +215,7 @@ impl Visitor for Runner<'_> {
             if let Some((var, val)) = self.env.get_var(var_name) {
                 self.expr_results.push(val.clone());
             } else {
-                self.throw_err(ASErreurType::new_variable_inconnue(var_name.clone()));
-                return;
+                throw_err!(self, ASErreurType::new_variable_inconnue(var_name.clone()));
             }
         }
     }
@@ -236,11 +244,10 @@ impl Visitor for Runner<'_> {
                         if let ASObj::ASEntier(i) = obj {
                             lst_final.push(lst[i as usize].clone());
                         } else {
-                            self.throw_err(ASErreurType::new_erreur_type(
-                                ASType::Entier,
-                                obj.get_type(),
-                            ));
-                            return;
+                            throw_err!(
+                                self,
+                                ASErreurType::new_erreur_type(ASType::Entier, obj.get_type(),)
+                            );
                         }
                     }
                     ASObj::ASListe(lst_final)
@@ -254,11 +261,10 @@ impl Visitor for Runner<'_> {
                         if let ASObj::ASEntier(i) = obj {
                             txt_final.push(txt.chars().nth(i as usize).unwrap());
                         } else {
-                            self.throw_err(ASErreurType::new_erreur_type(
-                                ASType::Entier,
-                                obj.get_type(),
-                            ));
-                            return;
+                            throw_err!(
+                                self,
+                                ASErreurType::new_erreur_type(ASType::Entier, obj.get_type(),)
+                            );
                         }
                     }
                     ASObj::ASTexte(txt_final)
@@ -290,10 +296,14 @@ impl Visitor for Runner<'_> {
                     if let Some(arg_expr) = arg {
                         let arg_val = eval!(expr, self, arg_expr, "FnCall arg");
                         if !ASType::type_match(&param.static_type, &arg_val.get_type()) {
-                            panic!(
-                                "Type de l'argument invalide. Attendu: {:?}, obtenu: {:?}",
-                                param.static_type,
-                                arg_val.get_type()
+                            throw_err!(
+                                self,
+                                ASErreurType::ErreurTypeAppel {
+                                    func_name: name.clone(),
+                                    param_name: param.name.clone(),
+                                    type_attendu: param.static_type.clone(),
+                                    type_obtenu: arg_val.get_type().clone(),
+                                }
                             );
                         }
                         env.insert(param.to_asvar(), arg_val);
@@ -309,7 +319,8 @@ impl Visitor for Runner<'_> {
                 self.env.push_scope(env);
                 self.visit_body(body);
 
-                if !self.should_early_exit() {
+                // Fonction termine sans de "retourner"
+                if !self.should_early_exit() && !ASType::type_match(&return_type, &ASType::Rien) {
                     self.expr_results.push(ASObj::ASNul);
                 } else if !self.early_exit_matches(EarlyExit::Retourner) {
                     panic!("Sortie d'une fonction autrement qu'avec `retourner`")
@@ -325,11 +336,15 @@ impl Visitor for Runner<'_> {
                 } else {
                     ASType::Rien
                 };
+
                 if !ASType::type_match(&return_type, &type_returned) {
-                    panic!(
-                        "Mauvais type de retour. Attendu: {:?}, Obtenu: {:?}",
-                        return_type, type_returned
-                    )
+                    throw_err!(
+                        self,
+                        ASErreurType::ErreurTypeRetour {
+                            type_attendu: return_type,
+                            type_obtenu: type_returned,
+                        }
+                    );
                 }
             } else {
                 panic!("Impossible d'appeler '{:?}'", expr);
@@ -363,12 +378,10 @@ impl Visitor for Runner<'_> {
                     (*s, *e, *step)
                 }
                 (s, e, step) => {
-                    self.throw_err(ASErreurType::new_suite_invalide(
-                        s.clone(),
-                        e.clone(),
-                        step.clone(),
-                    ));
-                    return;
+                    throw_err!(
+                        self,
+                        ASErreurType::new_suite_invalide(s.clone(), e.clone(), step.clone(),)
+                    );
                 }
             };
 
@@ -397,8 +410,7 @@ impl Visitor for Runner<'_> {
                     .collect();
                 self.expr_results.push(ASObj::ASListe(range));
             } else {
-                self.throw_err(ASErreurType::new_suite_invalide(start, end, step));
-                return;
+                throw_err!(self, ASErreurType::new_suite_invalide(start, end, step));
             }
         }
     }
@@ -460,8 +472,10 @@ impl Visitor for Runner<'_> {
                     let prompt_obj = eval!(opt_expr, self, prompt, "Prompt lire")
                         .unwrap_or(ASObj::ASTexte("Entrez une valeur: ".into()));
                     let ASObj::ASTexte(prompt) = prompt_obj else {
-                        self.throw_err(ASErreurType::new_erreur_type(ASType::Texte, prompt_obj.get_type()));
-                            return;
+                        throw_err!(
+                            self,
+                            ASErreurType::new_erreur_type(ASType::Texte, prompt_obj.get_type(),)
+                        );
                     };
                     let Response::Text(reponse) = self
                         .request_data(Data::Demander {
@@ -506,15 +520,24 @@ impl Visitor for Runner<'_> {
     fn visit_stmt_decl(&mut self, stmt: &Stmt) {
         if let Stmt::Decl { var, val } = stmt {
             let value = eval!(expr, self, val, "Decl valeur");
-            let DeclVar::Var { name, static_type, is_const } = var else { panic!() };
+            let DeclVar::Var {
+                name,
+                static_type,
+                is_const,
+            } = var
+            else {
+                panic!()
+            };
             let static_type = eval!(opt_type, self, static_type, "Decl var type");
             if static_type.is_some()
                 && !ASType::type_match(static_type.as_ref().unwrap(), &value.get_type())
             {
-                panic!(
-                    "Type invalide. Attendu: {:?}, obtenu: {:?}",
-                    static_type.unwrap(),
-                    value.get_type(),
+                throw_err!(
+                    self,
+                    ASErreurType::ErreurType {
+                        type_attendu: static_type.unwrap(),
+                        type_obtenu: value.get_type(),
+                    }
                 );
             }
             let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
@@ -525,28 +548,68 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_stmt_assign(&mut self, stmt: &Stmt) {
-        if let Stmt::Assign { var, val } = stmt {
+        if let Stmt::Assign {
+            var: assign_var,
+            val,
+        } = stmt
+        {
             let value = eval!(expr, self, val, "Assign valeur");
-            match var.as_ref() {
-                Expr::Ident(var_name) => {
-                    if let Some((var, _old_val)) = self.env.get_var(var_name) {
+            match assign_var {
+                AssignVar::Decl(DeclVar::Var {
+                    name,
+                    static_type,
+                    is_const,
+                }) => {
+                    if let Some((var, _old_val)) = self.env.get_var(name) {
                         if var.is_const() {
-                            panic!("Impossible de changer la valeur d'une constante")
+                            throw_err!(
+                                self,
+                                ASErreurType::AffectationConstante {
+                                    var_name: name.clone()
+                                }
+                            )
                         }
                         if !var.type_match(&value.get_type()) {
-                            panic!(
-                                "Type invalide. Attendu: {:?}, obtenu: {:?}",
-                                var.get_type(),
-                                value.get_type()
+                            throw_err!(
+                                self,
+                                ASErreurType::ErreurType {
+                                    type_attendu: var.get_type().clone(),
+                                    type_obtenu: value.get_type()
+                                }
                             );
                         }
 
                         self.env.assign(var.clone(), value);
                     } else {
-                        panic!("Variable inconnue '{}'", var_name);
+                        let static_type = eval!(opt_type, self, static_type, "Assign var type");
+                        if static_type.is_some()
+                            && !ASType::type_match(static_type.as_ref().unwrap(), &value.get_type())
+                        {
+                            throw_err!(
+                                self,
+                                ASErreurType::ErreurType {
+                                    type_attendu: static_type.unwrap(),
+                                    type_obtenu: value.get_type(),
+                                }
+                            );
+                        }
+                        let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
+                        self.env.declare(var, value);
                     }
                 }
-                _ => todo!(),
+                AssignVar::Slice { obj, slice } => {
+                    use ASObj::*;
+
+                    let var_val = eval!(expr, self, obj, "Assign Slice Obj");
+                    let slice_val = eval!(expr, self, slice, "Assign Slice Slice");
+                    match (var_val, slice_val) {
+                        (ASListe(mut lst), ASEntier(i)) => {
+                            *lst.index_mut(i as usize) = value;
+                        }
+                        _ => todo!(),
+                    }
+                }
+                AssignVar::Decl(_) => todo!(),
             }
         }
     }
@@ -621,7 +684,14 @@ impl Visitor for Runner<'_> {
                 _ => panic!("Pas itérable"),
             };
 
-            let DeclVar::Var { name, static_type, is_const } = var else { panic!() };
+            let DeclVar::Var {
+                name,
+                static_type,
+                is_const,
+            } = var
+            else {
+                panic!()
+            };
             let static_type = eval!(opt_type, self, static_type, "Pour var type");
 
             let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
@@ -754,8 +824,7 @@ impl Visitor for Runner<'_> {
     fn visit_type_opt(&mut self, t: &Type) {
         if let Type::Opt(t) = t {
             let type_val = eval!(type, self, t, "Opt type");
-            self.type_results
-                .push(ASType::union_of(type_val, ASType::Nul));
+            self.type_results.push(ASType::optional(type_val));
         }
     }
 }

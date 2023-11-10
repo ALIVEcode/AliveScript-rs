@@ -19,13 +19,13 @@ pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                 None,
                 vec![ASFnParam {
                     name: "obj".into(),
-                    static_type: ASType::Tout,
+                    static_type: ASType::any(),
                     default_value: None,
                 }],
                 |runner| {
                     let env = runner.get_env();
-                    let o = env.get_value(&"o".into()).unwrap();
-                    Some(ASObj::ASTexte(o.get_type().to_string()))
+                    let obj = env.get_value(&"obj".into()).unwrap();
+                    Some(ASObj::ASTexte(obj.get_type().to_string()))
                 },
                 ASType::Texte,
             ),
@@ -63,7 +63,7 @@ pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                 None,
                 vec![ASFnParam {
                     name: "obj".into(),
-                    static_type: ASType::Tout,
+                    static_type: ASType::any(),
                     default_value: Some(Expr::literal(ASObj::ASTexte("\n".into()))),
                 }],
                 |runner| {

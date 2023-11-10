@@ -4,6 +4,7 @@ use crate::ast::{
     Type,
     BinOpcode,
     DeclVar,
+    AssignVar,
     BinCompcode,
     TypeBinOpcode,
     FnParam,
@@ -32,7 +33,7 @@ pub Stmt: Box<Stmt> = {
     <var:DeclVar> "assign" <val:Expr> "eos" => Box::new(Stmt::Decl { <> }),
 
     // Affectation
-    <var:Expr> "assign" <val:Expr> "eos" => Box::new(Stmt::Assign { <> }),
+    <var:AssignVar> "assign" <val:Expr> "eos" => Box::new(Stmt::Assign { <> }),
     <var:Expr> <op:BinOpcodeAssign> <val:Expr> "eos" => Box::new(Stmt::OpAssign { <> }),
 
     // Conditionnels
@@ -103,7 +104,6 @@ pub StmtExpr: Box<Expr> = {
 pub Expr: Box<Expr> = {
   #[precedence(level="1")]
   Term,
-  Paire,
 
   #[precedence(level="2")]
   #[assoc(side="left")]
@@ -237,25 +237,33 @@ pub Term: Box<Expr> = {
 
   <obj:Term> "[" <slice:Expr> "]" => Box::new(Expr::Slice{<>}),
 
-  <obj:Term> "[" <first:Expr> "," <slice:Comma<Expr>> "]" => {
-      let mut slice_final = vec![first.clone()];
-      slice_final.extend(slice.into_iter());
-      Box::new(Expr::Slice{obj, slice: Box::new(Expr::List(slice_final)) })
-  },
-
   "ident" => Box::new(Expr::Ident(<>)),
+
+  Slice,
 
   //"afficher" => Box::new(Expr::Ident("afficher".into())),
 
   "(" <Expr> ")",
+
+  "(" <Paire> ")",
 
   "[" <Comma<Expr>> "]" => Box::new(Expr::List(<>)),
 
   "{" <Comma<Paire>> "}" => Box::new(Expr::Dict(<>)),
 };
 
-pub Paire: Box<Expr> = {
+#[inline]
+Paire: Box<Expr> = {
     <clef:Term> ":" <val:Term> => Box::new(Expr::Paire{ <> }),
+}
+
+#[inline]
+Slice: Box<Expr> = {
+  <obj:Term> "[" <first:Expr> "," <slice:Comma<Expr>> "]" => {
+      let mut slice_final = vec![first.clone()];
+      slice_final.extend(slice.into_iter());
+      Box::new(Expr::Slice{obj, slice: Box::new(Expr::List(slice_final)) })
+  },
 }
 
 DeclVar: DeclVar = {
@@ -274,6 +282,25 @@ DeclVar: DeclVar = {
         },
 };
 
+
+AssignVar: AssignVar = {
+    <name:"ident"> <static_type:StaticType> =>
+        AssignVar::Decl(DeclVar::Var { 
+            name,
+            static_type,
+            is_const: false,
+        }),
+    <expr:Slice> => {
+        match *expr {
+            Expr::Slice { obj, slice } => AssignVar::Slice {
+                obj,
+                slice,
+            },
+            _ => unreachable!(),
+        }
+    }
+}
+
 Lit: Expr = {
   "bool" => Expr::Lit(ASObj::ASBooleen(<>)),
 
@@ -287,9 +314,11 @@ Lit: Expr = {
 };
 
 FnParam: FnParam = {
-    <name:"ident"> <static_type:(":" <Type>)?> <default_value:("assign" <Expr>)?> 
+    <name:"ident"> <static_type:StaticType> <default_value:("assign" <Expr>)?> 
         => FnParam { <> },
 };
+
+StaticType: Option<Box<Type>> = (":" <Type>)?;
 
 Type: Box<Type> = {
   #[precedence(level="1")]
