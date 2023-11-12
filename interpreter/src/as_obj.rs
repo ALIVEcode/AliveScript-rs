@@ -150,8 +150,6 @@ impl ASObj {
         use ASObj::*;
 
         match self {
-            ASEntier(i) => i.to_string(),
-            ASDecimal(d) => d.to_string(),
             ASTexte(s) => format!("\"{}\"", s),
             o => o.to_string(),
         }
@@ -268,10 +266,10 @@ impl Display for ASObj {
             ASTexte(s) => s.clone(),
             ASBooleen(b) => {
                 if *b {
-                    "vrai".to_string()
+                    "vrai"
                 } else {
-                    "faux".to_string()
-                }
+                    "faux"
+                }.into()
             }
             ASNul => "nul".into(),
             ASPaire { key, val } => format!("{}: {}", key.repr(), val.repr()),
@@ -292,7 +290,7 @@ impl Display for ASObj {
             } => {
                 format!(
                     "{}({}) -> {}",
-                    name.as_ref().unwrap_or(&"".to_string()),
+                    name.as_ref().unwrap_or(&"".into()),
                     params
                         .iter()
                         .map(ASFnParam::to_string)
@@ -763,6 +761,10 @@ pub enum ASErreurType {
         end: ASObj,
         step: ASObj,
     },
+    ErreurValeur {
+        raison: Option<String>,
+        valeur: ASObj,
+    },
 }
 
 impl Display for ASErreurType {
@@ -774,6 +776,8 @@ impl Display for ASErreurType {
             AffectationConstante { var_name } => format!("Impossible de changer la valeur d'une constante: '{}'", var_name),
 
             ErreurConversionType { type_cible, texte } => format!("Impossible de convertir \"{}\" en {}", texte, type_cible),
+
+            ErreurValeur { raison, valeur } => format!("Valeur invalide: {}. {}", valeur, raison.unwrap_or_default()),
 
             ErreurType {
                 type_obtenu,

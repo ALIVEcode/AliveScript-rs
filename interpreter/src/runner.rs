@@ -442,14 +442,14 @@ impl Visitor for Runner<'_> {
                     let r = lhs_value.contains(&rhs_value);
                     match r {
                         Err(err) => throw_err!(self, err),
-                        Ok(r) => r
+                        Ok(r) => r,
                     }
                 }
                 PasDans => {
                     let r = lhs_value.contains(&rhs_value);
                     match r {
                         Err(err) => throw_err!(self, err),
-                        Ok(r) => !r
+                        Ok(r) => !r,
                     }
                 }
             });
@@ -706,7 +706,51 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_stmt_repeter(&mut self, stmt: &Stmt) {
-        todo!()
+        if let Stmt::Repeter { n, body } = stmt {
+            let n_iter = eval!(opt_expr, self, n, "Repeter body");
+            let n_value = match n_iter {
+                Some(ASObj::ASEntier(i)) => {
+                    if i >= 0 {
+                        Some(i)
+                    } else {
+                        throw_err!(
+                            self,
+                            ASErreurType::new_erreur_valeur(
+                                Some("La valeur doit être un entier >= 0.".into()),
+                                ASObj::ASEntier(i)
+                            )
+                        )
+                    }
+                }
+                Some(o) => throw_err!(
+                    self,
+                    ASErreurType::new_erreur_type(ASType::Entier, o.get_type().clone())
+                ),
+                None => None,
+            };
+
+            let mut counter = 0;
+            loop {
+                if let Some(n) = n_value {
+                    if n == counter {
+                        break;
+                    }
+                    counter += 1;
+                }
+                self.env.push_scope(ASScope::new());
+                self.visit_body(body);
+                self.env.pop_scope();
+                match self.early_exit {
+                    Some(EarlyExit::Retourner | EarlyExit::Erreur) => break,
+                    Some(EarlyExit::Continuer) => self.clear_early_exit(),
+                    Some(EarlyExit::Sortir) => {
+                        self.clear_early_exit();
+                        break;
+                    }
+                    None => {}
+                };
+            }
+        }
     }
 
     fn visit_stmt_pour(&mut self, stmt: &Stmt) {
