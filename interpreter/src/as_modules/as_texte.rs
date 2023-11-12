@@ -23,8 +23,10 @@ pub static TEXTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                 }],
                 |runner| {
                     let env = runner.get_env();
-                    let ASObj::ASTexte(txt) = env.get_value(&"txt".into()).unwrap() else { unreachable!() };
-                    Some(ASObj::ASTexte(txt.to_uppercase()))
+                    let ASObj::ASTexte(txt) = env.get_value(&"txt".into()).unwrap() else {
+                        unreachable!()
+                    };
+                    Ok(Some(ASObj::ASTexte(txt.to_uppercase())))
                 },
                 ASType::Texte,
             ),
@@ -43,8 +45,10 @@ pub static TEXTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                 }],
                 |runner| {
                     let env = runner.get_env();
-                    let ASObj::ASTexte(txt) = env.get_value(&"txt".into()).unwrap() else { unreachable!() };
-                    Some(ASObj::ASTexte(txt.to_lowercase()))
+                    let ASObj::ASTexte(txt) = env.get_value(&"txt".into()).unwrap() else {
+                        unreachable!()
+                    };
+                    Ok(Some(ASObj::ASTexte(txt.to_lowercase())))
                 },
                 ASType::Texte,
             ),
@@ -70,13 +74,17 @@ pub static TEXTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                 ],
                 |runner| {
                     let env = runner.get_env();
-                    let ASObj::ASTexte(txt) = env.get_value(&"txt".into()).unwrap() else { unreachable!() };
-                    let ASObj::ASTexte(subtxt) = env.get_value(&"subtxt".into()).unwrap() else { unreachable!() };
+                    let ASObj::ASTexte(txt) = env.get_value(&"txt".into()).unwrap() else {
+                        unreachable!()
+                    };
+                    let ASObj::ASTexte(subtxt) = env.get_value(&"subtxt".into()).unwrap() else {
+                        unreachable!()
+                    };
                     let maybe_i = txt.find(subtxt);
-                    Some(match maybe_i {
+                    Ok(Some(match maybe_i {
                         Some(i) => ASObj::ASEntier(i as i64),
                         None => ASObj::ASNul,
-                    })
+                    }))
                 },
                 ASType::Union(vec![ASType::Entier, ASType::Nul]),
             ),
@@ -112,17 +120,25 @@ pub static TEXTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                 ],
                 |runner| {
                     let env = runner.get_env();
-                    let ASObj::ASTexte(txt) = env.get_value(&"txt".into()).unwrap() else { unreachable!() };
-                    let ASObj::ASTexte(pattern) = env.get_value(&"pattern".into()).unwrap() else { unreachable!() };
-                    let ASObj::ASTexte(remplacement) = env.get_value(&"remplacement".into()).unwrap() else { unreachable!() };
+                    let ASObj::ASTexte(txt) = env.get_value(&"txt".into()).unwrap() else {
+                        unreachable!()
+                    };
+                    let ASObj::ASTexte(pattern) = env.get_value(&"pattern".into()).unwrap() else {
+                        unreachable!()
+                    };
+                    let ASObj::ASTexte(remplacement) =
+                        env.get_value(&"remplacement".into()).unwrap()
+                    else {
+                        unreachable!()
+                    };
                     let i = env.get_value(&"n".into()).unwrap();
-                    Some(match i {
+                    Ok(Some(match i {
                         ASObj::ASNul => ASObj::ASTexte(txt.replace(pattern, remplacement)),
                         ASObj::ASEntier(n) => {
                             ASObj::ASTexte(txt.replacen(pattern, remplacement, *n as usize))
                         }
                         _ => unreachable!(),
-                    })
+                    }))
                 },
                 ASType::Texte,
             ),

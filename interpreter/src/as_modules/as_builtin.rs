@@ -25,7 +25,7 @@ pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                 |runner| {
                     let env = runner.get_env();
                     let obj = env.get_value(&"obj".into()).unwrap();
-                    Some(ASObj::ASTexte(obj.get_type().to_string()))
+                    Ok(Some(ASObj::ASTexte(obj.get_type().to_string())))
                 },
                 ASType::Texte,
             ),
@@ -48,10 +48,10 @@ pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                         unreachable!()
                     };
                     let maybe_var = env.get_var(nom_var).map(|v| &v.0);
-                    Some(match maybe_var {
+                    Ok(Some(match maybe_var {
                         Some(var) => ASObj::ASTexte(var.get_type().to_string()),
                         None => ASObj::ASNul,
-                    })
+                    }))
                 },
                 ASType::union_of(ASType::Texte, ASType::Nul),
             ),
@@ -74,7 +74,7 @@ pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                         env.get_value(&"obj".into()).unwrap().to_string()
                     };
                     runner.send_data(Data::Afficher(obj));
-                    None
+                    Ok(None)
                 },
                 ASType::Rien,
             ),
@@ -94,7 +94,7 @@ pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                 |runner| {
                     let env = runner.get_env();
                     let obj = env.get_value(&"obj".into()).unwrap();
-                    Some(ASObj::ASBooleen(obj.to_bool()))
+                    Ok(Some(ASObj::ASBooleen(obj.to_bool())))
                 },
                 ASType::Booleen,
             ),
@@ -120,14 +120,14 @@ pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                     let ASObj::ASEntier(base) = env.get_value(&"base".into()).unwrap() else {
                         unreachable!()
                     };
-                    Some(match obj {
+                    Ok(Some(match obj {
                         ASObj::ASEntier(_) => obj.clone(),
                         ASObj::ASDecimal(d) => ASObj::ASEntier(*d as i64),
                         ASObj::ASTexte(s) => {
                             ASObj::ASEntier(i64::from_str_radix(s, *base as u32).unwrap())
                         }
                         _ => unreachable!(),
-                    })
+                    }))
                 },
                 ASType::Entier,
             ),
@@ -147,12 +147,12 @@ pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                 |runner| {
                     let env = runner.get_env();
                     let obj = env.get_value(&"obj".into()).unwrap();
-                    Some(match obj {
+                    Ok(Some(match obj {
                         ASObj::ASEntier(i) => ASObj::ASDecimal(*i as f64),
                         ASObj::ASDecimal(_) => obj.clone(),
                         ASObj::ASTexte(s) => ASObj::ASDecimal(s.parse().unwrap()),
                         _ => unreachable!(),
-                    })
+                    }))
                 },
                 ASType::Decimal,
             ),

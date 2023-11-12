@@ -30,9 +30,11 @@ pub static LISTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
             ],
             |runner| {
                 let env = runner.get_env();
-                let ASObj::ASListe(lst) = env.get_value(&"lst".into()).unwrap() else { unreachable!() };
+                let ASObj::ASListe(lst) = env.get_value(&"lst".into()).unwrap() else {
+                    unreachable!()
+                };
                 let mut lst = lst.clone();
-                Some(match env.get_value(&"clef".into()).unwrap() {
+                Ok(Some(match env.get_value(&"clef".into()).unwrap() {
                     ASObj::ASNul => {
                         lst.sort_by(|a, b| a.partial_cmp(b).expect("Comparable"));
                         ASObj::ASListe(lst)
@@ -51,7 +53,7 @@ pub static LISTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                         ASObj::ASListe(lst)
                     }
                     _ => unreachable!(),
-                })
+                }))
             },
             ASType::Liste,
         ),

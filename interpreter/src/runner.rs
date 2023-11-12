@@ -46,6 +46,19 @@ macro_rules! eval {
         }
     }};
 
+    (call, $runner:ident, $func:expr, $args:expr, $expect:literal) => {{
+        let to_call = Expr::FnCall {
+            func: $func,
+            args: $args.into_iter().map(|arg| Expr::literal(arg)).collect(),
+        };
+        to_call.accept($runner);
+        if $runner.error_thrown() {
+            return;
+        } else {
+            $runner.expr_results.pop().expect($expect)
+        }
+    }};
+
     (type, $runner:ident, $expr:expr, $expect:literal) => {{
         ($expr).accept($runner);
         if $runner.error_thrown() {
@@ -372,8 +385,10 @@ impl Visitor for Runner<'_> {
     fn visit_expr_callrust(&mut self, expr: &Expr) {
         if let Expr::CallRust(proc) = expr {
             let result = proc(self);
-            if let Some(value) = result {
-                self.expr_results.push(value);
+            match result {
+                Ok(Some(value)) => self.expr_results.push(value),
+                Ok(None) => {}
+                Err(err) => throw_err!(self, err),
             }
         }
     }
@@ -593,8 +608,19 @@ impl Visitor for Runner<'_> {
                         })
                         .unwrap();
 
+                    let reponse = reponse.trim().to_string();
+
                     let static_type: ASType = static_type.into();
-                    let value = static_type.convert_to_obj(reponse);
+                    let value = match factory {
+                        Some(factory) => Ok(eval!(
+                            call,
+                            self,
+                            factory.clone(),
+                            vec![ASObj::ASTexte(reponse)],
+                            "Factory returns a value"
+                        )),
+                        None => static_type.convert_to_obj(reponse),
+                    };
 
                     let Ok(value) = value else {
                         throw_err!(self, value.err().unwrap())

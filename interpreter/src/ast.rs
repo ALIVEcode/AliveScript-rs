@@ -1,5 +1,5 @@
 use crate::{
-    as_obj::ASObj,
+    as_obj::{ASErreurType, ASObj},
     runner::Runner,
     visitor::{Visitable, Visitor},
 };
@@ -99,7 +99,7 @@ pub enum Stmt {
 
 impl Stmt {
     /// Body en rust d'une fonction
-    pub fn native_fn(body: fn(&mut Runner) -> Option<ASObj>) -> Box<Self> {
+    pub fn native_fn(body: fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>) -> Box<Self> {
         Box::new(Stmt::Retourner(Some(Box::new(Expr::CallRust(body)))))
     }
 }
@@ -219,7 +219,7 @@ pub enum Expr {
         op: UnaryOpcode,
     },
 
-    CallRust(fn(&mut Runner) -> Option<ASObj>),
+    CallRust(fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>),
 }
 
 impl Expr {

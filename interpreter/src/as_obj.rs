@@ -73,7 +73,7 @@ impl ASObj {
         name: &str,
         docs: Option<String>,
         params: Vec<ASFnParam>,
-        body: fn(&mut Runner) -> Option<ASObj>,
+        body: fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>,
         return_type: ASType,
     ) -> ASObj {
         Self::ASFonc {
