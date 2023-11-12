@@ -589,13 +589,6 @@ impl Visitor for Runner<'_> {
                             }
                         }
                     }
-                    if static_type.as_ref().is_some_and(|t| !t.is_primitif()) {
-                        panic!(
-                            "Type invalide. Le type doit être un type primitif, pas {}",
-                            static_type.unwrap(),
-                        );
-                    }
-
                     let ASObj::ASTexte(prompt) = prompt_obj else {
                         throw_err!(
                             self,
@@ -625,6 +618,17 @@ impl Visitor for Runner<'_> {
                     let Ok(value) = value else {
                         throw_err!(self, value.err().unwrap())
                     };
+
+                    if !ASType::type_match(&static_type, &value.get_type())
+                    {
+                        throw_err!(
+                            self,
+                            ASErreurType::ErreurType {
+                                type_attendu: static_type,
+                                type_obtenu: value.get_type(),
+                            }
+                        );
+                    }
 
                     let var = ASVar::new(name.clone(), Some(static_type), *is_const);
                     self.env.declare(var, value);
