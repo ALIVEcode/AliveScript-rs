@@ -136,7 +136,7 @@ impl ASObj {
             (ASPaire { key, val }, rhs) => todo!(),
             (ASTexte(s), ASTexte(sub_s)) => Ok(s.contains(sub_s)),
             (ASListe(l), rhs) => Ok(l.contains(rhs)),
-            (ASDict(_), rhs) => todo!(),
+            (ASDict(d), rhs) => Ok(d.into_iter().find(|el| matches!(el, ASPaire { key, val } if key.as_ref() == rhs)).is_some()),
 
             (ASTuple(_), _) => todo!("Tuple pas encore (et peut-être jamais) dans le langage"),
             (ASStructure { name, fields }, _) => todo!("Check présense du field?"),
@@ -811,7 +811,7 @@ impl Display for ASErreurType {
                 type_obtenu,
                 type_attendu,
             } => format!(
-                "Mauvais type de retour. Attendu: {}, Obtenu: {}",
+                "Mauvais type de retour. Attendu: '{}', Obtenu: '{}'",
                 type_attendu, type_obtenu
             ),
 
@@ -821,7 +821,7 @@ impl Display for ASErreurType {
                 type_obtenu,
                 type_attendu,
             } => format!(
-                "Dans la fonction {}: Type de l'argument invalide pour le paramètre {}. Attendu: {}, obtenu: {}",
+                "Dans la fonction {}: Type de l'argument invalide pour le paramètre '{}'. Attendu: '{}', obtenu: '{}'",
                 func_name.as_ref().unwrap_or(&"<sans-nom>".to_string()), 
                 param_name,
                 type_attendu,
@@ -833,7 +833,7 @@ impl Display for ASErreurType {
                 lhs_type,
                 rhs_type,
             } => format!(
-                 "Opération {} non définie pour les valeurs de type {} et de type {}",
+                 "Opération '{}' non définie pour les valeurs de type '{}' et de type '{}'",
                  op,
                  lhs_type,
                  rhs_type,

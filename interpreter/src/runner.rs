@@ -471,14 +471,14 @@ impl Visitor for Runner<'_> {
                 Leq => lhs_value <= rhs_value,
                 Geq => lhs_value >= rhs_value,
                 Dans => {
-                    let r = lhs_value.contains(&rhs_value);
+                    let r = rhs_value.contains(&lhs_value);
                     match r {
                         Err(err) => throw_err!(self, err),
                         Ok(r) => r,
                     }
                 }
                 PasDans => {
-                    let r = lhs_value.contains(&rhs_value);
+                    let r = rhs_value.contains(&lhs_value);
                     match r {
                         Err(err) => throw_err!(self, err),
                         Ok(r) => !r,
