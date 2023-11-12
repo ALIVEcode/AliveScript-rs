@@ -150,10 +150,7 @@ pub enum DeclVar {
 #[derive(Debug, PartialEq, Clone)]
 pub enum AssignVar {
     Decl(DeclVar),
-    Slice {
-        obj: Box<Expr>,
-        slice: Box<Expr>,
-    },
+    Slice { obj: Box<Expr>, slice: Box<Expr> },
 }
 
 #[derive(Debug, PartialEq, Clone)]

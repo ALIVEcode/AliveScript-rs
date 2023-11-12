@@ -136,7 +136,10 @@ impl ASObj {
             (ASPaire { key, val }, rhs) => todo!(),
             (ASTexte(s), ASTexte(sub_s)) => Ok(s.contains(sub_s)),
             (ASListe(l), rhs) => Ok(l.contains(rhs)),
-            (ASDict(d), rhs) => Ok(d.into_iter().find(|el| matches!(el, ASPaire { key, val } if key.as_ref() == rhs)).is_some()),
+            (ASDict(d), rhs) => Ok(d
+                .into_iter()
+                .find(|el| matches!(el, ASPaire { key, val } if key.as_ref() == rhs))
+                .is_some()),
 
             (ASTuple(_), _) => todo!("Tuple pas encore (et peut-être jamais) dans le langage"),
             (ASStructure { name, fields }, _) => todo!("Check présense du field?"),
@@ -340,6 +343,14 @@ impl ASFnParam {
             static_type: static_type.into(),
             default_value,
         }
+    }
+
+    pub fn native(name: impl ToString, static_type: ASType, default_value: Option<ASObj>) -> Self {
+        Self::new(
+            name,
+            Some(static_type),
+            default_value.map(|val| Expr::literal(val)),
+        )
     }
 
     pub fn to_asvar(&self) -> ASVar {
