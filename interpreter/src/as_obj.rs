@@ -264,13 +264,7 @@ impl Display for ASObj {
             ASEntier(i) => i.to_string(),
             ASDecimal(d) => d.to_string(),
             ASTexte(s) => s.clone(),
-            ASBooleen(b) => {
-                if *b {
-                    "vrai"
-                } else {
-                    "faux"
-                }.into()
-            }
+            ASBooleen(b) => if *b { "vrai" } else { "faux" }.into(),
             ASNul => "nul".into(),
             ASPaire { key, val } => format!("{}: {}", key.repr(), val.repr()),
             ASListe(v) => format!(
@@ -756,6 +750,9 @@ pub enum ASErreurType {
         lhs_type: ASType,
         rhs_type: ASType,
     },
+    ErreurClef {
+        mauvaise_clef: ASObj,
+    },
     SuiteInvalide {
         start: ASObj,
         end: ASObj,
@@ -777,7 +774,7 @@ impl Display for ASErreurType {
 
             ErreurConversionType { type_cible, texte } => format!("Impossible de convertir \"{}\" en {}", texte, type_cible),
 
-            ErreurValeur { raison, valeur } => format!("Valeur invalide: {}. {}", valeur, raison.unwrap_or_default()),
+            ErreurValeur { raison, valeur } => format!("Valeur invalide: {}. {}", valeur, raison.clone().unwrap_or_default()),
 
             ErreurType {
                 type_obtenu,
@@ -808,9 +805,9 @@ impl Display for ASErreurType {
                 type_obtenu,
             ),
 
-            ErreurOperation { 
-                op, 
-                lhs_type, 
+            ErreurOperation {
+                op,
+                lhs_type,
                 rhs_type,
             } => format!(
                  "Opération {} non définie pour les valeurs de type {} et de type {}",
@@ -818,6 +815,8 @@ impl Display for ASErreurType {
                  lhs_type,
                  rhs_type,
             ),
+
+            ErreurClef { mauvaise_clef } => format!("La clef {} n'est pas dans le dictionnaire", mauvaise_clef.repr()),
 
             SuiteInvalide { start, end, step } => {
                 format!("Suite invalide: {} .. {} bond {}", start, end, step)

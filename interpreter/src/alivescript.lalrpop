@@ -34,7 +34,7 @@ pub Stmt: Box<Stmt> = {
 
     // Affectation
     <var:AssignVar> "assign" <val:Expr> "eos" => Box::new(Stmt::Assign { <> }),
-    <var:Expr> <op:BinOpcodeAssign> <val:Expr> "eos" => Box::new(Stmt::OpAssign { <> }),
+    <var:AssignVar> <op:BinOpcodeAssign> <val:Expr> "eos" => Box::new(Stmt::OpAssign { <> }),
 
     // Conditionnels
     "si" <cond:Expr> "alors"? "eos" <then_br:Stmt*> 
@@ -69,7 +69,8 @@ SubStmt: Box<Stmt> = {
     //            func: Box::new(Expr::Ident("afficher".into())),
     //            args: vec![arg],
     //        }))),
-    "afficher" <arg:Expr> => Box::new(Stmt::Afficher(arg)),
+
+    "afficher" <arg:Comma<Expr>> => Box::new(Stmt::Afficher(arg)),
 
     // Lire
     "lire" <factory:(<Term> "dans")?> <var:DeclVar> <prompt:("," <Expr>)?> => 
@@ -249,18 +250,39 @@ pub Term: Box<Expr> = {
 
   //"afficher" => Box::new(Expr::Ident("afficher".into())),
 
-  "(" <Expr> ")",
+  TermExpr,
 
   "(" <Paire> ")",
 
-  "[" <Comma<Expr>> "]" => Box::new(Expr::List(<>)),
-
-  "{" <Comma<Paire>> "}" => Box::new(Expr::Dict(<>)),
+  Collection,
 };
 
 #[inline]
+TermExpr: Box<Expr> = "(" <Expr> ")";
+
+#[inline]
+Collection: Box<Expr> = {
+  CommaCollection<"[", "]", Expr> => Box::new(Expr::List(<>)),
+
+  CommaCollection<"{", "}", Paire> => Box::new(Expr::Dict(<>)),
+}
+
+#[inline]
 Paire: Box<Expr> = {
-    <clef:Term> ":" <val:Term> => Box::new(Expr::Paire{ <> }),
+    <clef:"ident"> ":" <val:Term> =>
+        Box::new(Expr::Paire{ 
+            clef: Box::new(Expr::Lit(ASObj::ASTexte(clef))),
+            val,
+        }),
+
+    <clef:Lit> ":" <val:Term> =>
+        Box::new(Expr::Paire{ clef: Box::new(clef), val }),
+
+    <clef:Collection> ":" <val:Term> =>
+        Box::new(Expr::Paire{ <> }),
+
+    <clef:TermExpr> ":" <val:Term> =>
+        Box::new(Expr::Paire{ <> }),
 }
 
 #[inline]
@@ -377,6 +399,15 @@ Comma<T>: Vec<T> = {
     }
 };
 
+CommaCollection<Open, Close, T>: Vec<T> = {
+    Open <mut v:("eos"* <T> ",")*> <e:("eos"* <T>)?> "eos"* Close => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
 
 extern {
     type Location = usize;

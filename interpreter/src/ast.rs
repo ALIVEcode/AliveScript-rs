@@ -18,7 +18,7 @@ pub enum Stmt {
     },
 
     /// Afficher
-    Afficher(Box<Expr>),
+    Afficher(Vec<Box<Expr>>),
 
     /// Lire
     Lire {
@@ -40,7 +40,7 @@ pub enum Stmt {
     },
 
     OpAssign {
-        var: Box<Expr>,
+        var: AssignVar,
         op: BinOpcode,
         val: Box<Expr>,
     },

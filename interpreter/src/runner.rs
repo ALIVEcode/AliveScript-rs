@@ -1,4 +1,7 @@
-use std::{ops::IndexMut, str::FromStr};
+use std::{
+    ops::{Deref, Index, IndexMut},
+    str::FromStr,
+};
 
 use crate::{
     as_modules::ASModuleBuiltin,
@@ -269,6 +272,16 @@ impl Visitor for Runner<'_> {
                     }
                     ASObj::ASTexte(txt_final)
                 }
+                (ASObj::ASDict(dict), clef) => {
+                    let el = dict.into_iter().find(
+                        |el| matches!(el, ASObj::ASPaire { key, val } if *key.deref() == clef),
+                    );
+                    match el {
+                        Some(ASObj::ASPaire { key, val }) => val.deref().clone(),
+                        None => throw_err!(self, ASErreurType::new_erreur_clef(clef.clone())),
+                        Some(_) => unreachable!(),
+                    }
+                }
                 _ => todo!(),
             };
 
@@ -465,9 +478,14 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_stmt_afficher(&mut self, stmt: &Stmt) {
-        if let Stmt::Afficher(expr) = stmt {
-            let value = eval!(expr, self, expr, "Afficher prend un argument");
-            self.send_data(Data::Afficher(value.to_string()));
+        if let Stmt::Afficher(exprs) = stmt {
+            let mut values = Vec::with_capacity(exprs.len());
+            for expr in exprs {
+                let value = eval!(expr, self, expr, "Afficher prend un argument");
+                values.push(value.to_string());
+            }
+            let string = values.join(" ");
+            self.send_data(Data::Afficher(string));
         }
     }
 
@@ -655,26 +673,60 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_stmt_opassign(&mut self, stmt: &Stmt) {
-        if let Stmt::OpAssign { var, op, val } = stmt {
-            let value = eval!(expr, self, val, "Op Assign valeur");
-            if let Expr::Ident(var_name) = var.as_ref() {
-                if let Some((var, old_val)) = self.env.get_var(var_name) {
-                    if var.is_const() {
-                        panic!("Impossible de changer la valeur d'une constante")
-                    }
-                    let new_value = Runner::do_op(old_val.clone(), op, value.clone());
-                    if !var.type_match(&new_value.get_type()) {
-                        panic!(
-                            "Type invalide. Attendu: {:?}, obtenu: {:?}",
-                            var.get_type(),
-                            new_value.get_type()
-                        );
-                    }
+        if let Stmt::OpAssign {
+            var: assign_var,
+            op,
+            val,
+        } = stmt
+        {
+            let value = eval!(expr, self, val, "Assign valeur");
+            match assign_var {
+                AssignVar::Decl(DeclVar::Var {
+                    name,
+                    static_type,
+                    is_const,
+                }) => {
+                    if let Some((var, old_val)) = self.env.get_var(name) {
+                        if var.is_const() {
+                            throw_err!(
+                                self,
+                                ASErreurType::AffectationConstante {
+                                    var_name: name.clone()
+                                }
+                            )
+                        }
 
-                    self.env.assign(var.clone(), new_value);
-                } else {
-                    panic!("Variable inconnue '{}'", var_name);
+                        let value = Runner::<'_>::do_op(old_val.clone(), op, value);
+
+                        if !var.type_match(&value.get_type()) {
+                            throw_err!(
+                                self,
+                                ASErreurType::ErreurType {
+                                    type_attendu: var.get_type().clone(),
+                                    type_obtenu: value.get_type()
+                                }
+                            );
+                        }
+
+                        self.env.assign(var.clone(), value);
+                    } else {
+                        throw_err!(self, ASErreurType::new_variable_inconnue(name.clone()))
+                    }
                 }
+                AssignVar::Slice { obj, slice } => {
+                    use ASObj::*;
+
+                    let var_val = eval!(expr, self, obj, "Assign Slice Obj");
+                    let slice_val = eval!(expr, self, slice, "Assign Slice Slice");
+                    match (var_val, slice_val) {
+                        (ASListe(mut lst), ASEntier(i)) => {
+                            let old_value = lst.index(i as usize).clone();
+                            *lst.index_mut(i as usize) = Runner::<'_>::do_op(old_value, op, value);
+                        }
+                        _ => todo!(),
+                    }
+                }
+                AssignVar::Decl(_) => todo!(),
             }
         }
     }
@@ -707,7 +759,7 @@ impl Visitor for Runner<'_> {
 
     fn visit_stmt_repeter(&mut self, stmt: &Stmt) {
         if let Stmt::Repeter { n, body } = stmt {
-            let n_iter = eval!(opt_expr, self, n, "Repeter body");
+            let n_iter = eval!(opt_expr, self, n, "Repeter n");
             let n_value = match n_iter {
                 Some(ASObj::ASEntier(i)) => {
                     if i >= 0 {
