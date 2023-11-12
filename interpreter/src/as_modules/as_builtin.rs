@@ -138,7 +138,7 @@ pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
             true,
             ASObj::native_fn(
                 "decimal",
-                None,
+                Some("Tente de convertir du texte en valeur décimal. En cas d'échec: la fonction produit une erreur."),
                 vec![ASFnParam::native(
                     "obj",
                     ASType::union_of(ASType::Decimal, ASType::Texte),
@@ -155,6 +155,35 @@ pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                     }))
                 },
                 ASType::Decimal,
+            ),
+        ),
+        ASVar::new_with_value(
+            "info",
+            Some(ASType::Fonction),
+            true,
+            ASObj::native_fn(
+                "info",
+                Some("Affiche la documentation de la fonction passée en paramètre."),
+                vec![ASFnParam::native("f", ASType::Fonction, None)],
+                |runner| {
+                    let env = runner.get_env();
+                    let ASObj::ASFonc {
+                        name,
+                        docs,
+                        params,
+                        body,
+                        return_type,
+                    } = env.get_value(&"f".into()).unwrap()
+                    else {
+                        unreachable!()
+                    };
+                    Ok(Some(ASObj::ASTexte(format!(
+                        "{}: {}",
+                        name.clone().unwrap_or("<sans-nom>".into()),
+                        docs.clone().unwrap_or("<sans-docs>".into()),
+                    ))))
+                },
+                ASType::Texte,
             ),
         ),
     ]))

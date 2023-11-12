@@ -71,14 +71,14 @@ impl ASObj {
 
     pub fn native_fn(
         name: &str,
-        docs: Option<String>,
+        docs: Option<&str>,
         params: Vec<ASFnParam>,
         body: fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>,
         return_type: ASType,
     ) -> ASObj {
         Self::ASFonc {
             name: Some(name.into()),
-            docs,
+            docs: docs.map(|docs| docs.into()),
             params,
             body: vec![Stmt::native_fn(body)],
             return_type,
