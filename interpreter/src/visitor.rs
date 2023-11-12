@@ -19,8 +19,10 @@ pub trait Visitor {
     fn visit_expr_fncall(&mut self, expr: &Expr);
     fn visit_expr_callrust(&mut self, expr: &Expr);
 
+    fn visit_expr_unaryop(&mut self, expr: &Expr);
     fn visit_expr_binop(&mut self, expr: &Expr);
     fn visit_expr_bincomp(&mut self, expr: &Expr);
+    fn visit_expr_binlogic(&mut self, expr: &Expr);
 
     fn visit_expr_range(&mut self, expr: &Expr);
 

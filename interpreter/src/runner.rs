@@ -6,7 +6,10 @@ use std::{
 use crate::{
     as_modules::ASModuleBuiltin,
     as_obj::{ASEnv, ASErreur, ASErreurType, ASFnParam, ASObj, ASScope, ASType, ASVar},
-    ast::{AssignVar, BinCompcode, BinOpcode, DeclVar, Expr, LireVar, Stmt, Type, TypeBinOpcode},
+    ast::{
+        AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, Expr, LireVar, Stmt, Type,
+        TypeBinOpcode, UnaryOpcode,
+    },
     data::{Data, Response},
     io::InterpretorIO,
     visitor::{Visitable, Visitor},
@@ -120,6 +123,7 @@ impl<'a> Runner<'a> {
             Div => lhs / rhs,
             DivInt => lhs.div_int(rhs),
             Mod => lhs % rhs,
+            BitwiseXor => (lhs ^ rhs).unwrap(),
             _ => todo!(),
         }
     }
@@ -428,6 +432,21 @@ impl Visitor for Runner<'_> {
         }
     }
 
+    fn visit_expr_unaryop(&mut self, expr: &Expr) {
+        if let Expr::UnaryOp { expr, op } = expr {
+            use UnaryOpcode::*;
+
+            let value = eval!(expr, self, expr, "Lhs de binop");
+
+            let result = match op {
+                Pas => ASObj::ASBooleen(!value.to_bool()),
+                Negate => todo!(),
+            };
+
+            self.expr_results.push(result);
+        }
+    }
+
     fn visit_expr_binop(&mut self, expr: &Expr) {
         if let Expr::BinOp { lhs, op, rhs } = expr {
             let lhs_value = eval!(expr, self, lhs, "Lhs de binop");
@@ -466,6 +485,32 @@ impl Visitor for Runner<'_> {
                     }
                 }
             });
+            self.expr_results.push(result);
+        }
+    }
+
+    fn visit_expr_binlogic(&mut self, expr: &Expr) {
+        if let Expr::BinLogic { lhs, op, rhs } = expr {
+            let lhs_value = eval!(expr, self, lhs, "Lhs de bin logique");
+
+            use BinLogiccode::*;
+            let result = match op {
+                Et => {
+                    if !lhs_value.to_bool() {
+                        lhs_value
+                    } else {
+                        eval!(expr, self, rhs, "Rhs de bin logique")
+                    }
+                }
+                Ou => {
+                    if lhs_value.to_bool() {
+                        lhs_value
+                    } else {
+                        eval!(expr, self, rhs, "Rhs de bin logique")
+                    }
+                }
+            };
+
             self.expr_results.push(result);
         }
     }

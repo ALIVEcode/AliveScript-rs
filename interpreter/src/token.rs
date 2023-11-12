@@ -33,6 +33,21 @@ pub enum Token {
     #[token("alors")]
     KwAlors,
 
+    #[token("pas")]
+    KwPas,
+
+    #[token("non")]
+    KwNon,
+
+    #[token("et")]
+    KwEt,
+
+    #[token("ou")]
+    KwOu,
+
+    #[token("xor")]
+    KwXor,
+
     // Boucles
     #[token("tant que")]
     KwTantQue,

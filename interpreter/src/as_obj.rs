@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fmt::Display,
-    ops::{Add, Div, Mul, Rem, Sub},
+    ops::{Add, BitXor, Div, Mul, Rem, Sub},
     str::FromStr,
     sync::Arc,
 };
@@ -110,7 +110,10 @@ impl ASObj {
             ASDecimal(x) => *x != 0f64,
             ASTexte(s) => !s.is_empty(),
             ASBooleen(b) => *b,
-            _ => false,
+            ASNul => false,
+            ASListe(l) => !l.is_empty(),
+            ASDict(d) => !d.is_empty(),
+            _ => true,
         }
     }
 
@@ -236,6 +239,26 @@ impl Rem for ASObj {
             (ASEntier(x), ASDecimal(y)) => ASDecimal(x as f64 % y),
             (ASDecimal(x), ASDecimal(y)) => ASDecimal(x % y),
             _ => unimplemented!(),
+        }
+    }
+}
+
+impl BitXor for ASObj {
+    type Output = Result<ASObj, ASErreurType>;
+
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        use ASObj::*;
+
+        let type_1 = self.get_type().clone();
+        let type_2 = rhs.get_type().clone();
+        match (self, rhs) {
+            (ASEntier(x), ASEntier(y)) => Ok(ASEntier(x ^ y)),
+            (ASBooleen(x), ASBooleen(y)) => Ok(ASBooleen(x ^ y)),
+            _ => Err(ASErreurType::new_erreur_operation(
+                "xor".into(),
+                type_1,
+                type_2,
+            )),
         }
     }
 }

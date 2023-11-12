@@ -7,6 +7,8 @@ use crate::ast::{
     AssignVar,
     BinCompcode,
     TypeBinOpcode,
+    UnaryOpcode,
+    BinLogiccode,
     FnParam,
     LireVar,
 };
@@ -192,6 +194,21 @@ pub Expr: Box<Expr> = {
   },
 
   #[precedence(level="6")]
+  "pas" <expr:Expr> => {
+    Box::new(Expr::UnaryOp {
+      expr,
+      op: UnaryOpcode::Pas,
+    })
+  },
+
+  "non" <expr:Expr> => {
+    Box::new(Expr::UnaryOp {
+      expr,
+      op: UnaryOpcode::Pas,
+    })
+  },
+
+  #[precedence(level="7")]
   #[assoc(side="left")]
   <lhs:Expr> "==" <rhs:Expr> => {
     Box::new(Expr::BinComp {
@@ -204,6 +221,20 @@ pub Expr: Box<Expr> = {
     Box::new(Expr::BinComp {
       lhs,
       op: BinCompcode::NotEq,
+      rhs
+    })
+  },
+  <lhs:Expr> "dans" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Dans,
+      rhs
+    })
+  },
+  <lhs:Expr> "pas" "dans" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::PasDans,
       rhs
     })
   },
@@ -235,6 +266,32 @@ pub Expr: Box<Expr> = {
       rhs
     })
   },
+
+  #[precedence(level="8")]
+  #[assoc(side="left")]
+  <lhs:Expr> "et" <rhs:Expr> => {
+    Box::new(Expr::BinLogic {
+      lhs,
+      op: BinLogiccode::Et,
+      rhs
+    })
+  },
+
+  <lhs:Expr> "ou" <rhs:Expr> => {
+    Box::new(Expr::BinLogic {
+      lhs,
+      op: BinLogiccode::Ou,
+      rhs
+    })
+  },
+
+  <lhs:Expr> "xor" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::BitwiseXor,
+      rhs
+    })
+  },
 };
 
 pub Term: Box<Expr> = {
@@ -252,13 +309,13 @@ pub Term: Box<Expr> = {
 
   TermExpr,
 
-  "(" <Paire> ")",
+  "(" "eos"* <Paire> "eos"* ")",
 
   Collection,
 };
 
 #[inline]
-TermExpr: Box<Expr> = "(" <Expr> ")";
+TermExpr: Box<Expr> = "(" "eos"* <Expr> "eos"* ")";
 
 #[inline]
 Collection: Box<Expr> = {
@@ -452,6 +509,12 @@ extern {
         ">" => Token::CompGth,
         "<=" => Token::CompLeq,
         ">=" => Token::CompGeq,
+
+        "pas" => Token::KwPas,
+        "non" => Token::KwNon,
+        "et" => Token::KwEt,
+        "ou" => Token::KwOu,
+        "xor" => Token::KwXor,
 
         ".." => Token::RangeExcl,
         "..=" => Token::RangeIncl,

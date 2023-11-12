@@ -211,6 +211,17 @@ pub enum Expr {
         rhs: Box<Expr>,
     },
 
+    BinLogic {
+        lhs: Box<Expr>,
+        op: BinLogiccode,
+        rhs: Box<Expr>,
+    },
+
+    UnaryOp {
+        expr: Box<Expr>,
+        op: UnaryOpcode,
+    },
+
     CallRust(fn(&mut Runner) -> Option<ASObj>),
 }
 
@@ -218,6 +229,12 @@ impl Expr {
     pub fn literal(obj: ASObj) -> Box<Expr> {
         Box::new(Expr::Lit(obj))
     }
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum UnaryOpcode {
+    Pas,
+    Negate,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -231,6 +248,7 @@ pub enum BinOpcode {
     Mod,
     BitwiseOr,
     BitwiseAnd,
+    BitwiseXor,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -243,6 +261,12 @@ pub enum BinCompcode {
     Leq,
     Dans,
     PasDans,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum BinLogiccode {
+    Et,
+    Ou,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -272,6 +296,8 @@ impl Visitable for Expr {
         match self {
             BinOp { .. } => visitor.visit_expr_binop(self),
             BinComp { .. } => visitor.visit_expr_bincomp(self),
+            BinLogic { .. } => visitor.visit_expr_binlogic(self),
+            UnaryOp { .. } => visitor.visit_expr_unaryop(self),
             Lit(..) => visitor.visit_expr_lit(self),
             List(..) => visitor.visit_expr_list(self),
             Dict(..) => visitor.visit_expr_dict(self),
