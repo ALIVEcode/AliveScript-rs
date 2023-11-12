@@ -159,7 +159,7 @@ pub enum AssignVar {
 #[derive(Debug, PartialEq, Clone)]
 pub enum LireVar {
     Decl(DeclVar),
-    Assign(String),
+    Assign(AssignVar),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -241,6 +241,8 @@ pub enum BinCompcode {
     Gth,
     Geq,
     Leq,
+    Dans,
+    PasDans,
 }
 
 #[derive(Debug, PartialEq, Clone)]

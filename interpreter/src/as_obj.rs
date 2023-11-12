@@ -126,6 +126,26 @@ impl ASObj {
         }
     }
 
+    pub fn contains(&self, rhs: &Self) -> Result<bool, ASErreurType> {
+        use ASObj::*;
+
+        match (self, rhs) {
+            (ASPaire { key, val }, rhs) => todo!(),
+            (ASTexte(s), ASTexte(sub_s)) => Ok(s.contains(sub_s)),
+            (ASListe(l), rhs) => Ok(l.contains(rhs)),
+            (ASDict(_), rhs) => todo!(),
+
+            (ASTuple(_), _) => todo!("Tuple pas encore (et peut-être jamais) dans le langage"),
+            (ASStructure { name, fields }, _) => todo!("Check présense du field?"),
+            (ASModule { env }, _) => todo!(),
+            _ => Err(ASErreurType::new_erreur_operation(
+                "dans".into(),
+                self.get_type(),
+                rhs.get_type(),
+            )),
+        }
+    }
+
     pub fn repr(&self) -> String {
         use ASObj::*;
 
@@ -397,6 +417,33 @@ pub enum ASType {
 }
 
 impl ASType {
+    pub fn default_value(&self) -> ASObj {
+        use ASObj::*;
+        use ASType::*;
+
+        match self {
+            Tout => ASEntier(0),
+            Rien => todo!(),
+            Nul => ASNul,
+            Entier => ASEntier(0),
+            Decimal => ASDecimal(0f64),
+            Booleen => ASBooleen(false),
+            Texte => ASTexte("".into()),
+            Liste => ASListe(vec![]),
+            Paire => ASPaire {
+                key: Box::new(ASNul),
+                val: Box::new(ASNul),
+            },
+            Dict => ASDict(vec![]),
+            Fonction => todo!(),
+            Module => todo!(),
+            Objet(_) => todo!(),
+            Union(_) => todo!(),
+            Tuple(_) => todo!(),
+            Optional(_) => todo!(),
+        }
+    }
+
     pub fn nombre() -> ASType {
         ASType::Union(vec![Self::Entier, Self::Decimal])
     }
@@ -433,7 +480,7 @@ impl ASType {
         ASType::optional(ASType::Tout)
     }
 
-    fn is_tout(&self) -> bool {
+    pub fn is_tout(&self) -> bool {
         use ASType::*;
 
         match self {
@@ -441,6 +488,11 @@ impl ASType {
             Optional(t) => t.is_tout(),
             _ => self == &ASType::Tout,
         }
+    }
+
+    pub fn is_primitif(&self) -> bool {
+        use ASType::*;
+        matches!(self, Entier | Decimal | Texte | Booleen | Nul | Optional(_))
     }
 
     pub fn type_match(type1: &ASType, type2: &ASType) -> bool {
@@ -462,12 +514,75 @@ impl ASType {
             _ => false,
         }
     }
+
+    pub fn convert_to_obj(&self, s: String) -> Result<ASObj, ASErreurType> {
+        use ASType::*;
+
+        let s = s.trim().to_string();
+
+        match self {
+            Texte | Tout => Ok(ASObj::ASTexte(s)),
+            Optional(t) if t.as_ref() == &Tout => Ok(ASObj::ASTexte(s)),
+            Nul => {
+                if s.eq_ignore_ascii_case("nul") {
+                    Ok(ASObj::ASNul)
+                } else {
+                    Err(ASErreurType::ErreurConversionType {
+                        type_cible: Nul,
+                        texte: s.clone(),
+                    })
+                }
+            }
+            Entier => {
+                if let Ok(i) = s.parse() {
+                    Ok(ASObj::ASEntier(i))
+                } else {
+                    Err(ASErreurType::ErreurConversionType {
+                        type_cible: Entier,
+                        texte: s.clone(),
+                    })
+                }
+            }
+            Decimal => {
+                if let Ok(i) = s.parse() {
+                    Ok(ASObj::ASDecimal(i))
+                } else {
+                    Err(ASErreurType::ErreurConversionType {
+                        type_cible: Decimal,
+                        texte: s.clone(),
+                    })
+                }
+            }
+            Booleen => {
+                if s.eq_ignore_ascii_case("vrai") {
+                    Ok(ASObj::ASBooleen(true))
+                } else if s.eq_ignore_ascii_case("faux") {
+                    Ok(ASObj::ASBooleen(false))
+                } else {
+                    Err(ASErreurType::ErreurConversionType {
+                        type_cible: Booleen,
+                        texte: s.clone(),
+                    })
+                }
+            }
+            Optional(t) => {
+                if s == "" {
+                    Ok(ASObj::ASNul)
+                } else {
+                    t.convert_to_obj(s)
+                }
+            }
+            t => Err(ASErreurType::ErreurType {
+                type_attendu: ASType::union(vec![Entier, Decimal, Nul, Booleen, Texte]),
+                type_obtenu: t.clone(),
+            }),
+        }
+    }
 }
 
 impl From<Option<ASType>> for ASType {
     fn from(value: Option<ASType>) -> Self {
-        use ASType::*;
-        value.unwrap_or(ASType::optional(Tout))
+        value.unwrap_or(ASType::any())
     }
 }
 
@@ -478,6 +593,7 @@ impl FromStr for ASType {
         match s {
             "entier" => Ok(Self::Entier),
             "decimal" | "décimal" => Ok(Self::Decimal),
+            "booleen" | "booléen" => Ok(Self::Booleen),
             "nombre" => Ok(Self::nombre()),
             "iterable" | "itérable" => Ok(Self::iterable()),
             "texte" => Ok(Self::Texte),
@@ -627,11 +743,20 @@ pub enum ASErreurType {
         type_attendu: ASType,
         type_obtenu: ASType,
     },
+    ErreurConversionType {
+        type_cible: ASType,
+        texte: String,
+    },
     ErreurTypeAppel {
         func_name: Option<String>,
         param_name: String,
         type_attendu: ASType,
         type_obtenu: ASType,
+    },
+    ErreurOperation {
+        op: String,
+        lhs_type: ASType,
+        rhs_type: ASType,
     },
     SuiteInvalide {
         start: ASObj,
@@ -647,6 +772,9 @@ impl Display for ASErreurType {
         let to_string = match self {
             VariableInconnue { var_name } => format!("Variable inconnue '{}'", var_name),
             AffectationConstante { var_name } => format!("Impossible de changer la valeur d'une constante: '{}'", var_name),
+
+            ErreurConversionType { type_cible, texte } => format!("Impossible de convertir \"{}\" en {}", texte, type_cible),
+
             ErreurType {
                 type_obtenu,
                 type_attendu,
@@ -654,6 +782,7 @@ impl Display for ASErreurType {
                 "Erreur de type. Type attendu: '{}', type obtenu: '{}'",
                 type_attendu, type_obtenu,
             ),
+
             ErreurTypeRetour {
                 type_obtenu,
                 type_attendu,
@@ -661,6 +790,7 @@ impl Display for ASErreurType {
                 "Mauvais type de retour. Attendu: {}, Obtenu: {}",
                 type_attendu, type_obtenu
             ),
+
             ErreurTypeAppel {
                 func_name,
                 param_name,
@@ -670,9 +800,21 @@ impl Display for ASErreurType {
                 "Dans la fonction {}: Type de l'argument invalide pour le paramètre {}. Attendu: {}, obtenu: {}",
                 func_name.as_ref().unwrap_or(&"<sans-nom>".to_string()), 
                 param_name,
-                type_attendu, 
+                type_attendu,
                 type_obtenu,
             ),
+
+            ErreurOperation { 
+                op, 
+                lhs_type, 
+                rhs_type,
+            } => format!(
+                 "Opération {} non définie pour les valeurs de type {} et de type {}",
+                 op,
+                 lhs_type,
+                 rhs_type,
+            ),
+
             SuiteInvalide { start, end, step } => {
                 format!("Suite invalide: {} .. {} bond {}", start, end, step)
             }

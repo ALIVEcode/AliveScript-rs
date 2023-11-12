@@ -1,4 +1,4 @@
-use std::ops::IndexMut;
+use std::{ops::IndexMut, str::FromStr};
 
 use crate::{
     as_modules::ASModuleBuiltin,
@@ -431,14 +431,29 @@ impl Visitor for Runner<'_> {
             let rhs_value = eval!(expr, self, rhs, "Rhs de binop");
 
             use BinCompcode::*;
-            self.expr_results.push(ASObj::ASBooleen(match op {
+            let result = ASObj::ASBooleen(match op {
                 Eq => lhs_value == rhs_value,
                 NotEq => lhs_value != rhs_value,
                 Lth => lhs_value < rhs_value,
                 Gth => lhs_value > rhs_value,
                 Leq => lhs_value <= rhs_value,
                 Geq => lhs_value >= rhs_value,
-            }));
+                Dans => {
+                    let r = lhs_value.contains(&rhs_value);
+                    match r {
+                        Err(err) => throw_err!(self, err),
+                        Ok(r) => r
+                    }
+                }
+                PasDans => {
+                    let r = lhs_value.contains(&rhs_value);
+                    match r {
+                        Err(err) => throw_err!(self, err),
+                        Ok(r) => !r
+                    }
+                }
+            });
+            self.expr_results.push(result);
         }
     }
 
@@ -463,18 +478,50 @@ impl Visitor for Runner<'_> {
             prompt,
         } = stmt
         {
+            let prompt_obj = eval!(opt_expr, self, prompt, "Prompt lire")
+                .unwrap_or(ASObj::ASTexte("Entrez une valeur: ".into()));
+
             match var {
                 LireVar::Decl(DeclVar::Var {
                     name,
                     static_type,
                     is_const,
-                }) => {
-                    let prompt_obj = eval!(opt_expr, self, prompt, "Prompt lire")
-                        .unwrap_or(ASObj::ASTexte("Entrez une valeur: ".into()));
+                })
+                | LireVar::Assign(AssignVar::Decl(DeclVar::Var {
+                    name,
+                    static_type,
+                    is_const,
+                })) => {
+                    let is_assign = matches!(var, LireVar::Assign(_));
+
+                    let mut static_type = eval!(opt_type, self, static_type, "Lire var type");
+
+                    if is_assign {
+                        if let Some((var, _old_val)) = self.env.get_var(name) {
+                            if var.is_const() {
+                                throw_err!(
+                                    self,
+                                    ASErreurType::AffectationConstante {
+                                        var_name: name.clone()
+                                    }
+                                )
+                            }
+                            if static_type.is_none() {
+                                static_type = Some(var.get_type().clone());
+                            }
+                        }
+                    }
+                    if static_type.as_ref().is_some_and(|t| !t.is_primitif()) {
+                        panic!(
+                            "Type invalide. Le type doit être un type primitif, pas {}",
+                            static_type.unwrap(),
+                        );
+                    }
+
                     let ASObj::ASTexte(prompt) = prompt_obj else {
                         throw_err!(
                             self,
-                            ASErreurType::new_erreur_type(ASType::Texte, prompt_obj.get_type(),)
+                            ASErreurType::new_erreur_type(ASType::Texte, prompt_obj.get_type())
                         );
                     };
                     let Response::Text(reponse) = self
@@ -483,24 +530,17 @@ impl Visitor for Runner<'_> {
                         })
                         .unwrap();
 
-                    let value = ASObj::ASTexte(reponse);
+                    let static_type: ASType = static_type.into();
+                    let value = static_type.convert_to_obj(reponse);
 
-                    let static_type = eval!(opt_type, self, static_type, "Decl var type");
-                    if static_type.is_some()
-                        && !ASType::type_match(static_type.as_ref().unwrap(), &value.get_type())
-                    {
-                        panic!(
-                            "Type invalide. Attendu: {:?}, obtenu: {:?}",
-                            static_type.unwrap(),
-                            value.get_type(),
-                        );
-                    }
-                    let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
-                    if self.env.declare(var, value).is_some() {
-                        panic!("Variable redéclarée {:?}", name);
+                    let Ok(value) = value else {
+                        throw_err!(self, value.err().unwrap())
                     };
+
+                    let var = ASVar::new(name.clone(), Some(static_type), *is_const);
+                    self.env.declare(var, value);
                 }
-                LireVar::Assign(name) => {}
+                LireVar::Assign(_) => todo!(),
                 LireVar::Decl(DeclVar::ListUnpack(_)) => todo!(),
             }
         }
@@ -794,19 +834,8 @@ impl Visitor for Runner<'_> {
 
     fn visit_type_lit(&mut self, t: &Type) {
         if let Type::Lit(t) = t {
-            self.type_results.push(match t.as_str() {
-                "entier" => ASType::Entier,
-                "decimal" => ASType::Decimal,
-                "nombre" => ASType::nombre(),
-                "iterable" => ASType::iterable(),
-                "texte" => ASType::Texte,
-                "liste" => ASType::Liste,
-                "rien" => ASType::Rien,
-                "fonction" => ASType::Fonction,
-                "nul" => ASType::Nul,
-                "tout" => ASType::Tout,
-                other => todo!("Check si le type existe {:?}", other),
-            });
+            self.type_results
+                .push(ASType::from_str(t.as_str()).unwrap())
         }
     }
 

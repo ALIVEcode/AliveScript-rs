@@ -72,13 +72,21 @@ SubStmt: Box<Stmt> = {
     "afficher" <arg:Expr> => Box::new(Stmt::Afficher(arg)),
 
     // Lire
-    "lire" <factory:(<Expr> "dans")?> <var:DeclVar> <prompt:("," <Expr>)?> => 
+    "lire" <factory:(<Term> "dans")?> <var:DeclVar> <prompt:("," <Expr>)?> => 
         Box::new(Stmt::Lire {
                     factory,
                     var: LireVar::Decl(var),
                     prompt,
                 }),
-    "lire" <factory:(<Expr> "dans")?> <var:"ident"> <prompt:("," <Expr>)?> => 
+
+    //"lire" <var:AssignVar> <prompt:("," <Expr>)?> => 
+    //    Box::new(Stmt::Lire {
+    //                factory: None,
+    //                var: LireVar::Assign(var),
+    //                prompt,
+    //            }),
+
+    "lire" <factory:(<Term> "dans")?> <var:AssignVar> <prompt:("," <Expr>)?> => 
         Box::new(Stmt::Lire {
                     factory,
                     var: LireVar::Assign(var),
@@ -235,8 +243,6 @@ pub Term: Box<Expr> = {
 
   <obj:Term> "." <prop:"ident"> => Box::new(Expr::AccessProp{<>}),
 
-  <obj:Term> "[" <slice:Expr> "]" => Box::new(Expr::Slice{<>}),
-
   "ident" => Box::new(Expr::Ident(<>)),
 
   Slice,
@@ -259,6 +265,9 @@ Paire: Box<Expr> = {
 
 #[inline]
 Slice: Box<Expr> = {
+
+  <obj:Term> "[" <slice:Expr> "]" => Box::new(Expr::Slice{<>}),
+
   <obj:Term> "[" <first:Expr> "," <slice:Comma<Expr>> "]" => {
       let mut slice_final = vec![first.clone()];
       slice_final.extend(slice.into_iter());
@@ -283,6 +292,7 @@ DeclVar: DeclVar = {
 };
 
 
+#[inline]
 AssignVar: AssignVar = {
     <name:"ident"> <static_type:StaticType> =>
         AssignVar::Decl(DeclVar::Var { 

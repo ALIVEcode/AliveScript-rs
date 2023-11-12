@@ -1,6 +1,6 @@
 #![allow(dead_code, unused_variables)]
 
-use std::env;
+use std::{env, io::Write};
 
 use data::{Data, Response};
 use io::InterpretorIO;
@@ -36,6 +36,7 @@ impl InterpretorIO for IO {
             Data::Erreur { texte, ligne } => todo!(),
             Data::Demander { prompt } => {
                 print!("{}", prompt.unwrap_or("Entrez une valeur: ".into()));
+                std::io::stdout().flush().unwrap();
                 let mut line = String::new();
                 std::io::stdin().read_line(&mut line).unwrap();
                 Some(Response::Text(line))
