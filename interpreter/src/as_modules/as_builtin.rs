@@ -132,5 +132,34 @@ pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                 ASType::Booleen,
             ),
         ),
+        ASVar::new_with_value(
+            "decimal",
+            Some(ASType::Fonction),
+            true,
+            ASObj::native_fn(
+                "decimal",
+                None,
+                vec![
+                    ASFnParam::native(
+                        "obj",
+                        ASType::union_of(ASType::Decimal, ASType::Texte),
+                        Some(ASObj::ASDecimal(0f64)),
+                    ),
+                ],
+                |runner| {
+                    let env = runner.get_env();
+                    let obj = env.get_value(&"obj".into()).unwrap();
+                    Some(match obj {
+                        ASObj::ASEntier(i) => ASObj::ASDecimal(*i as f64),
+                        ASObj::ASDecimal(_) => obj.clone(),
+                        ASObj::ASTexte(s) => {
+                            ASObj::ASDecimal(s.parse().unwrap())
+                        }
+                        _ => unreachable!(),
+                    })
+                },
+                ASType::Booleen,
+            ),
+        ),
     ]))
 });

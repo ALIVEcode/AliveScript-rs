@@ -82,7 +82,7 @@ pub enum Token {
     KwRetourner,
 
     // Variables
-    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().parse())]
+    #[regex(r"[a-zA-Zα-ζΑ-Ζ_ïöëäíóéáìòèàîôêâçÏÖËÄÍÓÉÁÌÒÈÀÎÔÊÂÇ][a-zA-Z0-9_α-ζΑ-ΖïöëäíóéáìòèàîôêâçÏÖËÄÍÓÉÁÌÒÈÀÎÔÊÂÇ]*", |lex| lex.slice().parse())]
     Ident(String),
 
     // Types de données
