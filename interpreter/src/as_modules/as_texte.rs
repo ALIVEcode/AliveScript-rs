@@ -4,55 +4,23 @@ use once_cell::sync::Lazy;
 
 use crate::{
     as_obj::{ASFnParam, ASObj, ASScope, ASType, ASVar},
-    ast::Expr,
+    ast::Expr, fonction_as, cast_as,
 };
 
 pub static TEXTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
     Arc::new(ASScope::from(vec![
-        ASVar::new_with_value(
-            "maj",
-            Some(ASType::Fonction),
-            true,
-            ASObj::native_fn(
-                "maj",
-                None,
-                vec![ASFnParam {
-                    name: "txt".into(),
-                    static_type: ASType::Texte,
-                    default_value: None,
-                }],
-                |runner| {
-                    let env = runner.get_env();
-                    let ASObj::ASTexte(txt) = env.get_value(&"txt".into()).unwrap() else {
-                        unreachable!()
-                    };
-                    Ok(Some(ASObj::ASTexte(txt.to_uppercase())))
-                },
-                ASType::Texte,
-            ),
-        ),
-        ASVar::new_with_value(
-            "minus",
-            Some(ASType::Fonction),
-            true,
-            ASObj::native_fn(
-                "minus",
-                None,
-                vec![ASFnParam {
-                    name: "txt".into(),
-                    static_type: ASType::Texte,
-                    default_value: None,
-                }],
-                |runner| {
-                    let env = runner.get_env();
-                    let ASObj::ASTexte(txt) = env.get_value(&"txt".into()).unwrap() else {
-                        unreachable!()
-                    };
-                    Ok(Some(ASObj::ASTexte(txt.to_lowercase())))
-                },
-                ASType::Texte,
-            ),
-        ),
+        fonction_as! {
+            maj(txt: ASType::Texte) -> ASType::Texte; {
+                cast_as!(ASObj::ASTexte(txt) = txt);
+                Ok(Some(ASObj::ASTexte(txt.to_uppercase())))
+            }
+        },
+        fonction_as! {
+            minus(txt: ASType::Texte) -> ASType::Texte; {
+                cast_as!(ASObj::ASTexte(txt) = txt);
+                Ok(Some(ASObj::ASTexte(txt.to_lowercase())))
+            }
+        },
         ASVar::new_with_value(
             "indexDe",
             Some(ASType::Fonction),

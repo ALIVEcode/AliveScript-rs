@@ -5,7 +5,9 @@ use std::{
 
 use crate::{
     as_modules::ASModuleBuiltin,
-    as_obj::{ASEnv, ASErreur, ASErreurType, ASFnParam, ASObj, ASScope, ASType, ASVar},
+    as_obj::{
+        ASEnv, ASErreur, ASErreurType, ASFnParam, ASObj, ASScope, ASStructField, ASType, ASVar,
+    },
     ast::{
         AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, Expr, LireVar, Stmt, Type,
         TypeBinOpcode, UnaryOpcode,
@@ -86,6 +88,14 @@ macro_rules! throw_err {
     ($self:expr, $err:expr) => {{
         $self.throw_err($err);
         return;
+    }};
+
+    (?, $self:expr, $err:expr) => {{
+        let result = $err;
+        if result.is_err() {
+            $self.throw_err(result.err().unwrap());
+            return;
+        }
     }};
 }
 
@@ -244,10 +254,37 @@ impl Visitor for Runner<'_> {
         if let Expr::AccessProp { obj, prop } = expr {
             let obj_val = eval!(expr, self, obj, "AccessProp obj");
 
-            self.expr_results.push(match obj_val {
+            let result = match &obj_val {
                 ASObj::ASModule { env } => env.get(prop).expect("AccessProp prop").1.clone(),
+                ASObj::ASStructure { name, fields } => {
+                    let field = fields.into_iter().find(|field| &field.name == prop);
+                    if let Some(ASStructField {
+                        name,
+                        vis,
+                        static_type,
+                        default_value,
+                        is_const,
+                    }) = field
+                    {
+                        let Some(value) =
+                            eval!(opt_expr, self, default_value, "Default value field")
+                        else {
+                            throw_err!(
+                                self,
+                                ASErreurType::new_erreur_access_propriete(obj_val, prop.clone())
+                            );
+                        };
+                        value
+                    } else {
+                        throw_err!(
+                            self,
+                            ASErreurType::new_erreur_propriete_pas_init(obj_val, prop.clone())
+                        );
+                    }
+                }
                 _ => todo!(),
-            });
+            };
+            self.expr_results.push(result);
         }
     }
 
@@ -382,68 +419,119 @@ impl Visitor for Runner<'_> {
         }
     }
 
-    fn visit_expr_callrust(&mut self, expr: &Expr) {
-        if let Expr::CallRust(proc) = expr {
-            let result = proc(self);
-            match result {
-                Ok(Some(value)) => self.expr_results.push(value),
-                Ok(None) => {}
-                Err(err) => throw_err!(self, err),
+    fn visit_expr_struct_inst(&mut self, expr: &Expr) {
+        let Expr::StructInst { structure, fields } = expr else {
+            return;
+        };
+
+        let struct_parent = eval!(expr, self, structure, "Struct");
+        let ASObj::ASStructure {
+            name: struct_name,
+            fields: parent_fields,
+        } = &struct_parent
+        else {
+            throw_err!(
+                self,
+                ASErreurType::new_erreur_type(ASType::Structure, struct_parent.get_type())
+            )
+        };
+        let mut env = ASScope::new();
+
+        for field in parent_fields {
+            let field_value = eval!(
+                opt_expr,
+                self,
+                field.default_value.clone(),
+                "Struct default value"
+            );
+            let field_var = ASVar::new(
+                field.name.clone(),
+                Some(field.static_type.clone()),
+                field.is_const,
+            );
+            if let Some(value) = field_value {
+                env.declare(field_var, value);
+            } else {
+                env.declare(field_var, ASObj::ASNul);
             }
+        }
+
+        for field_expr in fields.into_iter() {
+            let ASObj::ASPaire { key, val } = eval!(expr, self, field_expr, "Struct field") else {
+                unreachable!()
+            };
+            let ASObj::ASTexte(key) = *key else {
+                unreachable!()
+            };
+
+            throw_err!(?, self, env.assign_type_strict(&key, *val));
+        }
+    }
+
+    fn visit_expr_callrust(&mut self, expr: &Expr) {
+        let Expr::CallRust(proc) = expr else { return };
+
+        let result = proc(self);
+        match result {
+            Ok(Some(value)) => self.expr_results.push(value),
+            Ok(None) => {}
+            Err(err) => throw_err!(self, err),
         }
     }
 
     fn visit_expr_range(&mut self, expr: &Expr) {
-        if let Expr::Range {
+        let Expr::Range {
             start,
             end,
             step,
             is_incl,
         } = expr
-        {
-            let start = eval!(expr, self, start, "Range start");
-            let end = eval!(expr, self, end, "Range end");
-            let step = eval!(opt_expr, self, step, "Range step").unwrap_or(ASObj::ASEntier(1));
+        else {
+            return;
+        };
 
-            let (mut start_val, mut end_val, step_val) = match (&start, &end, &step) {
-                (ASObj::ASEntier(s), ASObj::ASEntier(e), ASObj::ASEntier(step)) if *step != 0 => {
-                    (*s, *e, *step)
-                }
-                (s, e, step) => {
-                    throw_err!(
-                        self,
-                        ASErreurType::new_suite_invalide(s.clone(), e.clone(), step.clone(),)
-                    );
-                }
-            };
+        let start = eval!(expr, self, start, "Range start");
+        let end = eval!(expr, self, end, "Range end");
+        let step = eval!(opt_expr, self, step, "Range step").unwrap_or(ASObj::ASEntier(1));
 
-            if start_val > end_val && step_val < 0 {
-                (start_val, end_val) = (end_val + 1, start_val + 1);
-                let range = if *is_incl {
-                    start_val - 1..end_val
-                } else {
-                    start_val..end_val
-                };
-                let range = range
-                    .rev()
-                    .step_by(step_val.abs() as usize)
-                    .map(|i| ASObj::ASEntier(i))
-                    .collect();
-                self.expr_results.push(ASObj::ASListe(range));
-            } else if start_val < end_val && step_val > 0 {
-                let range = if *is_incl {
-                    start_val..end_val + 1
-                } else {
-                    start_val..end_val
-                };
-                let range = range
-                    .step_by(step_val as usize)
-                    .map(|i| ASObj::ASEntier(i))
-                    .collect();
-                self.expr_results.push(ASObj::ASListe(range));
-            } else {
-                throw_err!(self, ASErreurType::new_suite_invalide(start, end, step));
+        let (mut start_val, mut end_val, step_val) = match (&start, &end, &step) {
+            (ASObj::ASEntier(s), ASObj::ASEntier(e), ASObj::ASEntier(step)) if *step != 0 => {
+                (*s, *e, *step)
             }
+            (s, e, step) => {
+                throw_err!(
+                    self,
+                    ASErreurType::new_suite_invalide(s.clone(), e.clone(), step.clone(),)
+                );
+            }
+        };
+
+        if start_val > end_val && step_val < 0 {
+            (start_val, end_val) = (end_val + 1, start_val + 1);
+            let range = if *is_incl {
+                start_val - 1..end_val
+            } else {
+                start_val..end_val
+            };
+            let range = range
+                .rev()
+                .step_by(step_val.abs() as usize)
+                .map(|i| ASObj::ASEntier(i))
+                .collect();
+            self.expr_results.push(ASObj::ASListe(range));
+        } else if start_val < end_val && step_val > 0 {
+            let range = if *is_incl {
+                start_val..end_val + 1
+            } else {
+                start_val..end_val
+            };
+            let range = range
+                .step_by(step_val as usize)
+                .map(|i| ASObj::ASEntier(i))
+                .collect();
+            self.expr_results.push(ASObj::ASListe(range));
+        } else {
+            throw_err!(self, ASErreurType::new_suite_invalide(start, end, step));
         }
     }
 
@@ -619,8 +707,7 @@ impl Visitor for Runner<'_> {
                         throw_err!(self, value.err().unwrap())
                     };
 
-                    if !ASType::type_match(&static_type, &value.get_type())
-                    {
+                    if !ASType::type_match(&static_type, &value.get_type()) {
                         throw_err!(
                             self,
                             ASErreurType::ErreurType {
@@ -694,25 +781,25 @@ impl Visitor for Runner<'_> {
                     is_const,
                 }) => {
                     if let Some((var, _old_val)) = self.env.get_var(name) {
-                        if var.is_const() {
-                            throw_err!(
-                                self,
-                                ASErreurType::AffectationConstante {
-                                    var_name: name.clone()
-                                }
-                            )
-                        }
-                        if !var.type_match(&value.get_type()) {
-                            throw_err!(
-                                self,
-                                ASErreurType::ErreurType {
-                                    type_attendu: var.get_type().clone(),
-                                    type_obtenu: value.get_type()
-                                }
-                            );
-                        }
+                        // if var.is_const() {
+                        //     throw_err!(
+                        //         self,
+                        //         ASErreurType::AffectationConstante {
+                        //             var_name: name.clone()
+                        //         }
+                        //     )
+                        // }
+                        // if !var.type_match(&value.get_type()) {
+                        //     throw_err!(
+                        //         self,
+                        //         ASErreurType::ErreurType {
+                        //             type_attendu: var.get_type().clone(),
+                        //             type_obtenu: value.get_type()
+                        //         }
+                        //     );
+                        // }
 
-                        self.env.assign(var.clone(), value);
+                        throw_err!(?, self, self.env.assign_strict(name, value));
                     } else {
                         let static_type = eval!(opt_type, self, static_type, "Assign var type");
                         if static_type.is_some()
@@ -783,7 +870,7 @@ impl Visitor for Runner<'_> {
                             );
                         }
 
-                        self.env.assign(var.clone(), value);
+                        self.env.assign(name, value);
                     } else {
                         throw_err!(self, ASErreurType::new_variable_inconnue(name.clone()))
                     }
@@ -1000,7 +1087,28 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_stmt_defstruct(&mut self, stmt: &Stmt) {
-        todo!()
+        if let Stmt::DefStruct { name, fields } = stmt {
+            let mut as_fields = Vec::with_capacity(fields.len());
+            for field in fields.into_iter() {
+                let field_type = eval!(opt_type, self, field.static_type.clone(), "Field Type");
+                as_fields.push(ASStructField {
+                    name: field.name.clone(),
+                    vis: field.vis.into(),
+                    static_type: field_type.into(),
+                    is_const: field.is_const,
+                    default_value: field.default_value.clone(),
+                })
+            }
+            let as_struct = ASObj::ASStructure {
+                name: name.clone(),
+                fields: as_fields,
+            };
+            let var = ASVar::new(name.clone(), Some(ASType::Structure), true);
+            let result = self.env.declare_strict(var, as_struct);
+            if result.is_err() {
+                throw_err!(self, result.err().unwrap());
+            }
+        }
     }
 
     fn visit_type_lit(&mut self, t: &Type) {

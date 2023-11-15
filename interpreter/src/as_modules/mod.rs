@@ -1,7 +1,9 @@
-mod as_math;
-mod as_liste;
-mod as_texte;
 mod as_builtin;
+mod as_liste;
+mod as_math;
+mod as_temps;
+mod as_texte;
+mod fonction_macro;
 
 use once_cell::sync::Lazy;
 use std::{collections::HashMap, sync::Arc};
@@ -9,18 +11,10 @@ use std::{collections::HashMap, sync::Arc};
 use crate::as_obj::{ASEnv, ASObj, ASScope, ASType, ASVar};
 
 use self::as_builtin::BUILTIN_MOD;
-use self::as_math::MATH_MOD;
 use self::as_liste::LISTE_MOD;
+use self::as_math::MATH_MOD;
+use self::as_temps::TEMPS_MOD;
 use self::as_texte::TEXTE_MOD;
-
-static AS_MODULES: Lazy<HashMap<ASModuleBuiltin, Arc<ASScope>>> = Lazy::new(|| {
-    let mut modules = HashMap::new();
-    modules.insert(ASModuleBuiltin::Builtin, Arc::clone(&*BUILTIN_MOD));
-    modules.insert(ASModuleBuiltin::Math, Arc::clone(&*MATH_MOD));
-    modules.insert(ASModuleBuiltin::Liste, Arc::clone(&*LISTE_MOD));
-    modules.insert(ASModuleBuiltin::Texte, Arc::clone(&*TEXTE_MOD));
-    modules
-});
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug, Copy)]
 pub enum ASModuleBuiltin {
@@ -31,6 +25,16 @@ pub enum ASModuleBuiltin {
     Temps,
     Voiture,
 }
+
+static AS_MODULES: Lazy<HashMap<ASModuleBuiltin, Arc<ASScope>>> = Lazy::new(|| {
+    let mut modules = HashMap::new();
+    modules.insert(ASModuleBuiltin::Builtin, Arc::clone(&*BUILTIN_MOD));
+    modules.insert(ASModuleBuiltin::Math, Arc::clone(&*MATH_MOD));
+    modules.insert(ASModuleBuiltin::Liste, Arc::clone(&*LISTE_MOD));
+    modules.insert(ASModuleBuiltin::Texte, Arc::clone(&*TEXTE_MOD));
+    modules.insert(ASModuleBuiltin::Temps, Arc::clone(&*TEMPS_MOD));
+    modules
+});
 
 impl ASModuleBuiltin {
     pub fn load(&self, alias: &Option<String>, vars: &Option<Vec<String>>, env: &mut ASEnv) {
@@ -133,4 +137,3 @@ impl From<&str> for ASModuleBuiltin {
         }
     }
 }
-

@@ -81,6 +81,14 @@ pub enum Token {
     #[token("retourner")]
     KwRetourner,
 
+    // Structures
+    #[token("structure")]
+    KwStructure,
+
+    #[token("methode")]
+    #[token("méthode")]
+    KwMethode,
+
     // Variables
     #[regex(r"[a-zA-Zα-ζΑ-Ζ_ïöëäíóéáìòèàîôêâçÏÖËÄÍÓÉÁÌÒÈÀÎÔÊÂÇ][a-zA-Z0-9_α-ζΑ-ΖïöëäíóéáìòèàîôêâçÏÖËÄÍÓÉÁÌÒÈÀÎÔÊÂÇ]*", |lex| lex.slice().parse())]
     Ident(String),
@@ -148,9 +156,11 @@ pub enum Token {
     OpDivAssign,
 
     #[token("//=")]
+    #[token("div=")]
     OpDivIntAssign,
 
     #[token("%=")]
+    #[token("mod=")]
     OpModAssign,
 
     #[token("**=")]
@@ -162,17 +172,21 @@ pub enum Token {
     CompEq,
 
     #[token("!=")]
+    #[token("≠")]
+    #[token("<>")]
     CompNotEq,
 
     #[token("<")]
     CompLth,
 
     #[token("<=")]
+    #[token("≤")]
     CompLeq,
 
     #[token(">")]
     CompGth,
 
+    #[token("≥")]
     #[token(">=")]
     CompGeq,
 
@@ -183,6 +197,7 @@ pub enum Token {
     Assign,
 
     #[token("->")]
+    #[token("→")]
     RightArrow,
 
     #[token(".")]
@@ -192,6 +207,8 @@ pub enum Token {
     QuestionMark,
 
     #[token("..")]
+    #[token("jusqu'a")]
+    #[token("jusqu'à")]
     RangeExcl,
 
     #[token("..=")]

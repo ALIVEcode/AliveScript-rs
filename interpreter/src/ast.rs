@@ -1,5 +1,5 @@
 use crate::{
-    as_obj::{ASErreurType, ASObj},
+    as_obj::{ASErreurType, ASObj, ASStructFieldVis},
     runner::Runner,
     visitor::{Visitable, Visitor},
 };
@@ -111,30 +111,28 @@ pub struct FnParam {
     pub default_value: Option<Box<Expr>>,
 }
 
-// impl FnParam {
-//     pub fn new(
-//         name: impl ToString,
-//         static_type: Option<Type>,
-//         default_value: Option<Box<Expr>>,
-//     ) -> Self {
-//         Self {
-//             name: name.to_string(),
-//             static_type: static_type.into(),
-//             default_value,
-//         }
-//     }
-//
-//     pub fn to_asvar(&self) -> ASVar {
-//         ASVar::new(self.name.clone(), Some(self.static_type.clone()), false)
-//     }
-// }
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct StructField {
     pub name: String,
+    pub vis: StructFieldVis,
     pub static_type: Option<Box<Type>>,
     pub default_value: Option<Box<Expr>>,
     pub is_const: bool,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum StructFieldVis {
+    Publique,
+    Privee,
+}
+
+impl Into<ASStructFieldVis> for StructFieldVis {
+    fn into(self) -> ASStructFieldVis {
+        match self {
+            Self::Privee => ASStructFieldVis::Privee,
+            Self::Publique => ASStructFieldVis::Publique,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -194,6 +192,11 @@ pub enum Expr {
     FnCall {
         func: Box<Expr>,
         args: Vec<Box<Expr>>,
+    },
+
+    StructInst {
+        structure: Box<Expr>,
+        fields: Vec<Box<Expr>>,
     },
 
     BinOp {
@@ -305,6 +308,7 @@ impl Visitable for Expr {
             Range { .. } => visitor.visit_expr_range(self),
             Slice { .. } => visitor.visit_expr_slice(self),
             CallRust(..) => visitor.visit_expr_callrust(self),
+            StructInst { .. } => visitor.visit_expr_struct_inst(self),
         }
     }
 }
@@ -326,6 +330,7 @@ impl Visitable for Stmt {
             TantQue { .. } => visitor.visit_stmt_tantque(self),
             Pour { .. } => visitor.visit_stmt_pour(self),
             DefFn { .. } => visitor.visit_stmt_deffn(self),
+            DefStruct { .. } => visitor.visit_stmt_defstruct(self),
             Retourner(..) => visitor.visit_stmt_retourner(self),
             Sortir => visitor.visit_stmt_sortir(self),
             Continuer => visitor.visit_stmt_continuer(self),

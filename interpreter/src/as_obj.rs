@@ -9,7 +9,7 @@ use std::{
 use derive_new::new;
 
 use crate::{
-    ast::{Expr, Stmt, StructField},
+    ast::{Expr, Stmt},
     data::Data,
     lexer::LexicalError,
     runner::Runner,
@@ -21,6 +21,8 @@ pub enum ASObj {
     ASDecimal(f64),
     ASBooleen(bool),
     ASNul,
+    // A placeholder value for representing the absence of values
+    ASNoValue,
 
     ASPaire {
         key: Box<ASObj>,
@@ -44,11 +46,16 @@ pub enum ASObj {
 
     ASStructure {
         name: String,
-        fields: Vec<StructField>,
+        fields: Vec<ASStructField>,
     },
 
     ASModule {
         env: Arc<ASScope>,
+    },
+
+    ASStructInst {
+        struct_parent: Box<ASObj>,
+        env: ASScope,
     },
 }
 
@@ -364,6 +371,21 @@ impl Display for ASFnParam {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct ASStructField {
+    pub name: String,
+    pub vis: ASStructFieldVis,
+    pub static_type: ASType,
+    pub default_value: Option<Box<Expr>>,
+    pub is_const: bool,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum ASStructFieldVis {
+    Publique,
+    Privee,
+}
+
 #[derive(Debug, Hash, Eq, Clone, PartialEq)]
 pub struct ASVar {
     name: String,
@@ -433,6 +455,7 @@ pub enum ASType {
     Dict,
 
     Fonction,
+    Structure,
 
     Module,
     Objet(String),
@@ -462,6 +485,7 @@ impl ASType {
             },
             Dict => ASDict(vec![]),
             Fonction => todo!(),
+            Structure => todo!(),
             Module => todo!(),
             Objet(_) => todo!(),
             Union(_) => todo!(),
@@ -656,6 +680,7 @@ impl Display for ASType {
             Objet(o) => o.clone(),
 
             Fonction => "fonction".into(),
+            Structure => "structure".into(),
 
             Union(types) => types
                 .iter()
@@ -699,12 +724,58 @@ impl ASScope {
         self.0.insert(var.get_name().clone(), (var, val))
     }
 
+    pub fn declare(&mut self, var: ASVar, val: ASObj) -> Option<(ASVar, ASObj)> {
+        self.insert(var, val)
+    }
+
     pub fn iter(&self) -> std::collections::hash_map::Iter<'_, String, (ASVar, ASObj)> {
         self.0.iter()
     }
 
     pub fn into_iter(self) -> std::collections::hash_map::IntoIter<String, (ASVar, ASObj)> {
         self.0.into_iter()
+    }
+
+    pub fn assign(&mut self, var_name: &String, val: ASObj) -> Option<(ASVar, ASObj)> {
+        let var = self.get(var_name).unwrap().0.clone();
+        self.insert(var, val)
+    }
+
+    pub fn assign_strict(
+        &mut self,
+        var_name: &String,
+        val: ASObj,
+    ) -> Result<Option<(ASVar, ASObj)>, ASErreurType> {
+        let var = &self.get(var_name).unwrap().0;
+        if var.is_const() {
+            Err(ASErreurType::new_affectation_constante(var_name.clone()))
+        } else if !var.type_match(&val.get_type()) {
+            Err(ASErreurType::new_erreur_type(
+                var.get_type().clone(),
+                val.get_type(),
+            ))
+        } else {
+            Ok(self.insert(var.clone(), val))
+        }
+    }
+
+    pub fn assign_type_strict(
+        &mut self,
+        var_name: &String,
+        val: ASObj,
+    ) -> Result<Option<(ASVar, ASObj)>, ASErreurType> {
+        let Some(var) = &self.get(var_name) else {
+            return Err(ASErreurType::new_variable_inconnue(var_name.clone()));
+        };
+        let var = &var.0;
+        if !var.type_match(&val.get_type()) {
+            Err(ASErreurType::new_erreur_type(
+                var.get_type().clone(),
+                val.get_type(),
+            ))
+        } else {
+            Ok(self.insert(var.clone(), val))
+        }
     }
 }
 
@@ -748,8 +819,38 @@ impl ASEnv {
         self.0.last_mut().unwrap().insert(var, val)
     }
 
-    pub fn assign(&mut self, var: ASVar, val: ASObj) -> Option<(ASVar, ASObj)> {
-        self.get_env_of_var(var.get_name()).insert(var, val)
+    pub fn declare_strict(
+        &mut self,
+        var: ASVar,
+        val: ASObj,
+    ) -> Result<Option<(ASVar, ASObj)>, ASErreurType> {
+        let var_name = var.get_name();
+        if self
+            .0
+            .last_mut()
+            .unwrap()
+            .get(var_name)
+            .is_some_and(|(v, _)| v.is_const())
+        {
+            Err(ASErreurType::new_affectation_constante(var_name.clone()))
+        } else {
+            Ok(self.0.last_mut().unwrap().insert(var, val))
+        }
+    }
+
+    pub fn assign(&mut self, var_name: &String, val: ASObj) -> Option<(ASVar, ASObj)> {
+        let scope = self.get_env_of_var(var_name);
+        let var = scope.get(var_name).unwrap().0.clone();
+        self.get_env_of_var(var_name).insert(var, val)
+    }
+
+    pub fn assign_strict(
+        &mut self,
+        var_name: &String,
+        val: ASObj,
+    ) -> Result<Option<(ASVar, ASObj)>, ASErreurType> {
+        let scope = self.get_env_of_var(var_name);
+        scope.assign_strict(var_name, val)
     }
 }
 
@@ -786,6 +887,14 @@ pub enum ASErreurType {
     },
     ErreurClef {
         mauvaise_clef: ASObj,
+    },
+    ErreurAccessPropriete {
+        obj: ASObj,
+        prop: String,
+    },
+    ErreurProprietePasInit {
+        obj: ASObj,
+        prop: String,
     },
     SuiteInvalide {
         start: ASObj,
@@ -851,6 +960,10 @@ impl Display for ASErreurType {
             ),
 
             ErreurClef { mauvaise_clef } => format!("La clef {} n'est pas dans le dictionnaire", mauvaise_clef.repr()),
+
+            ErreurAccessPropriete { obj, prop } => format!("La propriété {} n'existe pas dans {}", obj, prop),
+
+            ErreurProprietePasInit { obj, prop } => format!("La propriété {} n'est pas initialisé dans {}", obj, prop),
 
             SuiteInvalide { start, end, step } => {
                 format!("Suite invalide: {} .. {} bond {}", start, end, step)

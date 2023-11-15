@@ -17,6 +17,7 @@ pub trait Visitor {
     fn visit_expr_slice(&mut self, expr: &Expr);
 
     fn visit_expr_fncall(&mut self, expr: &Expr);
+    fn visit_expr_struct_inst(&mut self, expr: &Expr);
     fn visit_expr_callrust(&mut self, expr: &Expr);
 
     fn visit_expr_unaryop(&mut self, expr: &Expr);

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use once_cell::sync::Lazy;
 
 use crate::as_obj::{ASFnParam, ASObj, ASScope, ASType, ASVar};
+use crate::fonction_as;
 
 pub static MATH_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
     Arc::new(ASScope::from(vec![
@@ -29,25 +30,24 @@ pub static MATH_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                 ASType::Decimal,
             ),
         ),
-        ASVar::new_with_value(
-            "cos",
-            Some(ASType::Fonction),
-            true,
-            ASObj::native_fn(
-                "cos",
-                None,
-                vec![ASFnParam::new("x", None, None)],
-                |runner| {
-                    let env = runner.get_env();
-                    Ok(Some(match env.get_var(&"x".into()).unwrap() {
-                        (_, ASObj::ASDecimal(n)) => ASObj::ASDecimal(n.cos()),
-                        (_, ASObj::ASEntier(i)) => ASObj::ASDecimal((*i as f64).cos()),
+        fonction_as! {
+            cos(x: ASType::nombre()) -> ASType::Decimal; {
+                Ok(Some(match x {
+                        ASObj::ASDecimal(n) => ASObj::ASDecimal(n.cos()),
+                        ASObj::ASEntier(i) => ASObj::ASDecimal((*i as f64).cos()),
                         _ => unreachable!(),
                     }))
-                },
-                ASType::Decimal,
-            ),
-        ),
+            }
+        },
+        fonction_as! {
+            tan(x: ASType::nombre()) -> ASType::Decimal; {
+                Ok(Some(match x {
+                    ASObj::ASDecimal(i) => ASObj::ASDecimal(i.tan()),
+                    ASObj::ASEntier(i) => ASObj::ASDecimal((*i as f64).tan()),
+                    _ => unreachable!()
+                }))
+            }
+        },
         ASVar::new_with_value(
             "PI",
             Some(ASType::Decimal),

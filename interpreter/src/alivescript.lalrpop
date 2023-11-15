@@ -10,6 +10,8 @@ use crate::ast::{
     UnaryOpcode,
     BinLogiccode,
     FnParam,
+    StructField,
+    StructFieldVis,
     LireVar,
 };
 use crate::as_obj::ASObj;
@@ -54,13 +56,48 @@ pub Stmt: Box<Stmt> = {
     "pour" <var:DeclVar> "dans" <iterable:Expr> "faire"? "eos" <body:Stmt*> "fin" "pour" "eos" =>
         Box::new(Stmt::Pour { <> }),
 
+    "pour" <var:DeclIdent> "dans" <iterable:Expr> "faire"? "eos" <body:Stmt*> "fin" "pour" "eos" =>
+        Box::new(Stmt::Pour { <> }),
+
     // Def fonctions
     "fonction" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
         <body:Stmt*> "fin" "fonction" "eos" => Box::new(Stmt::DefFn { <> }),
 
+    // Def structure
+    "structure" <name:"ident"> "eos" <fields:StructFieldDecl*> "fin" "structure" "eos"
+        => Box::new(Stmt::DefStruct { <> }),
+
     <then_stmt:SubStmt> "si" <cond:Expr> "eos" => 
       Box::new(Stmt::CondStmt { <> }),
 };
+
+#[inline]
+StructFieldDecl: StructField = {
+    "var" <var_name:"ident"> <static_type:StaticType> <default_value:("assign" <Expr>)?> "eos" =>
+        StructField { 
+            name: var_name.into(),
+            vis: StructFieldVis::Publique,
+            static_type,
+            default_value,
+            is_const: false,
+        },
+
+    "const" <var_name:"ident"> <static_type:StaticType> <default_value:("assign" <Expr>)?> "eos" =>
+        StructField { 
+            name: var_name.into(),
+            vis: StructFieldVis::Publique,
+            static_type,
+            default_value,
+            is_const: true,
+        },
+};
+
+//#[inline]
+//StructMethode: Box<Stmt> = {
+//    // Def methode
+//    "methode" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
+//        <body:Stmt*> "fin" "fonction" "eos" => Box::new(Stmt::DefFn { <> }),
+//};
 
 SubStmt: Box<Stmt> = {
     Expr => Box::new(Stmt::Expr(<>)),
@@ -299,6 +336,8 @@ pub Term: Box<Expr> = {
 
   <func:Term> "(" <args:Comma<Expr>> ")" => Box::new(Expr::FnCall{<>}),
 
+  //StructInst,
+
   <obj:Term> "." <prop:"ident"> => Box::new(Expr::AccessProp{<>}),
 
   "ident" => Box::new(Expr::Ident(<>)),
@@ -355,18 +394,28 @@ Slice: Box<Expr> = {
 }
 
 DeclVar: DeclVar = {
-    "var" <var_name:"ident"> <static_type:(":" <Type>)?> =>
+    "var" <var_name:"ident"> <static_type:StaticType> =>
         DeclVar::Var { 
             name: var_name.into(),
             static_type,
             is_const: false,
         },
 
-    "const" <var_name:"ident"> <static_type:(":" <Type>)?> =>
+    "const" <var_name:"ident"> <static_type:StaticType> =>
         DeclVar::Var { 
             name: var_name.into(),
             static_type,
             is_const: true,
+        },
+};
+
+#[inline]
+DeclIdent: DeclVar = {
+    <var_name:"ident"> <static_type:StaticType> =>
+        DeclVar::Var { 
+          name: var_name.into(),
+          static_type,
+          is_const: false,
         },
 };
 
@@ -405,6 +454,14 @@ Lit: Expr = {
 FnParam: FnParam = {
     <name:"ident"> <static_type:StaticType> <default_value:("assign" <Expr>)?> 
         => FnParam { <> },
+};
+
+//StructInst: Box<Expr> = <struct:Term> <fields:CommaCollection<"{", "}", StructField>>;
+
+#[inline]
+StructField: Box<Expr> = {
+    Paire,
+    "ident" => Box::new(Expr::Ident(<>)),
 };
 
 StaticType: Option<Box<Type>> = (":" <Type>)?;
@@ -495,6 +552,8 @@ extern {
         "retourner" => Token::KwRetourner,
         "continuer" => Token::KwContinuer,
         "sortir" => Token::KwSortir,
+
+        "structure" => Token::KwStructure,
 
         "ident" => Token::Ident(<String>),
         "int" => Token::Int(<i64>),
