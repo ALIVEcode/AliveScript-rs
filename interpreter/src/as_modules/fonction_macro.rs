@@ -20,7 +20,7 @@ macro_rules! default_value {
 
 #[macro_export]
 macro_rules! fonction_as {
-    ($($desc:literal;)? $name:ident ($($param_name:ident : $param_type:expr $(=> $default:expr)?)* $(,)?)
+    ($($desc:literal;)? $name:ident ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
      -> $return_type:expr; $body:expr) => {
         $crate::as_obj::ASVar::new_with_value(
             std::stringify!($name),
@@ -50,7 +50,7 @@ macro_rules! fonction_as {
 }
 
 #[macro_export]
-macro_rules! cast_as {
+macro_rules! unpack_as {
     ($var:pat = $val:expr) => {
         let $var = $val else { std::unreachable!() };
     };
