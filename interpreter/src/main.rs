@@ -2,23 +2,11 @@
 
 use std::{env, io::Write};
 
-use data::{Data, Response};
-use io::InterpretorIO;
-use lalrpop_util::lalrpop_mod;
-
-lalrpop_mod!(alivescript, "/src/alivescript.rs");
-
-mod as_modules;
-pub(crate) mod as_obj;
-pub(crate) mod ast;
-pub mod data;
-mod lexer;
-mod runner;
-pub(crate) mod token;
-mod visitor;
-pub mod io;
-
-use crate::{lexer::Lexer, visitor::Visitor};
+use alivescript_rust::{
+    data::{Data, Response},
+    io::InterpretorIO,
+    run_script,
+};
 
 struct IO {}
 
@@ -28,6 +16,8 @@ impl InterpretorIO for IO {
             Data::Afficher(s) => println!("{}", s),
             Data::Erreur { texte, ligne } => println!("{}", texte),
             Data::Demander { prompt } => todo!(),
+            Data::NotifInfo { msg } => todo!(),
+            Data::NotifErr { msg } => todo!(),
         }
     }
     fn request(&mut self, data: Data) -> Option<Response> {
@@ -41,22 +31,16 @@ impl InterpretorIO for IO {
                 std::io::stdin().read_line(&mut line).unwrap();
                 Some(Response::Text(line))
             }
+            Data::NotifInfo { msg } => todo!(),
+            Data::NotifErr { msg } => todo!(),
         }
     }
 }
 
 fn main() {
-    let mut io  = IO{};
+    let mut io = IO {};
     let script_file = env::args().nth(1).unwrap();
     let script = std::fs::read_to_string(script_file).unwrap();
 
     run_script(script, &mut io);
-}
-
-pub fn run_script<'a, IO: InterpretorIO + 'a>(script: String, interpretor_io: &mut IO) {
-    let lexer = Lexer::new(&script[..]);
-    let stmts = alivescript::ScriptParser::new().parse(lexer).unwrap();
-
-    let mut visitor = runner::Runner::new(interpretor_io);
-    visitor.visit_body(&stmts);
 }

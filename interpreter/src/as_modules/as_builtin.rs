@@ -3,33 +3,31 @@ use std::sync::Arc;
 use once_cell::sync::Lazy;
 
 use crate::{
+    as_fonction,
     as_obj::{ASFnParam, ASObj, ASScope, ASType, ASVar},
     ast::Expr,
     data::Data,
+    unpack_as,
 };
 
 pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
     Arc::new(ASScope::from(vec![
-        ASVar::new_with_value(
-            "typeDe",
-            Some(ASType::Fonction),
-            true,
-            ASObj::native_fn(
-                "typeDe",
-                None,
-                vec![ASFnParam {
-                    name: "obj".into(),
-                    static_type: ASType::any(),
-                    default_value: None,
-                }],
-                |runner| {
-                    let env = runner.get_env();
-                    let obj = env.get_value(&"obj".into()).unwrap();
-                    Ok(Some(ASObj::ASTexte(obj.get_type().to_string())))
-                },
-                ASType::Texte,
-            ),
-        ),
+        as_fonction! {
+            typeDe(obj: ASType::any()) -> ASType::Texte; {
+                Ok(Some(ASObj::ASTexte(obj.get_type().to_string())))
+            }
+        },
+        as_fonction! {
+            typeVar[runner](nomVar: ASType::Texte) -> ASType::Texte; {
+                let env = runner.get_env();
+                unpack_as!(ASObj::ASTexte(nom_var) = nomVar);
+                let maybe_var = env.get_var(nom_var).map(|v| &v.0);
+                Ok(Some(match maybe_var {
+                    Some(var) => ASObj::ASTexte(var.get_type().to_string()),
+                    None => ASObj::ASNul,
+                }))
+            }
+        },
         ASVar::new_with_value(
             "typeVar",
             Some(ASType::Fonction),

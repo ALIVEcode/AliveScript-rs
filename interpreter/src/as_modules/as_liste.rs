@@ -1,15 +1,13 @@
-use std::sync::Arc;
-
-use once_cell::sync::Lazy;
-
 use crate::{
-    as_obj::{ASFnParam, ASObj, ASScope, ASType, ASVar},
+    as_mod,
+    as_obj::{ASFnParam, ASObj, ASType, ASVar},
     ast::Expr,
     visitor::Visitable,
 };
 
-pub static LISTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
-    Arc::new(ASScope::from(vec![ASVar::new_with_value(
+as_mod!(
+    LISTE_MOD,
+    ASVar::new_with_value(
         "trier",
         Some(ASType::Fonction),
         true,
@@ -57,5 +55,5 @@ pub static LISTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
             },
             ASType::Liste,
         ),
-    )]))
-});
+    ),
+);

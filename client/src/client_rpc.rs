@@ -78,6 +78,8 @@ impl InterpretorIO for ClientRPC<'_> {
             Data::Afficher(msg) => ("afficher", json!(vec![msg])),
             Data::Erreur { texte, ligne } => todo!(),
             Data::Demander { prompt } => todo!(),
+            Data::NotifInfo { msg } => todo!(),
+            Data::NotifErr { msg } => todo!(),
         };
 
         let result = json!({
@@ -98,6 +100,8 @@ impl InterpretorIO for ClientRPC<'_> {
             Data::Afficher(msg) => ("afficher", json!(vec![msg])),
             Data::Erreur { texte, ligne } => todo!(),
             Data::Demander { prompt } => ("demander", json!([prompt])),
+            Data::NotifInfo { msg } => todo!(),
+            Data::NotifErr { msg } => todo!(),
         };
 
         let result = json!({

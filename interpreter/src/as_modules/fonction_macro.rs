@@ -19,8 +19,8 @@ macro_rules! default_value {
 }
 
 #[macro_export]
-macro_rules! fonction_as {
-    ($($desc:literal;)? $name:ident ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
+macro_rules! as_fonction {
+    ($($desc:literal;)? $name:ident $([$runner:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
      -> $return_type:expr; $body:expr) => {
         $crate::as_obj::ASVar::new_with_value(
             std::stringify!($name),
@@ -36,11 +36,13 @@ macro_rules! fonction_as {
                     default_value: $crate::default_value!($($default)?),
                 },
                 )*],
+                #[allow(non_snake_case)]
                 |runner| {
-                    let env = runner.get_env();
+                    let env = runner.get_env().clone();
                     $(
                     let $param_name = env.get_value(&std::stringify!($param_name).into()).unwrap();
                     )*
+                    $(let $runner = runner;)?
                     $body
                 },
                 $return_type,
@@ -53,5 +55,15 @@ macro_rules! fonction_as {
 macro_rules! unpack_as {
     ($var:pat = $val:expr) => {
         let $var = $val else { std::unreachable!() };
+    };
+}
+
+#[macro_export]
+macro_rules! as_mod {
+    ($name:ident, $($var:expr),* $(,)?) => {
+        pub static $name: once_cell::sync::Lazy<std::sync::Arc<$crate::as_obj::ASScope>> = once_cell::sync::Lazy::new(|| {
+            std::sync::Arc::new($crate::as_obj::ASScope::from(std::vec![$($var),*]))
+        });
+
     };
 }

@@ -896,7 +896,7 @@ pub enum ASErreurType {
         obj: ASObj,
         prop: String,
     },
-    SuiteInvalide {
+    ErreurSuiteInvalide {
         start: ASObj,
         end: ASObj,
         step: ASObj,
@@ -905,6 +905,31 @@ pub enum ASErreurType {
         raison: Option<String>,
         valeur: ASObj,
     },
+    ErreurAffirmation {
+        test: String,
+        attendu: ASObj,
+        obtenu: ASObj,
+    },
+}
+
+impl ASErreurType {
+    pub const fn error_name(&self) -> &'static str {
+        match self {
+            ASErreurType::VariableInconnue { .. } => "VariableInconnue",
+            ASErreurType::AffectationConstante { .. } => "AffectationConstante",
+            ASErreurType::ErreurType { .. } => "ErreurType",
+            ASErreurType::ErreurTypeRetour { .. } => "ErreurTypeRetour",
+            ASErreurType::ErreurConversionType { .. } => "ErreurConversionType",
+            ASErreurType::ErreurTypeAppel { .. } => "ErreurTypeAppel",
+            ASErreurType::ErreurOperation { .. } => "ErreurOperation",
+            ASErreurType::ErreurClef { .. } => "ErreurClef",
+            ASErreurType::ErreurAccessPropriete { .. } => "ErreurAccessPropriete",
+            ASErreurType::ErreurProprietePasInit { .. } => "ErreurProprietePasInit",
+            ASErreurType::ErreurSuiteInvalide { .. } => "SuiteInvalide",
+            ASErreurType::ErreurValeur { .. } => "ErreurValeur",
+            ASErreurType::ErreurAffirmation { .. } => "ErreurAffirmation",
+        }
+    }
 }
 
 impl Display for ASErreurType {
@@ -965,12 +990,19 @@ impl Display for ASErreurType {
 
             ErreurProprietePasInit { obj, prop } => format!("La propriété {} n'est pas initialisé dans {}", obj, prop),
 
-            SuiteInvalide { start, end, step } => {
+            ErreurSuiteInvalide { start, end, step } => {
                 format!("Suite invalide: {} .. {} bond {}", start, end, step)
+            }
+
+            ErreurAffirmation { attendu, obtenu, test } => {
+                format!("Affirmation échouée pour le test `{}`. Résultat attendu: '{}'. Résultat obtenu: '{}'.",
+                        test,
+                        attendu,
+                        obtenu)
             }
         };
 
-        write!(f, "{}", to_string)
+        write!(f, "{}: {}", self.error_name(), to_string)
     }
 }
 

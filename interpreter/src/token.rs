@@ -186,8 +186,8 @@ pub enum Token {
     #[token(">")]
     CompGth,
 
-    #[token("≥")]
     #[token(">=")]
+    #[token("≥")]
     CompGeq,
 
     // Symboles
@@ -242,8 +242,11 @@ pub enum Token {
     #[token(";")]
     EoS,
 
-    #[regex(r"\(-:([^:]|:[^-]|:-[^\)])*:-\)")]
-    ASDocs,
+    #[regex(r"\(-:([^:]|:[^-]|:-[^\)])*:-\)", |lex| {
+        let slice = lex.slice();
+        slice[3..slice.len()-3].parse()
+    })]
+    ASDocs(String),
 
     #[regex(r"[ \t\f]+", logos::skip)]
     #[regex(r"#[^\n]*\n", logos::skip)]
@@ -254,6 +257,83 @@ pub enum Token {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        let to_string = match self {
+            Token::KwUtiliser => "utiliser".to_owned(),
+            Token::KwLire => "lire".to_owned(),
+            Token::KwAfficher => "afficher".to_owned(),
+            Token::KwVar => "var".to_owned(),
+            Token::KwConst => "const".to_owned(),
+            Token::KwFin => "fin".to_owned(),
+            Token::KwSi => "si".to_owned(),
+            Token::KwSinon => "sinon".to_owned(),
+            Token::KwAlors => "alors".to_owned(),
+            Token::KwPas => "pas".to_owned(),
+            Token::KwNon => "non".to_owned(),
+            Token::KwEt => "et".to_owned(),
+            Token::KwOu => "ou".to_owned(),
+            Token::KwXor => "xor".to_owned(),
+            Token::KwTantQue => "tant que".to_owned(),
+            Token::KwPour => "pour".to_owned(),
+            Token::KwFaire => "faire".to_owned(),
+            Token::KwRepeter => "repeter".to_owned(),
+            Token::KwDans => "dans".to_owned(),
+            Token::KwBond => "bond".to_owned(),
+            Token::KwSortir => "sortir".to_owned(),
+            Token::KwContinuer => "continuer".to_owned(),
+            Token::KwFonction => "fonction".to_owned(),
+            Token::KwRetourner => "retourner".to_owned(),
+            Token::KwStructure => "structure".to_owned(),
+            Token::KwMethode => "methode".to_owned(),
+
+            Token::Nul => format!("NUL"),
+            Token::Ident(v) => format!("IDENTIFIANT({v})"),
+            Token::Int(i) => format!("ENTIER({i})"),
+            Token::Float(d) => format!("DÉCIMAL({d})"),
+            Token::Text(s) => format!("TEXTE(\"{s}\")"),
+            Token::Bool(b) => format!("BOOLÉEN({b})"),
+
+            Token::OpAdd => "PLUS(+)".to_owned(),
+            Token::OpMinus => "MOINS(-)".to_owned(),
+            Token::Star => "ÉTOILE(*)".to_owned(),
+            Token::OpDiv => "DIV(/)".to_owned(),
+            Token::OpDivInt => "DIV_ENTIÈRE(//, div)".to_owned(),
+            Token::OpMod => "MODULO(%, mod)".to_owned(),
+            Token::OpExp => "EXPOSANT(**, ^)".to_owned(),
+            Token::OpPipe => "BARRE(|)".to_owned(),
+
+            Token::OpAddAssign => "PLUS_AFFECT(+=)".to_owned(),
+            Token::OpMinusAssign => "MOINS_AFFECT(-=)".to_owned(),
+            Token::OpTimesAssign => "FOIS_AFFECT(*=)".to_owned(),
+            Token::OpDivAssign => "DIV_AFFECT(/=)".to_owned(),
+            Token::OpDivIntAssign => "DIV_ENTIÈRE_AFFECT(//=, div=)".to_owned(),
+            Token::OpModAssign => "MODULO_AFFECT(%=, mod=)".to_owned(),
+            Token::OpExpAssign => "EXPOSANT_AFFECT(**=, ^=)".to_owned(),
+
+            Token::CompEq => "EGAL(==)".to_owned(),
+            Token::CompNotEq => "PAS_EGAL(!=, <>, ≠)".to_owned(),
+            Token::CompLth => "PLUS_PETIT(<)".to_owned(),
+            Token::CompLeq => "PLUS_PETIT_EGAL(<=, ≤)".to_owned(),
+            Token::CompGth => "PLUS_GRAND(>)".to_owned(),
+            Token::CompGeq => "PLUS_GRAND_EGAL(>=, ≥)".to_owned(),
+
+            Token::Assign => "AFFECTER(=, <-, ←)".to_owned(),
+            Token::RightArrow => "FLECHE_DROITE(->, →)".to_owned(),
+            Token::Dot => "POINT(.)".to_owned(),
+            Token::QuestionMark => "POINT_INTER(?)".to_owned(),
+            Token::RangeExcl => "SUITE_EXCL(.., jusqu'a, jusqu'à)".to_owned(),
+            Token::RangeIncl => "SUITE_INCL(..=)".to_owned(),
+            Token::Comma => "VIRGULE(,)".to_owned(),
+            Token::Colon => "DEUX_POINTS(:)".to_owned(),
+            Token::LParen => "PARENT_G(()".to_owned(),
+            Token::RParen => "PARENT_D())".to_owned(),
+            Token::LBracket => "CROCHET_G([)".to_owned(),
+            Token::RBracket => "CROCHET_D(])".to_owned(),
+            Token::LCurly => "ACCOLADE_G({)".to_owned(),
+            Token::RCurly => "ACCOLADE_D(})".to_owned(),
+            Token::EoS => "FIN_COMMANDE(\\n, ;)".to_owned(),
+            Token::ASDocs(docs) => format!("DOCUMENTATION({docs})"),
+            Token::Error => "ERREUR".to_owned(),
+        };
+        write!(f, "{}", to_string)
     }
 }

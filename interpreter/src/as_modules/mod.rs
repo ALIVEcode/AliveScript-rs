@@ -3,6 +3,7 @@ mod as_liste;
 mod as_math;
 mod as_temps;
 mod as_texte;
+mod as_tests;
 mod fonction_macro;
 
 use once_cell::sync::Lazy;

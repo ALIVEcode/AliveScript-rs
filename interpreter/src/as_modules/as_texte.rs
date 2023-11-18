@@ -3,25 +3,26 @@ use std::sync::Arc;
 use once_cell::sync::Lazy;
 
 use crate::{
+    as_fonction,
     as_obj::{ASObj, ASScope, ASType},
-    fonction_as, unpack_as,
+    unpack_as,
 };
 
 pub static TEXTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
     Arc::new(ASScope::from(vec![
-        fonction_as! {
+        as_fonction! {
             maj(txt: ASType::Texte) -> ASType::Texte; {
                 unpack_as!(ASObj::ASTexte(txt) = txt);
                 Ok(Some(ASObj::ASTexte(txt.to_uppercase())))
             }
         },
-        fonction_as! {
+        as_fonction! {
             minus(txt: ASType::Texte) -> ASType::Texte; {
                 unpack_as!(ASObj::ASTexte(txt) = txt);
                 Ok(Some(ASObj::ASTexte(txt.to_lowercase())))
             }
         },
-        fonction_as! {
+        as_fonction! {
             indexDe(txt: ASType::Texte, subtxt: ASType::Texte) -> ASType::optional(ASType::Entier); {
                 unpack_as!(ASObj::ASTexte(txt) = txt);
                 unpack_as!(ASObj::ASTexte(subtxt) = subtxt);
@@ -33,7 +34,7 @@ pub static TEXTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                 }))
             }
         },
-        fonction_as! {
+        as_fonction! {
             remplacer(txt: ASType::Texte,
                       pattern: ASType::Texte,
                       remplacement: ASType::Texte,

@@ -1,54 +1,65 @@
 #![allow(dead_code, unused_variables)]
 
-use data::Data;
-use io::InterpretorIO;
-use lalrpop_util::lalrpop_mod;
-
-lalrpop_mod!(alivescript, "/src/alivescript.rs");
-
 mod as_modules;
+mod runner;
+mod visitor;
+
 pub(crate) mod as_obj;
 pub(crate) mod ast;
-pub mod data;
-mod lexer;
-mod runner;
+pub(crate) mod lexer;
 pub(crate) mod token;
-mod visitor;
+
+pub mod data;
 pub mod io;
+
+use crate::data::Data;
+use crate::io::InterpretorIO;
+use crate::runner::Runner;
+use lalrpop_util::lalrpop_mod;
+use lalrpop_util::ParseError;
+
+lalrpop_mod!(pub alivescript, "/src/alivescript.rs");
 
 use crate::{lexer::Lexer, visitor::Visitor};
 
-// fn main() {
-//     let file = env::args().nth(1).expect("File to execute");
-//     let content = std::fs::read_to_string(file).unwrap();
-//     let lexer = Lexer::new(&content[..]);
-//     let stmts = alivescript::ScriptParser::new().parse(lexer).unwrap();
-//
-//     let mut visitor = runner::Runner::new();
-//     visitor.visit_body(&stmts);
-//
-//     let datas = visitor.get_datas();
-//     // println!("{:#?}", visitor.get_datas());
-//     exec(datas);
-// }
+fn get_err_line(script: &String, start: usize, end: usize) -> (String, usize) {
+    let line_num = script[0..end].split('\n').count();
+
+    let line_start = script[0..end].rfind(&['\n', ';']).unwrap_or(0);
+    let line_end = script[start..]
+        .find(&['\n', ';'])
+        .map(|i| i + start)
+        .unwrap_or(script.len());
+    (script[line_start..=line_end].trim().to_owned(), line_num)
+}
 
 pub fn run_script<'a, IO: InterpretorIO + 'a>(script: String, interpretor_io: &mut IO) {
     let lexer = Lexer::new(&script[..]);
-    let stmts = alivescript::ScriptParser::new().parse(lexer).unwrap();
+    let result_stmts = alivescript::ScriptParser::new().parse(lexer);
 
-    let mut visitor = runner::Runner::new(interpretor_io);
-    visitor.visit_body(&stmts);
-}
-
-
-fn exec(datas: Vec<Data>) {
-    for data in datas {
-        match data {
-            Data::Afficher(obj) => println!("{}", obj),
-            Data::Erreur { texte, ligne } => println!("{}", texte),
-            Data::Demander { prompt } => todo!(),
+    match result_stmts {
+        Ok(stmts) => {
+            let mut visitor = Runner::new(interpretor_io);
+            visitor.visit_body(&stmts);
         }
-    }
+        Err(err) => {
+            let err_txt = match err {
+                ParseError::UnrecognizedToken { token, expected } => {
+                    let (line, line_num) = get_err_line(&script, token.0, token.2);
+                    format!("À la ligne {} ('{}'). Jeton non reconnu: {}. Jetons valides dans cette position: {}",
+                             line_num, line, token.1, expected.join(", "))
+                }
+                ParseError::InvalidToken { location } => todo!(),
+                ParseError::UnrecognizedEof { location, expected } => todo!(),
+                ParseError::ExtraToken { token } => todo!(),
+                ParseError::User { error } => todo!(),
+            };
+            interpretor_io.send(Data::Erreur {
+                texte: format!("ErreurSyntaxe: {}", err_txt),
+                ligne: 0,
+            })
+        }
+    };
 }
 
 #[cfg(test)]

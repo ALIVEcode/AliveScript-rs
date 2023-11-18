@@ -3,6 +3,8 @@ pub enum Data {
     Afficher(String),
     Erreur { texte: String, ligne: usize },
     Demander { prompt: Option<String> },
+    NotifInfo { msg: String },
+    NotifErr { msg: String },
 }
 
 impl Data {

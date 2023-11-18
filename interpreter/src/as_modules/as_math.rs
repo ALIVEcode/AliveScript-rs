@@ -3,7 +3,7 @@ use std::sync::Arc;
 use once_cell::sync::Lazy;
 
 use crate::as_obj::{ASFnParam, ASObj, ASScope, ASType, ASVar};
-use crate::fonction_as;
+use crate::as_fonction;
 
 pub static MATH_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
     Arc::new(ASScope::from(vec![
@@ -30,7 +30,7 @@ pub static MATH_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                 ASType::Decimal,
             ),
         ),
-        fonction_as! {
+        as_fonction! {
             cos(x: ASType::nombre()) -> ASType::Decimal; {
                 Ok(Some(match x {
                         ASObj::ASDecimal(n) => ASObj::ASDecimal(n.cos()),
@@ -39,7 +39,7 @@ pub static MATH_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                     }))
             }
         },
-        fonction_as! {
+        as_fonction! {
             tan(x: ASType::nombre()) -> ASType::Decimal; {
                 Ok(Some(match x {
                     ASObj::ASDecimal(i) => ASObj::ASDecimal(i.tan()),

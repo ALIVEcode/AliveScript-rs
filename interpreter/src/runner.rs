@@ -501,7 +501,7 @@ impl Visitor for Runner<'_> {
             (s, e, step) => {
                 throw_err!(
                     self,
-                    ASErreurType::new_suite_invalide(s.clone(), e.clone(), step.clone(),)
+                    ASErreurType::new_erreur_suite_invalide(s.clone(), e.clone(), step.clone(),)
                 );
             }
         };
@@ -531,7 +531,7 @@ impl Visitor for Runner<'_> {
                 .collect();
             self.expr_results.push(ASObj::ASListe(range));
         } else {
-            throw_err!(self, ASErreurType::new_suite_invalide(start, end, step));
+            throw_err!(self, ASErreurType::new_erreur_suite_invalide(start, end, step));
         }
     }
 
@@ -644,8 +644,7 @@ impl Visitor for Runner<'_> {
             prompt,
         } = stmt
         {
-            let prompt_obj = eval!(opt_expr, self, prompt, "Prompt lire")
-                .unwrap_or(ASObj::ASTexte("Entrez une valeur: ".into()));
+            let prompt_obj = eval!(opt_expr, self, prompt, "Prompt lire");
 
             match var {
                 LireVar::Decl(DeclVar::Var {
@@ -677,15 +676,22 @@ impl Visitor for Runner<'_> {
                             }
                         }
                     }
-                    let ASObj::ASTexte(prompt) = prompt_obj else {
-                        throw_err!(
-                            self,
-                            ASErreurType::new_erreur_type(ASType::Texte, prompt_obj.get_type())
-                        );
-                    };
+                    let res_prompt = prompt_obj.map(|obj| {
+                        if let ASObj::ASTexte(prompt) = obj {
+                            Ok(prompt)
+                        } else {
+                            Err(ASErreurType::new_erreur_type(
+                                ASType::Texte,
+                                obj.get_type(),
+                            ))
+                        }
+                    });
+                    if let Some(Err(err)) = res_prompt {
+                        throw_err!(self, err);
+                    }
                     let Response::Text(reponse) = self
                         .request_data(Data::Demander {
-                            prompt: Some(prompt),
+                            prompt: res_prompt.map(|p| p.ok().unwrap()),
                         })
                         .unwrap();
 
