@@ -43,8 +43,8 @@ const AS_MODULES: Lazy<HashMap<ASModuleBuiltin, Rc<ASScope>>> = Lazy::new(|| {
 
 impl ASModuleBuiltin {
     pub fn load(&self, alias: &Option<String>, vars: &Option<Vec<String>>, env: &mut ASEnv) {
-        let mod_scope2 = AS_MODULES;
-        let mod_scope = mod_scope2.get(self).expect("Module that exists");
+        let mod_scope = AS_MODULES;
+        let mod_scope = mod_scope.get(self).expect("Module that exists");
 
         match alias {
             // Some() => mod_scope.iter().for_each(|(_name, (var, val))| {

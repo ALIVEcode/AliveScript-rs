@@ -200,9 +200,17 @@ impl Clone for ASObj {
                 body: body.clone(),
                 return_type: return_type.clone(),
             },
-            ASStructure { name, fields } => todo!(),
-            ASModule { env } => todo!(),
-            ASStructInst { struct_parent, env } => todo!(),
+            ASStructure { name, fields } => ASStructure {
+                name: name.clone(),
+                fields: fields.clone(),
+            },
+            ASModule { env } => ASModule {
+                env: Rc::clone(env),
+            },
+            ASStructInst { struct_parent, env } => ASStructInst {
+                struct_parent: struct_parent.clone(),
+                env: env.clone(),
+            },
             ASTuple(_) => todo!(),
         }
     }
