@@ -1,12 +1,13 @@
 mod common;
 
-use common::TestIO;
-
-use alivescript_rust::run_script;
+use common::run_test;
 
 #[test]
-fn numbers() {
-    let mut test_io = TestIO::default();
-    run_script(String::from("1za"), &mut test_io);
-    dbg!("{:#?}", test_io.outputs());
+fn entiers() {
+    run_test("tests/test_entier.als", &vec![]);
+}
+
+#[test]
+fn suite() {
+    run_test("tests/test_suite.als", &vec![]);
 }

@@ -1,4 +1,6 @@
-#[derive(Debug, PartialEq, Clone)]
+use derive_new::new;
+
+#[derive(Debug, PartialEq, Clone, Eq, new)]
 pub enum Data {
     Afficher(String),
     Erreur { texte: String, ligne: usize },

@@ -386,16 +386,24 @@ impl Visitor for Runner<'_> {
                 self.env.push_scope(env);
                 self.visit_body(body);
 
-                // Fonction termine sans de "retourner"
-                if !self.should_early_exit() && !ASType::type_match(&return_type, &ASType::Rien) {
-                    self.expr_results.push(ASObj::ASNul);
-                } else if !self.early_exit_matches(EarlyExit::Retourner) {
-                    panic!("Sortie d'une fonction autrement qu'avec `retourner`")
-                }
-
                 // Clean up
                 self.clear_early_exit();
                 self.env.pop_scope();
+
+                if self.error_thrown() {
+                    return;
+                }
+
+                // Fonction termine sans de "retourner" ou "error"
+                if !self.should_early_exit() {
+                    if self.expr_results.last().is_none()
+                        && !ASType::type_match(&return_type, &ASType::Rien)
+                    {
+                        self.expr_results.push(ASObj::ASNul);
+                    }
+                } else if !self.early_exit_matches(EarlyExit::Retourner) {
+                    panic!("Sortie d'une fonction autrement qu'avec `retourner`")
+                }
 
                 // Retourner
                 let type_returned = if let Some(returned_value) = self.expr_results.last() {
@@ -531,7 +539,10 @@ impl Visitor for Runner<'_> {
                 .collect();
             self.expr_results.push(ASObj::ASListe(range));
         } else {
-            throw_err!(self, ASErreurType::new_erreur_suite_invalide(start, end, step));
+            throw_err!(
+                self,
+                ASErreurType::new_erreur_suite_invalide(start, end, step)
+            );
         }
     }
 
@@ -680,10 +691,7 @@ impl Visitor for Runner<'_> {
                         if let ASObj::ASTexte(prompt) = obj {
                             Ok(prompt)
                         } else {
-                            Err(ASErreurType::new_erreur_type(
-                                ASType::Texte,
-                                obj.get_type(),
-                            ))
+                            Err(ASErreurType::new_erreur_type(ASType::Texte, obj.get_type()))
                         }
                     });
                     if let Some(Err(err)) = res_prompt {

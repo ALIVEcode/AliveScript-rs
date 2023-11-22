@@ -15,7 +15,7 @@ use crate::{
     runner::Runner,
 };
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum ASObj {
     ASEntier(i64),
     ASDecimal(f64),
@@ -169,6 +169,25 @@ impl ASObj {
     }
 }
 
+impl PartialEq for ASObj {
+    fn eq(&self, other: &Self) -> bool {
+        use ASObj::*;
+
+        match (self, other) {
+            (ASEntier(i), ASDecimal(d)) | (ASDecimal(d), ASEntier(i)) => *d == *i as f64,
+            (ASEntier(i1), ASEntier(i2)) => i1 == i2,
+            (ASTexte(t1), ASTexte(t2)) => t1 == t2,
+            (ASBooleen(b1), ASBooleen(b2)) => b1 == b2,
+            (ASListe(l1), ASListe(l2)) => l1 == l2,
+            (ASDict(d1), ASDict(d2)) => d1 == d2,
+            (ASFonc { name: name1, .. }, ASFonc { name: name2, .. }) => name1 == name2,
+            (ASStructure { name: name1, .. }, ASStructure { name: name2, .. }) => name1 == name2,
+            (ASNul, ASNul) => true,
+            _ => false,
+        }
+    }
+}
+
 impl Add for ASObj {
     type Output = ASObj;
 
@@ -182,6 +201,11 @@ impl Add for ASObj {
             (ASDecimal(x), ASEntier(y)) => ASDecimal(x + y as f64),
             (ASEntier(x), ASDecimal(y)) => ASDecimal(x as f64 + y),
             (ASDecimal(x), ASDecimal(y)) => ASDecimal(x + y),
+            (ASListe(l), any) => ASListe({
+                let mut l = l.clone();
+                l.push(any);
+                l
+            }),
             _ => unimplemented!(),
         }
     }
@@ -216,6 +240,17 @@ impl Mul for ASObj {
             (ASDecimal(x), ASEntier(y)) => ASDecimal(x * y as f64),
             (ASEntier(x), ASDecimal(y)) => ASDecimal(x as f64 * y),
             (ASDecimal(x), ASDecimal(y)) => ASDecimal(x * y),
+            (ASListe(l), ASEntier(n)) => ASListe(if n <= 0 {
+                vec![]
+            } else {
+                let n = n as usize;
+                let len = l.len();
+                let mut new_vec = Vec::with_capacity(n * len);
+                for i in 0..n * len {
+                    new_vec.push(l[i % len].clone());
+                }
+                new_vec
+            }),
             _ => unimplemented!(),
         }
     }
@@ -651,6 +686,9 @@ impl FromStr for ASType {
             "rien" => Ok(Self::Nul),
             "nul" => Ok(Self::Nul),
             "tout" => Ok(Self::Tout),
+            "fonction" => Ok(Self::Fonction),
+            "structure" => Ok(Self::Structure),
+            "module" => Ok(Self::Module),
             other => Ok(Self::Objet(other.into())),
         }
     }

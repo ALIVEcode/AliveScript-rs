@@ -15,6 +15,7 @@ use self::as_builtin::BUILTIN_MOD;
 use self::as_liste::LISTE_MOD;
 use self::as_math::MATH_MOD;
 use self::as_temps::TEMPS_MOD;
+use self::as_tests::TEST_MOD;
 use self::as_texte::TEXTE_MOD;
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug, Copy)]
@@ -25,6 +26,7 @@ pub enum ASModuleBuiltin {
     Math,
     Temps,
     Voiture,
+    Test,
 }
 
 static AS_MODULES: Lazy<HashMap<ASModuleBuiltin, Arc<ASScope>>> = Lazy::new(|| {
@@ -34,6 +36,7 @@ static AS_MODULES: Lazy<HashMap<ASModuleBuiltin, Arc<ASScope>>> = Lazy::new(|| {
     modules.insert(ASModuleBuiltin::Liste, Arc::clone(&*LISTE_MOD));
     modules.insert(ASModuleBuiltin::Texte, Arc::clone(&*TEXTE_MOD));
     modules.insert(ASModuleBuiltin::Temps, Arc::clone(&*TEMPS_MOD));
+    modules.insert(ASModuleBuiltin::Test, Arc::clone(&*TEST_MOD));
     modules
 });
 
@@ -118,6 +121,7 @@ impl ASModuleBuiltin {
             ASModuleBuiltin::Math => "Math",
             ASModuleBuiltin::Temps => "Temps",
             ASModuleBuiltin::Voiture => "Voiture",
+            ASModuleBuiltin::Test => "Test",
         }
         .into()
     }
@@ -134,7 +138,8 @@ impl From<&str> for ASModuleBuiltin {
             "Texte" => Texte,
             "Temps" => Temps,
             "Voiture" => Voiture,
-            _ => todo!(),
+            "Test" => Test,
+            _ => todo!("Implement {}", mod_name)
         }
     }
 }

@@ -1,10 +1,11 @@
 #![allow(dead_code, unused_variables)]
 
-use std::vec::IntoIter;
+use std::{path::Path, vec::IntoIter};
 
 use alivescript_rust::{
     data::{Data, Response},
     io::InterpretorIO,
+    run_script,
 };
 
 #[derive(Default)]
@@ -17,7 +18,6 @@ impl TestIO {
     pub fn outputs(&self) -> &Vec<Data> {
         &self.outputs
     }
-    
 }
 
 impl InterpretorIO for TestIO {
@@ -41,5 +41,14 @@ impl InterpretorIO for TestIO {
     }
 }
 
+pub fn run_test<P>(file_path: P, expected: &Vec<Data>)
+where
+    P: AsRef<Path>,
+{
+    let script = std::fs::read_to_string(file_path).unwrap();
 
+    let mut test_io = TestIO::default();
+    run_script(script, &mut test_io);
 
+    assert_eq!(test_io.outputs(), expected);
+}

@@ -25,7 +25,6 @@ pub Script: Vec<Box<Stmt>> = <("eos"* <Stmt>)*> "eos"*;
 pub Stmt: Box<Stmt> = {
     <SubStmt> "eos",
 
-    // Utiliser
     "utiliser" <module:"ident"> "eos" => 
         Box::new(Stmt::Utiliser { module, alias: None, vars: None } ),
     "utiliser" <module:"ident"> <alias:ModuleIdent?> <vars:("{" <Comma<"ident">> "}")> "eos" => 
@@ -33,37 +32,31 @@ pub Stmt: Box<Stmt> = {
     "utiliser" <module:"ident"> <alias:ModuleIdent?> "{" "*" "}" "eos" => 
         Box::new(Stmt::Utiliser { module, alias, vars: Some(vec![String::from("*")]) }),
 
-    // Déclarations
     <var:DeclVar> "assign" <val:Expr> "eos" => Box::new(Stmt::Decl { <> }),
 
-    // Affectation
     <var:AssignVar> "assign" <val:Expr> "eos" => Box::new(Stmt::Assign { <> }),
     <var:AssignVar> <op:BinOpcodeAssign> <val:Expr> "eos" => Box::new(Stmt::OpAssign { <> }),
 
-    // Conditionnels
-    "si" <cond:Expr> "alors"? "eos" <then_br:Stmt*> 
-         <elif_brs:("sinon" "si" <Expr> "alors"? "eos" <Stmt*>)*>
-         <else_br:("sinon" "eos" <Stmt*>)?> "fin" "si" "eos" => 
+    "si" <cond:Expr> "alors"? "eos" <then_br:Script> 
+         <elif_brs:("sinon" "si" <Expr> "alors"? "eos" <Script>)*>
+         <else_br:("sinon" "eos" <Script>)?> "fin" "si" "eos" => 
          Box::new(Stmt::Si { <> }),
 
-    // Boucles
-    "repeter" <n:Expr?> "eos" <body:Stmt*> "fin" "repeter" "eos" => 
+    "repeter" <n:Expr?> "eos" <body:Script> "fin" "repeter" "eos" => 
         Box::new(Stmt::Repeter { <> }),
 
-    "tant que" <cond:Expr> "faire"? "eos" <body:Stmt*> "fin" "tant que" "eos" => 
+    "tant que" <cond:Expr> "faire"? "eos" <body:Script> "fin" "tant que" "eos" => 
         Box::new(Stmt::TantQue { <> }),
 
-    "pour" <var:DeclVar> "dans" <iterable:Expr> "faire"? "eos" <body:Stmt*> "fin" "pour" "eos" =>
+    "pour" <var:DeclVar> "dans" <iterable:Expr> "faire"? "eos" <body:Script> "fin" "pour" "eos" =>
         Box::new(Stmt::Pour { <> }),
 
-    "pour" <var:DeclIdent> "dans" <iterable:Expr> "faire"? "eos" <body:Stmt*> "fin" "pour" "eos" =>
+    "pour" <var:DeclIdent> "dans" <iterable:Expr> "faire"? "eos" <body:Script> "fin" "pour" "eos" =>
         Box::new(Stmt::Pour { <> }),
 
-    // Def fonctions
     "fonction" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
-        <body:Stmt*> "fin" "fonction" "eos" => Box::new(Stmt::DefFn { <> }),
+        <body:Script> "fin" "fonction" "eos" => Box::new(Stmt::DefFn { <> }),
 
-    // Def structure
     "structure" <name:"ident"> "eos" <fields:StructFieldDecl*> "fin" "structure" "eos"
         => Box::new(Stmt::DefStruct { <> }),
 
@@ -102,29 +95,14 @@ StructFieldDecl: StructField = {
 SubStmt: Box<Stmt> = {
     Expr => Box::new(Stmt::Expr(<>)),
 
-    //"afficher" <arg:Expr> => 
-    //    Box::new(Stmt::Expr(Box::new(
-    //        Expr::FnCall{
-    //            func: Box::new(Expr::Ident("afficher".into())),
-    //            args: vec![arg],
-    //        }))),
-
     "afficher" <arg:Comma<Expr>> => Box::new(Stmt::Afficher(arg)),
 
-    // Lire
     "lire" <factory:(<Term> "dans")?> <var:DeclVar> <prompt:("," <Expr>)?> => 
         Box::new(Stmt::Lire {
                     factory,
                     var: LireVar::Decl(var),
                     prompt,
                 }),
-
-    //"lire" <var:AssignVar> <prompt:("," <Expr>)?> => 
-    //    Box::new(Stmt::Lire {
-    //                factory: None,
-    //                var: LireVar::Assign(var),
-    //                prompt,
-    //            }),
 
     "lire" <factory:(<Term> "dans")?> <var:AssignVar> <prompt:("," <Expr>)?> => 
         Box::new(Stmt::Lire {
@@ -146,7 +124,6 @@ pub StmtExpr: Box<Expr> = {
           func: Box::new(Expr::Ident(func)),
           args: vec![arg],
       }),
-  // <func:Term> "(" <args:Comma<Expr>> ")" => Box::new(Expr::FnCall{<>}),
 }
 
 pub Expr: Box<Expr> = {

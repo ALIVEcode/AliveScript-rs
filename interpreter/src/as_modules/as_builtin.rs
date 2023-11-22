@@ -28,32 +28,16 @@ pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
                 }))
             }
         },
-        ASVar::new_with_value(
-            "typeVar",
-            Some(ASType::Fonction),
-            true,
-            ASObj::native_fn(
-                "typeVar",
-                None,
-                vec![ASFnParam {
-                    name: "nomVar".into(),
-                    static_type: ASType::Texte,
-                    default_value: None,
-                }],
-                |runner| {
-                    let env = runner.get_env();
-                    let ASObj::ASTexte(nom_var) = env.get_value(&"nomVar".into()).unwrap() else {
-                        unreachable!()
-                    };
-                    let maybe_var = env.get_var(nom_var).map(|v| &v.0);
-                    Ok(Some(match maybe_var {
-                        Some(var) => ASObj::ASTexte(var.get_type().to_string()),
-                        None => ASObj::ASNul,
-                    }))
-                },
-                ASType::union_of(ASType::Texte, ASType::Nul),
-            ),
-        ),
+        as_fonction! {
+            tailleDe(obj: ASType::iterable()) -> ASType::Entier; {
+                Ok(Some(ASObj::ASEntier(match obj {
+                    ASObj::ASTexte(t) => t.len(),
+                    ASObj::ASListe(l) => l.len(),
+                    ASObj::ASDict(d) => d.len(),
+                    _ => unreachable!()
+                } as i64)))
+            }
+        },
         ASVar::new_with_value(
             "afficher",
             Some(ASType::Fonction),
