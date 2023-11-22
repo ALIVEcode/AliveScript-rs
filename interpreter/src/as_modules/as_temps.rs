@@ -1,11 +1,11 @@
-use std::sync::Arc;
+use std::rc::Rc;
 
 use once_cell::sync::Lazy;
 
 use crate::as_obj::{ASFnParam, ASObj, ASScope, ASType, ASVar};
 
-pub static TEMPS_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
-    Arc::new(ASScope::from(vec![ASVar::new_with_value(
+pub const TEMPS_MOD: Lazy<Rc<ASScope>> = Lazy::new(|| {
+    Rc::new(ASScope::from(vec![ASVar::new_with_value(
         "maj",
         Some(ASType::Fonction),
         true,

@@ -2,12 +2,13 @@ mod as_builtin;
 mod as_liste;
 mod as_math;
 mod as_temps;
-mod as_texte;
 mod as_tests;
+mod as_texte;
 mod fonction_macro;
 
 use once_cell::sync::Lazy;
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::as_obj::{ASEnv, ASObj, ASScope, ASType, ASVar};
 
@@ -29,20 +30,21 @@ pub enum ASModuleBuiltin {
     Test,
 }
 
-static AS_MODULES: Lazy<HashMap<ASModuleBuiltin, Arc<ASScope>>> = Lazy::new(|| {
+const AS_MODULES: Lazy<HashMap<ASModuleBuiltin, Rc<ASScope>>> = Lazy::new(|| {
     let mut modules = HashMap::new();
-    modules.insert(ASModuleBuiltin::Builtin, Arc::clone(&*BUILTIN_MOD));
-    modules.insert(ASModuleBuiltin::Math, Arc::clone(&*MATH_MOD));
-    modules.insert(ASModuleBuiltin::Liste, Arc::clone(&*LISTE_MOD));
-    modules.insert(ASModuleBuiltin::Texte, Arc::clone(&*TEXTE_MOD));
-    modules.insert(ASModuleBuiltin::Temps, Arc::clone(&*TEMPS_MOD));
-    modules.insert(ASModuleBuiltin::Test, Arc::clone(&*TEST_MOD));
+    modules.insert(ASModuleBuiltin::Builtin, Rc::clone(&*BUILTIN_MOD));
+    modules.insert(ASModuleBuiltin::Math, Rc::clone(&*MATH_MOD));
+    modules.insert(ASModuleBuiltin::Liste, Rc::clone(&*LISTE_MOD));
+    modules.insert(ASModuleBuiltin::Texte, Rc::clone(&*TEXTE_MOD));
+    modules.insert(ASModuleBuiltin::Temps, Rc::clone(&*TEMPS_MOD));
+    modules.insert(ASModuleBuiltin::Test, Rc::clone(&*TEST_MOD));
     modules
 });
 
 impl ASModuleBuiltin {
     pub fn load(&self, alias: &Option<String>, vars: &Option<Vec<String>>, env: &mut ASEnv) {
-        let mod_scope = AS_MODULES.get(self).expect("Module that exists");
+        let mod_scope2 = AS_MODULES;
+        let mod_scope = mod_scope2.get(self).expect("Module that exists");
 
         match alias {
             // Some() => mod_scope.iter().for_each(|(_name, (var, val))| {
@@ -53,7 +55,7 @@ impl ASModuleBuiltin {
                     env.declare(
                         ASVar::new(alias_name.clone(), Some(ASType::Module), true),
                         ASObj::ASModule {
-                            env: Arc::clone(mod_scope),
+                            env: Rc::clone(mod_scope),
                         },
                     );
                 }
@@ -65,7 +67,7 @@ impl ASModuleBuiltin {
                     env.declare(
                         ASVar::new(alias_name.clone(), Some(ASType::Module), true),
                         ASObj::ASModule {
-                            env: Arc::new(mod_env),
+                            env: Rc::new(mod_env),
                         },
                     );
                 }
@@ -81,7 +83,7 @@ impl ASModuleBuiltin {
                     env.declare(
                         ASVar::new(alias_name.clone(), Some(ASType::Module), true),
                         ASObj::ASModule {
-                            env: Arc::new(mod_env),
+                            env: Rc::new(mod_env),
                         },
                     );
                 }
@@ -91,7 +93,7 @@ impl ASModuleBuiltin {
                     env.declare(
                         ASVar::new(self.name(), Some(ASType::Module), true),
                         ASObj::ASModule {
-                            env: Arc::clone(mod_scope),
+                            env: Rc::clone(mod_scope),
                         },
                     );
                 }
@@ -139,7 +141,7 @@ impl From<&str> for ASModuleBuiltin {
             "Temps" => Temps,
             "Voiture" => Voiture,
             "Test" => Test,
-            _ => todo!("Implement {}", mod_name)
+            _ => todo!("Implement {}", mod_name),
         }
     }
 }

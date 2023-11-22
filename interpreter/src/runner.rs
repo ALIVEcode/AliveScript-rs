@@ -1,5 +1,7 @@
 use std::{
-    ops::{Deref, Index, IndexMut},
+    cell::RefCell,
+    ops::{Deref, IndexMut},
+    rc::Rc,
     str::FromStr,
 };
 
@@ -212,7 +214,8 @@ impl Visitor for Runner<'_> {
                 let val = eval!(expr, self, expr, "Element de liste");
                 liste.push(val);
             }
-            self.expr_results.push(ASObj::ASListe(liste));
+            self.expr_results
+                .push(ASObj::ASListe(Rc::new(RefCell::new(liste))));
         }
     }
 
@@ -294,12 +297,12 @@ impl Visitor for Runner<'_> {
             let slice = eval!(expr, self, slice, "Idx idx");
 
             let result = match (obj_val, slice) {
-                (ASObj::ASListe(lst), ASObj::ASEntier(i)) => lst[i as usize].clone(),
+                (ASObj::ASListe(lst), ASObj::ASEntier(i)) => lst.borrow()[i as usize].clone(),
                 (ASObj::ASListe(lst), ASObj::ASListe(range)) => {
-                    let mut lst_final = Vec::with_capacity(range.len());
-                    for obj in range {
+                    let mut lst_final = Vec::with_capacity(range.borrow().len());
+                    for obj in range.borrow().iter() {
                         if let ASObj::ASEntier(i) = obj {
-                            lst_final.push(lst[i as usize].clone());
+                            lst_final.push(lst.borrow()[*i as usize].clone());
                         } else {
                             throw_err!(
                                 self,
@@ -307,16 +310,16 @@ impl Visitor for Runner<'_> {
                             );
                         }
                     }
-                    ASObj::ASListe(lst_final)
+                    ASObj::ASListe(Rc::new(RefCell::new(lst_final)))
                 }
                 (ASObj::ASTexte(txt), ASObj::ASEntier(i)) => {
                     ASObj::ASTexte(txt[i as usize..i as usize + 1].into())
                 }
                 (ASObj::ASTexte(txt), ASObj::ASListe(range)) => {
-                    let mut txt_final = String::with_capacity(range.len());
-                    for obj in range {
+                    let mut txt_final = String::with_capacity(range.borrow().len());
+                    for obj in range.borrow().iter() {
                         if let ASObj::ASEntier(i) = obj {
-                            txt_final.push(txt.chars().nth(i as usize).unwrap());
+                            txt_final.push(txt.chars().nth(*i as usize).unwrap());
                         } else {
                             throw_err!(
                                 self,
@@ -526,7 +529,8 @@ impl Visitor for Runner<'_> {
                 .step_by(step_val.abs() as usize)
                 .map(|i| ASObj::ASEntier(i))
                 .collect();
-            self.expr_results.push(ASObj::ASListe(range));
+            self.expr_results
+                .push(ASObj::ASListe(Rc::new(RefCell::new(range))));
         } else if start_val < end_val && step_val > 0 {
             let range = if *is_incl {
                 start_val..end_val + 1
@@ -537,7 +541,8 @@ impl Visitor for Runner<'_> {
                 .step_by(step_val as usize)
                 .map(|i| ASObj::ASEntier(i))
                 .collect();
-            self.expr_results.push(ASObj::ASListe(range));
+            self.expr_results
+                .push(ASObj::ASListe(Rc::new(RefCell::new(range))));
         } else {
             throw_err!(
                 self,
@@ -837,8 +842,8 @@ impl Visitor for Runner<'_> {
                     let var_val = eval!(expr, self, obj, "Assign Slice Obj");
                     let slice_val = eval!(expr, self, slice, "Assign Slice Slice");
                     match (var_val, slice_val) {
-                        (ASListe(mut lst), ASEntier(i)) => {
-                            *lst.index_mut(i as usize) = value;
+                        (ASListe(lst), ASEntier(i)) => {
+                            *lst.borrow_mut().index_mut(i as usize) = value;
                         }
                         _ => todo!(),
                     }
@@ -895,9 +900,10 @@ impl Visitor for Runner<'_> {
                     let var_val = eval!(expr, self, obj, "Assign Slice Obj");
                     let slice_val = eval!(expr, self, slice, "Assign Slice Slice");
                     match (var_val, slice_val) {
-                        (ASListe(mut lst), ASEntier(i)) => {
-                            let old_value = lst.index(i as usize).clone();
-                            *lst.index_mut(i as usize) = Runner::<'_>::do_op(old_value, op, value);
+                        (ASListe(lst), ASEntier(i)) => {
+                            let old_value = lst.borrow()[i as usize].clone();
+                            *lst.borrow_mut().index_mut(i as usize) =
+                                Runner::<'_>::do_op(old_value, op, value);
                         }
                         _ => todo!(),
                     }
@@ -990,9 +996,11 @@ impl Visitor for Runner<'_> {
         {
             let iter_obj = eval!(expr, self, iterable, "Pour iterable");
 
-            let iter: Vec<ASObj> = match iter_obj {
-                ASObj::ASTexte(s) => s.chars().map(|c| ASObj::ASTexte(String::from(c))).collect(),
-                ASObj::ASListe(ls) => ls,
+            let iter: Rc<RefCell<Vec<ASObj>>> = match iter_obj {
+                ASObj::ASTexte(s) => Rc::new(RefCell::new(
+                    s.chars().map(|c| ASObj::ASTexte(String::from(c))).collect(),
+                )),
+                ASObj::ASListe(ref ls) => Rc::clone(ls),
                 _ => panic!("Pas itérable"),
             };
 
@@ -1008,8 +1016,9 @@ impl Visitor for Runner<'_> {
 
             let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
 
-            for val in iter {
-                self.env.push_scope(ASScope::from(vec![(var.clone(), val)]));
+            for val in iter.borrow().iter() {
+                self.env
+                    .push_scope(ASScope::from(vec![(var.clone(), val.clone())]));
                 self.visit_body(body);
                 self.env.pop_scope();
                 match self.early_exit {

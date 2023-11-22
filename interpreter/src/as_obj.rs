@@ -1,9 +1,10 @@
 use std::{
+    cell::RefCell,
     collections::HashMap,
     fmt::Display,
     ops::{Add, BitXor, Div, Mul, Rem, Sub},
+    rc::Rc,
     str::FromStr,
-    sync::Arc,
 };
 
 use derive_new::new;
@@ -15,7 +16,7 @@ use crate::{
     runner::Runner,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum ASObj {
     ASEntier(i64),
     ASDecimal(f64),
@@ -32,7 +33,7 @@ pub enum ASObj {
     ASTuple(Vec<ASObj>),
 
     ASTexte(String),
-    ASListe(Vec<ASObj>),
+    ASListe(Rc<RefCell<Vec<ASObj>>>),
     /// Les éléments du vecteur sont tous garanti d'être des [`ASObj::ASPaire`]
     ASDict(Vec<ASObj>),
 
@@ -50,7 +51,7 @@ pub enum ASObj {
     },
 
     ASModule {
-        env: Arc<ASScope>,
+        env: Rc<ASScope>,
     },
 
     ASStructInst {
@@ -118,7 +119,7 @@ impl ASObj {
             ASTexte(s) => !s.is_empty(),
             ASBooleen(b) => *b,
             ASNul => false,
-            ASListe(l) => !l.is_empty(),
+            ASListe(l) => !l.borrow().is_empty(),
             ASDict(d) => !d.is_empty(),
             _ => true,
         }
@@ -142,7 +143,7 @@ impl ASObj {
         match (self, rhs) {
             (ASPaire { key, val }, rhs) => todo!(),
             (ASTexte(s), ASTexte(sub_s)) => Ok(s.contains(sub_s)),
-            (ASListe(l), rhs) => Ok(l.contains(rhs)),
+            (ASListe(l), rhs) => Ok(l.borrow().contains(rhs)),
             (ASDict(d), rhs) => Ok(d
                 .into_iter()
                 .find(|el| matches!(el, ASPaire { key, val } if key.as_ref() == rhs))
@@ -165,6 +166,44 @@ impl ASObj {
         match self {
             ASTexte(s) => format!("\"{}\"", s),
             o => o.to_string(),
+        }
+    }
+}
+
+impl Clone for ASObj {
+    fn clone(&self) -> Self {
+        use ASObj::*;
+
+        match self {
+            ASEntier(i) => ASEntier(*i),
+            ASDecimal(d) => ASDecimal(*d),
+            ASBooleen(b) => ASBooleen(*b),
+            ASNul => ASNul,
+            ASNoValue => ASNoValue,
+            ASPaire { key, val } => ASPaire {
+                key: key.clone(),
+                val: val.clone(),
+            },
+            ASTexte(t) => ASTexte(t.clone()),
+            ASListe(l) => ASListe(Rc::clone(&l)),
+            ASDict(d) => ASDict(d.clone()),
+            ASFonc {
+                name,
+                docs,
+                params,
+                body,
+                return_type,
+            } => ASFonc {
+                name: name.clone(),
+                docs: docs.clone(),
+                params: params.clone(),
+                body: body.clone(),
+                return_type: return_type.clone(),
+            },
+            ASStructure { name, fields } => todo!(),
+            ASModule { env } => todo!(),
+            ASStructInst { struct_parent, env } => todo!(),
+            ASTuple(_) => todo!(),
         }
     }
 }
@@ -202,9 +241,9 @@ impl Add for ASObj {
             (ASEntier(x), ASDecimal(y)) => ASDecimal(x as f64 + y),
             (ASDecimal(x), ASDecimal(y)) => ASDecimal(x + y),
             (ASListe(l), any) => ASListe({
-                let mut l = l.clone();
+                let mut l = l.borrow().clone();
                 l.push(any);
-                l
+                Rc::new(RefCell::new(l))
             }),
             _ => unimplemented!(),
         }
@@ -241,15 +280,16 @@ impl Mul for ASObj {
             (ASEntier(x), ASDecimal(y)) => ASDecimal(x as f64 * y),
             (ASDecimal(x), ASDecimal(y)) => ASDecimal(x * y),
             (ASListe(l), ASEntier(n)) => ASListe(if n <= 0 {
-                vec![]
+                Rc::new(RefCell::new(vec![]))
             } else {
                 let n = n as usize;
+                let l = l.borrow();
                 let len = l.len();
                 let mut new_vec = Vec::with_capacity(n * len);
                 for i in 0..n * len {
                     new_vec.push(l[i % len].clone());
                 }
-                new_vec
+                Rc::new(RefCell::new(new_vec))
             }),
             _ => unimplemented!(),
         }
@@ -337,7 +377,11 @@ impl Display for ASObj {
             ASPaire { key, val } => format!("{}: {}", key.repr(), val.repr()),
             ASListe(v) => format!(
                 "[{}]",
-                v.iter().map(Self::repr).collect::<Vec<String>>().join(", ")
+                v.borrow()
+                    .iter()
+                    .map(Self::repr)
+                    .collect::<Vec<String>>()
+                    .join(", ")
             ),
             ASDict(v) => format!(
                 "{{{}}}",
@@ -513,7 +557,7 @@ impl ASType {
             Decimal => ASDecimal(0f64),
             Booleen => ASBooleen(false),
             Texte => ASTexte("".into()),
-            Liste => ASListe(vec![]),
+            Liste => ASListe(Rc::new(RefCell::new(vec![]))),
             Paire => ASPaire {
                 key: Box::new(ASNul),
                 val: Box::new(ASNul),

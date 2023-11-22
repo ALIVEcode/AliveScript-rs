@@ -61,8 +61,8 @@ macro_rules! unpack_as {
 #[macro_export]
 macro_rules! as_mod {
     ($name:ident, $($var:expr),* $(,)?) => {
-        pub static $name: once_cell::sync::Lazy<std::sync::Arc<$crate::as_obj::ASScope>> = once_cell::sync::Lazy::new(|| {
-            std::sync::Arc::new($crate::as_obj::ASScope::from(std::vec![$($var),*]))
+        pub const $name: once_cell::sync::Lazy<std::rc::Rc<$crate::as_obj::ASScope>> = once_cell::sync::Lazy::new(|| {
+            std::rc::Rc::new($crate::as_obj::ASScope::from(std::vec![$($var),*]))
         });
 
     };

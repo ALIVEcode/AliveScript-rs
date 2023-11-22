@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::rc::Rc;
 
 use once_cell::sync::Lazy;
 
@@ -10,8 +10,8 @@ use crate::{
     unpack_as,
 };
 
-pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
-    Arc::new(ASScope::from(vec![
+pub const BUILTIN_MOD: Lazy<Rc<ASScope>> = Lazy::new(|| {
+    Rc::new(ASScope::from(vec![
         as_fonction! {
             typeDe(obj: ASType::any()) -> ASType::Texte; {
                 Ok(Some(ASObj::ASTexte(obj.get_type().to_string())))
@@ -32,7 +32,7 @@ pub static BUILTIN_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
             tailleDe(obj: ASType::iterable()) -> ASType::Entier; {
                 Ok(Some(ASObj::ASEntier(match obj {
                     ASObj::ASTexte(t) => t.len(),
-                    ASObj::ASListe(l) => l.len(),
+                    ASObj::ASListe(l) => l.borrow().len(),
                     ASObj::ASDict(d) => d.len(),
                     _ => unreachable!()
                 } as i64)))

@@ -1,12 +1,12 @@
-use std::sync::Arc;
+use std::rc::Rc;
 
 use once_cell::sync::Lazy;
 
 use crate::as_obj::{ASFnParam, ASObj, ASScope, ASType, ASVar};
 use crate::as_fonction;
 
-pub static MATH_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
-    Arc::new(ASScope::from(vec![
+pub const MATH_MOD: Lazy<Rc<ASScope>> = Lazy::new(|| {
+    Rc::new(ASScope::from(vec![
         ASVar::new_with_value(
             "sin",
             Some(ASType::Fonction),

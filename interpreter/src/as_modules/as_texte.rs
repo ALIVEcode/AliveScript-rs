@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::rc::Rc;
 
 use once_cell::sync::Lazy;
 
@@ -8,8 +8,8 @@ use crate::{
     unpack_as,
 };
 
-pub static TEXTE_MOD: Lazy<Arc<ASScope>> = Lazy::new(|| {
-    Arc::new(ASScope::from(vec![
+pub const TEXTE_MOD: Lazy<Rc<ASScope>> = Lazy::new(|| {
+    Rc::new(ASScope::from(vec![
         as_fonction! {
             maj(txt: ASType::Texte) -> ASType::Texte; {
                 unpack_as!(ASObj::ASTexte(txt) = txt);
