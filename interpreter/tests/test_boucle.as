@@ -7,5 +7,6 @@ fin pour
 const x: entier | nombre? = 12
 
 si x dans lst
-    lire const x
+    lire x, "Entrez un nombre"
 fin si
+
