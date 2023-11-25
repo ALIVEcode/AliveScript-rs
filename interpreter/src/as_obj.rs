@@ -47,6 +47,7 @@ pub enum ASObj {
 
     ASStructure {
         name: String,
+        docs: Option<String>,
         fields: Vec<ASStructField>,
     },
 
@@ -150,7 +151,7 @@ impl ASObj {
                 .is_some()),
 
             (ASTuple(_), _) => todo!("Tuple pas encore (et peut-être jamais) dans le langage"),
-            (ASStructure { name, fields }, _) => todo!("Check présense du field?"),
+            (ASStructure { name, docs, fields }, _) => todo!("Check présense du field?"),
             (ASModule { env }, _) => todo!(),
             _ => Err(ASErreurType::new_erreur_operation(
                 "dans".into(),
@@ -200,8 +201,9 @@ impl Clone for ASObj {
                 body: body.clone(),
                 return_type: return_type.clone(),
             },
-            ASStructure { name, fields } => ASStructure {
+            ASStructure { name, docs, fields } => ASStructure {
                 name: name.clone(),
+                docs: docs.clone(),
                 fields: fields.clone(),
             },
             ASModule { env } => ASModule {

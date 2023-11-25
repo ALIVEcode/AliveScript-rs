@@ -39,7 +39,7 @@ impl InterpretorIO for IO {
 
 fn main() {
     let mut io = IO {};
-    let script_file = env::args().nth(1).unwrap();
+    let script_file = env::args().nth(1).expect("No script file provided");
     let script = std::fs::read_to_string(script_file).unwrap();
 
     run_script(script, &mut io);

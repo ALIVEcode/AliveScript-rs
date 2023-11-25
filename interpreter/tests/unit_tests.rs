@@ -4,7 +4,7 @@ use common::run_test;
 
 #[test]
 fn entiers() {
-    run_test("tests/test_entier.as", &vec![]);
+    run_test("tests/test_data/test_entier.as", &vec![]);
 }
 
 #[test]

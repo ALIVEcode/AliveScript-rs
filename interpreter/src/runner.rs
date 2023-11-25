@@ -134,6 +134,10 @@ impl<'a> Runner<'a> {
         self.io.request(data)
     }
 
+    pub fn push_value(&mut self, value: ASObj) {
+        self.expr_results.push(value);
+    }
+
     pub fn pop_value(&mut self) -> Option<ASObj> {
         self.expr_results.pop()
     }
@@ -203,7 +207,7 @@ impl Visitor for Runner<'_> {
 
     fn visit_expr_lit(&mut self, expr: &Expr) {
         if let Expr::Lit(value) = expr {
-            self.expr_results.push(value.clone());
+            self.push_value(value.clone());
         }
     }
 
@@ -225,7 +229,7 @@ impl Visitor for Runner<'_> {
             // let val_val = self.eval_expr(val).expect("Paire val");
             let clef_val = eval!(expr, self, clef, "Paire clef");
             let val_val = eval!(expr, self, val, "Paire val");
-            self.expr_results.push(ASObj::ASPaire {
+            self.push_value(ASObj::ASPaire {
                 key: Box::new(clef_val),
                 val: Box::new(val_val),
             });
@@ -239,14 +243,14 @@ impl Visitor for Runner<'_> {
                 let val = eval!(expr, self, expr, "Element de dict");
                 dict.push(val);
             }
-            self.expr_results.push(ASObj::ASDict(dict));
+            self.push_value(ASObj::ASDict(dict));
         }
     }
 
     fn visit_expr_ident(&mut self, expr: &Expr) {
         if let Expr::Ident(var_name) = expr {
             if let Some((var, val)) = self.env.get_var(var_name) {
-                self.expr_results.push(val.clone());
+                self.push_value(val.clone());
             } else {
                 throw_err!(self, ASErreurType::new_variable_inconnue(var_name.clone()));
             }
@@ -259,7 +263,7 @@ impl Visitor for Runner<'_> {
 
             let result = match &obj_val {
                 ASObj::ASModule { env } => env.get(prop).expect("AccessProp prop").1.clone(),
-                ASObj::ASStructure { name, fields } => {
+                ASObj::ASStructure { name, docs, fields } => {
                     let field = fields.into_iter().find(|field| &field.name == prop);
                     if let Some(ASStructField {
                         name,
@@ -287,7 +291,7 @@ impl Visitor for Runner<'_> {
                 }
                 _ => todo!(),
             };
-            self.expr_results.push(result);
+            self.push_value(result);
         }
     }
 
@@ -342,7 +346,7 @@ impl Visitor for Runner<'_> {
                 _ => todo!(),
             };
 
-            self.expr_results.push(result);
+            self.push_value(result);
         }
     }
 
@@ -402,7 +406,7 @@ impl Visitor for Runner<'_> {
                     if self.expr_results.last().is_none()
                         && !ASType::type_match(&return_type, &ASType::Rien)
                     {
-                        self.expr_results.push(ASObj::ASNul);
+                        self.push_value(ASObj::ASNul);
                     }
                 } else if !self.early_exit_matches(EarlyExit::Retourner) {
                     panic!("Sortie d'une fonction autrement qu'avec `retourner`")
@@ -438,6 +442,7 @@ impl Visitor for Runner<'_> {
         let struct_parent = eval!(expr, self, structure, "Struct");
         let ASObj::ASStructure {
             name: struct_name,
+            docs,
             fields: parent_fields,
         } = &struct_parent
         else {
@@ -484,13 +489,13 @@ impl Visitor for Runner<'_> {
 
         let result = proc(self);
         match result {
-            Ok(Some(value)) => self.expr_results.push(value),
+            Ok(Some(value)) => self.push_value(value),
             Ok(None) => {}
             Err(err) => throw_err!(self, err),
         }
     }
 
-    fn visit_expr_range(&mut self, expr: &Expr) {
+    fn visit_expr_suite(&mut self, expr: &Expr) {
         let Expr::Range {
             start,
             end,
@@ -544,10 +549,7 @@ impl Visitor for Runner<'_> {
             self.expr_results
                 .push(ASObj::ASListe(Rc::new(RefCell::new(range))));
         } else {
-            throw_err!(
-                self,
-                ASErreurType::new_erreur_suite_invalide(start, end, step)
-            );
+            self.push_value(ASObj::ASListe(Rc::new(RefCell::new(vec![]))));
         }
     }
 
@@ -562,7 +564,7 @@ impl Visitor for Runner<'_> {
                 Negate => todo!(),
             };
 
-            self.expr_results.push(result);
+            self.push_value(result);
         }
     }
 
@@ -604,7 +606,7 @@ impl Visitor for Runner<'_> {
                     }
                 }
             });
-            self.expr_results.push(result);
+            self.push_value(result);
         }
     }
 
@@ -630,7 +632,7 @@ impl Visitor for Runner<'_> {
                 }
             };
 
-            self.expr_results.push(result);
+            self.push_value(result);
         }
     }
 
@@ -1064,6 +1066,7 @@ impl Visitor for Runner<'_> {
     fn visit_stmt_deffn(&mut self, stmt: &Stmt) {
         if let Stmt::DefFn {
             name,
+            docs,
             params,
             body,
             return_type,
@@ -1084,7 +1087,7 @@ impl Visitor for Runner<'_> {
 
             let func = ASObj::asfonc(
                 Some(name.clone()),
-                None,
+                docs.clone(),
                 params_fonc,
                 body.clone(),
                 return_type,
@@ -1103,14 +1106,14 @@ impl Visitor for Runner<'_> {
                 val_expr.accept(self);
             } else {
                 // retourner
-                self.expr_results.push(ASObj::ASNul);
+                self.push_value(ASObj::ASNul);
             }
             self.set_early_exit(Some(EarlyExit::Retourner));
         }
     }
 
     fn visit_stmt_defstruct(&mut self, stmt: &Stmt) {
-        if let Stmt::DefStruct { name, fields } = stmt {
+        if let Stmt::DefStruct { name, docs, fields } = stmt {
             let mut as_fields = Vec::with_capacity(fields.len());
             for field in fields.into_iter() {
                 let field_type = eval!(opt_type, self, field.static_type.clone(), "Field Type");
@@ -1124,6 +1127,7 @@ impl Visitor for Runner<'_> {
             }
             let as_struct = ASObj::ASStructure {
                 name: name.clone(),
+                docs: docs.clone(),
                 fields: as_fields,
             };
             let var = ASVar::new(name.clone(), Some(ASType::Structure), true);

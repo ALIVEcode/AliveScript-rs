@@ -52,6 +52,22 @@ macro_rules! as_fonction {
 }
 
 #[macro_export]
+macro_rules! as_var {
+    ($var:ident : $param_type:expr => $val:expr) => {
+        $crate::as_obj::ASVar::new_with_value(std::stringify!($var), Some($param_type), false, $val)
+    };
+    ($var:ident => $val:expr) => {
+        $crate::as_obj::ASVar::new_with_value(std::stringify!($var), None, false, $val)
+    };
+    (const $var:ident : $param_type:expr => $val:expr) => {
+        $crate::as_obj::ASVar::new_with_value(std::stringify!($var), Some($param_type), true, $val)
+    };
+    (const $var:ident => $val:expr) => {
+        $crate::as_obj::ASVar::new_with_value(std::stringify!($var), None, true, $val)
+    };
+}
+
+#[macro_export]
 macro_rules! unpack_as {
     ($var:pat = $val:expr) => {
         let $var = $val else { std::unreachable!() };

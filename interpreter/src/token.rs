@@ -244,7 +244,7 @@ pub enum Token {
 
     #[regex(r"\(-:([^:]|:[^-]|:-[^\)])*:-\)", |lex| {
         let slice = lex.slice();
-        slice[3..slice.len()-3].parse()
+        slice[3..slice.len()-3].parse().map(|s: String| s.trim().to_owned())
     })]
     ASDocs(String),
 

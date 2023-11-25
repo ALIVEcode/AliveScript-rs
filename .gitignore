@@ -1,3 +1,4 @@
 **/target
 **/asdoc/book/
 interpreter/*.als
+interpreter/*.as

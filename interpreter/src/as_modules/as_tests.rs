@@ -34,5 +34,15 @@ as_mod!(
                 Err(ASErreurType::new_erreur_affirmation(format!("{} != {}", obj1, obj2), ASBooleen(false), ASBooleen(true)))
             }
         }
-    }
+    },
+
+    as_fonction! {
+        affirmerEgalType(obj1: ASType::any(), obj2: ASType::any()) -> ASType::Rien; {
+            if obj1.get_type() == obj2.get_type() {
+                Ok(None)
+            } else {
+                Err(ASErreurType::new_erreur_affirmation(format!("{} == {}", obj1.get_type(), obj2.get_type()), ASBooleen(true), ASBooleen(false)))
+            }
+        }
+    },
 );

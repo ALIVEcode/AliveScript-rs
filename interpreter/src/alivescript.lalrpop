@@ -54,10 +54,10 @@ pub Stmt: Box<Stmt> = {
     "pour" <var:DeclIdent> "dans" <iterable:Expr> "faire"? "eos" <body:Script> "fin" "pour" "eos" =>
         Box::new(Stmt::Pour { <> }),
 
-    "fonction" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
+    <docs:(<"DOCS"> "eos"*)?> "fonction" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
         <body:Script> "fin" "fonction" "eos" => Box::new(Stmt::DefFn { <> }),
 
-    "structure" <name:"ident"> "eos" <fields:StructFieldDecl*> "fin" "structure" "eos"
+    <docs:(<"DOCS"> "eos"*)?> "structure" <name:"ident"> "eos" <fields:StructFieldDecl*> "fin" "structure" "eos"
         => Box::new(Stmt::DefStruct { <> }),
 
     <then_stmt:SubStmt> "si" <cond:Expr> "eos" => 
@@ -321,8 +321,6 @@ pub Term: Box<Expr> = {
 
   Slice,
 
-  //"afficher" => Box::new(Expr::Ident("afficher".into())),
-
   TermExpr,
 
   "(" "eos"* <Paire> "eos"* ")",
@@ -524,6 +522,8 @@ extern {
         "pour" => Token::KwPour,
         "faire" => Token::KwFaire,
         "dans" => Token::KwDans,
+
+        "DOCS" => Token::ASDocs(<String>),
 
         "fonction" => Token::KwFonction,
         "retourner" => Token::KwRetourner,

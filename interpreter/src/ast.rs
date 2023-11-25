@@ -84,6 +84,7 @@ pub enum Stmt {
     /// Définition d'une fonction
     DefFn {
         name: String,
+        docs: Option<String>,
         params: Vec<FnParam>,
         body: Vec<Box<Stmt>>,
         return_type: Option<Box<Type>>,
@@ -91,6 +92,7 @@ pub enum Stmt {
 
     DefStruct {
         name: String,
+        docs: Option<String>,
         fields: Vec<StructField>,
     },
 
@@ -305,7 +307,7 @@ impl Visitable for Expr {
             Ident(..) => visitor.visit_expr_ident(self),
             AccessProp { .. } => visitor.visit_expr_accessprop(self),
             FnCall { .. } => visitor.visit_expr_fncall(self),
-            Range { .. } => visitor.visit_expr_range(self),
+            Range { .. } => visitor.visit_expr_suite(self),
             Slice { .. } => visitor.visit_expr_slice(self),
             CallRust(..) => visitor.visit_expr_callrust(self),
             StructInst { .. } => visitor.visit_expr_struct_inst(self),
