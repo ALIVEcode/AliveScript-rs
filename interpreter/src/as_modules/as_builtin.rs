@@ -141,10 +141,10 @@ as_mod! {
         info(f: ASType::Fonction) -> ASType::Texte; {
             let ASObj::ASFonc { name, docs, params, body, return_type } = f else {unreachable!()};
             Ok(Some(ASObj::ASTexte(format!(
-                "{}\n{}",
+                "{}\n  {}",
                 f.to_string(),
                 docs.clone()
-                    .map(|doc| doc.unindent())
+                    .map(|doc| doc.unindent().replace("\n", "\n  "))
                     .unwrap_or("<sans-documentation>".into()),
             ))))
         }
