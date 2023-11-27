@@ -82,8 +82,8 @@ pub enum Token {
     KwRetourner,
 
     // Structures
-    #[token("structure")]
-    KwStructure,
+    #[token("classe")]
+    KwClasse,
 
     #[token("methode")]
     #[token("méthode")]
@@ -282,7 +282,7 @@ impl fmt::Display for Token {
             Token::KwContinuer => "continuer".to_owned(),
             Token::KwFonction => "fonction".to_owned(),
             Token::KwRetourner => "retourner".to_owned(),
-            Token::KwStructure => "structure".to_owned(),
+            Token::KwClasse => "classe".to_owned(),
             Token::KwMethode => "methode".to_owned(),
 
             Token::Nul => format!("NUL"),

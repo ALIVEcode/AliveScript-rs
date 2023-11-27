@@ -1,61 +1,41 @@
 use std::rc::Rc;
 
 use crate::{
-    as_mod,
-    as_obj::{ASFnParam, ASObj, ASType, ASVar},
+    as_cast, as_fonction, as_mod,
+    as_obj::{ASObj, ASType},
     ast::Expr,
     visitor::Visitable,
 };
 
 as_mod!(
     LISTE_MOD,
-    ASVar::new_with_value(
-        "trier",
-        Some(ASType::Fonction),
-        true,
-        ASObj::native_fn(
-            "trier",
-            None,
-            vec![
-                ASFnParam {
-                    name: "lst".into(),
-                    static_type: ASType::Liste,
-                    default_value: None,
-                },
-                ASFnParam {
-                    name: "clef".into(),
-                    static_type: ASType::Fonction,
-                    default_value: Some(Box::new(Expr::Lit(ASObj::ASNul))),
-                },
-            ],
-            |runner| {
-                let env = runner.get_env();
-                let ASObj::ASListe(lst) = env.get_value(&"lst".into()).unwrap() else {
-                    unreachable!()
-                };
-                let mut lst = lst.as_ref().clone();
-                Ok(Some(match env.get_value(&"clef".into()).unwrap() {
-                    ASObj::ASNul => {
-                        lst.get_mut().sort_by(|a, b| a.partial_cmp(b).expect("Comparable"));
-                        ASObj::ASListe(Rc::new(lst))
+    as_fonction! {
+        trier[runner](lst: ASType::Liste, clef: ASType::Fonction => ASObj::ASNul) -> ASType::Liste; {
+            let env = runner.get_env();
+            as_cast!(ASObj::ASListe(lst) = lst);
+            let mut lst = lst.as_ref().clone();
+            Ok(Some(match env.get_value(&"clef".into()).unwrap() {
+                ASObj::ASNul => {
+                    lst.get_mut()
+                        .sort_by(|a, b| a.partial_cmp(b).expect("Comparable"));
+                    ASObj::ASListe(Rc::new(lst))
+                }
+                clef @ ASObj::ASFonc { .. } => {
+                    let clef = Expr::literal(clef.clone());
+                    for el in lst.get_mut().iter_mut() {
+                        let to_call = Expr::FnCall {
+                            func: clef.clone(),
+                            args: vec![Expr::literal(el.clone())],
+                        };
+                        to_call.accept(runner);
+                        *el = runner.pop_value().unwrap();
                     }
-                    clef @ ASObj::ASFonc { .. } => {
-                        let clef = Expr::literal(clef.clone());
-                        for el in lst.get_mut().iter_mut() {
-                            let to_call = Expr::FnCall {
-                                func: clef.clone(),
-                                args: vec![Expr::literal(el.clone())],
-                            };
-                            to_call.accept(runner);
-                            *el = runner.pop_value().unwrap();
-                        }
-                        lst.get_mut().sort_by(|a, b| a.partial_cmp(b).expect("Comparable"));
-                        ASObj::ASListe(Rc::new(lst))
-                    }
-                    _ => unreachable!(),
-                }))
-            },
-            ASType::Liste,
-        ),
-    ),
+                    lst.get_mut()
+                        .sort_by(|a, b| a.partial_cmp(b).expect("Comparable"));
+                    ASObj::ASListe(Rc::new(lst))
+                }
+                _ => unreachable!(),
+            }))
+        }
+    },
 );

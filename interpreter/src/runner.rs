@@ -8,7 +8,8 @@ use std::{
 use crate::{
     as_modules::ASModuleBuiltin,
     as_obj::{
-        ASEnv, ASErreur, ASErreurType, ASFnParam, ASObj, ASScope, ASStructField, ASType, ASVar,
+        ASClasseField, ASEnv, ASErreur, ASErreurType, ASFnParam, ASObj, ASScope, ASType,
+        ASVar,
     },
     ast::{
         AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, Expr, LireVar, Stmt, Type,
@@ -263,9 +264,9 @@ impl Visitor for Runner<'_> {
 
             let result = match &obj_val {
                 ASObj::ASModule { env } => env.get(prop).expect("AccessProp prop").1.clone(),
-                ASObj::ASStructure { name, docs, fields } => {
+                ASObj::ASClasse { name, docs, fields } => {
                     let field = fields.into_iter().find(|field| &field.name == prop);
-                    if let Some(ASStructField {
+                    if let Some(ASClasseField {
                         name,
                         vis,
                         static_type,
@@ -353,19 +354,12 @@ impl Visitor for Runner<'_> {
     fn visit_expr_fncall(&mut self, expr: &Expr) {
         if let Expr::FnCall { func, args } = expr {
             let expr = eval!(expr, self, func, "FnCall Fonc");
-            if let ASObj::ASFonc {
-                name,
-                docs,
-                params,
-                ref body,
-                return_type,
-            } = expr
-            {
+            if let ASObj::ASFonc(f) = expr {
                 let mut env = ASScope::new();
                 let mut args_iter = args.iter();
 
                 // Set params dans env local de la fonction
-                for param in params.iter() {
+                for param in f.params().iter() {
                     let arg = args_iter.next();
                     if let Some(arg_expr) = arg {
                         let arg_val = eval!(expr, self, arg_expr, "FnCall arg");
@@ -373,7 +367,7 @@ impl Visitor for Runner<'_> {
                             throw_err!(
                                 self,
                                 ASErreurType::ErreurTypeAppel {
-                                    func_name: name.clone(),
+                                    func_name: f.name().clone(),
                                     param_name: param.name.clone(),
                                     type_attendu: param.static_type.clone(),
                                     type_obtenu: arg_val.get_type().clone(),
@@ -391,7 +385,7 @@ impl Visitor for Runner<'_> {
 
                 // Exec Body
                 self.env.push_scope(env);
-                self.visit_body(body);
+                self.visit_body(f.body());
 
                 // Clean up
                 self.clear_early_exit();
@@ -404,7 +398,7 @@ impl Visitor for Runner<'_> {
                 // Fonction termine sans de "retourner" ou "error"
                 if !self.should_early_exit() {
                     if self.expr_results.last().is_none()
-                        && !ASType::type_match(&return_type, &ASType::Rien)
+                        && !ASType::type_match(f.return_type(), &ASType::Rien)
                     {
                         self.push_value(ASObj::ASNul);
                     }
@@ -419,11 +413,11 @@ impl Visitor for Runner<'_> {
                     ASType::Rien
                 };
 
-                if !ASType::type_match(&return_type, &type_returned) {
+                if !ASType::type_match(f.return_type(), &type_returned) {
                     throw_err!(
                         self,
                         ASErreurType::ErreurTypeRetour {
-                            type_attendu: return_type,
+                            type_attendu: f.return_type().clone(),
                             type_obtenu: type_returned,
                         }
                     );
@@ -435,12 +429,12 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_expr_struct_inst(&mut self, expr: &Expr) {
-        let Expr::StructInst { structure, fields } = expr else {
+        let Expr::ClasseInst { structure, fields } = expr else {
             return;
         };
 
-        let struct_parent = eval!(expr, self, structure, "Struct");
-        let ASObj::ASStructure {
+        let struct_parent = eval!(expr, self, structure, "Classe");
+        let ASObj::ASClasse {
             name: struct_name,
             docs,
             fields: parent_fields,
@@ -448,7 +442,7 @@ impl Visitor for Runner<'_> {
         else {
             throw_err!(
                 self,
-                ASErreurType::new_erreur_type(ASType::Structure, struct_parent.get_type())
+                ASErreurType::new_erreur_type(ASType::Classe, struct_parent.get_type())
             )
         };
         let mut env = ASScope::new();
@@ -458,7 +452,7 @@ impl Visitor for Runner<'_> {
                 opt_expr,
                 self,
                 field.default_value.clone(),
-                "Struct default value"
+                "Classe default value"
             );
             let field_var = ASVar::new(
                 field.name.clone(),
@@ -473,7 +467,7 @@ impl Visitor for Runner<'_> {
         }
 
         for field_expr in fields.into_iter() {
-            let ASObj::ASPaire { key, val } = eval!(expr, self, field_expr, "Struct field") else {
+            let ASObj::ASPaire { key, val } = eval!(expr, self, field_expr, "Classe field") else {
                 unreachable!()
             };
             let ASObj::ASTexte(key) = *key else {
@@ -1113,11 +1107,11 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_stmt_defstruct(&mut self, stmt: &Stmt) {
-        if let Stmt::DefStruct { name, docs, fields } = stmt {
+        if let Stmt::DefClasse { name, docs, fields } = stmt {
             let mut as_fields = Vec::with_capacity(fields.len());
             for field in fields.into_iter() {
                 let field_type = eval!(opt_type, self, field.static_type.clone(), "Field Type");
-                as_fields.push(ASStructField {
+                as_fields.push(ASClasseField {
                     name: field.name.clone(),
                     vis: field.vis.into(),
                     static_type: field_type.into(),
@@ -1125,12 +1119,12 @@ impl Visitor for Runner<'_> {
                     default_value: field.default_value.clone(),
                 })
             }
-            let as_struct = ASObj::ASStructure {
+            let as_struct = ASObj::ASClasse {
                 name: name.clone(),
                 docs: docs.clone(),
                 fields: as_fields,
             };
-            let var = ASVar::new(name.clone(), Some(ASType::Structure), true);
+            let var = ASVar::new(name.clone(), Some(ASType::Classe), true);
             let result = self.env.declare_strict(var, as_struct);
             if result.is_err() {
                 throw_err!(self, result.err().unwrap());

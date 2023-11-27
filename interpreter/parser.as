@@ -22,5 +22,5 @@ fonction additionVecteur(v1: liste, v2: liste) -> liste?
     retourner v1
 fin fonction
 
+afficher 3..1
 
-afficher info(additionVecteur)

@@ -1,11 +1,9 @@
 use unindent::Unindent;
 
 use crate::{
-    as_fonction, as_mod,
+    as_cast, as_fonction, as_mod,
     as_obj::{ASFnParam, ASObj, ASType, ASVar},
-    ast::Expr,
-    data::Data,
-    unpack_as,
+    as_var,
 };
 
 as_mod! {
@@ -18,7 +16,7 @@ as_mod! {
     as_fonction! {
         typeVar[runner](nomVar: ASType::Texte) -> ASType::Texte; {
             let env = runner.get_env();
-            unpack_as!(ASObj::ASTexte(nom_var) = nomVar);
+            as_cast!(ASObj::ASTexte(nom_var) = nomVar);
             let maybe_var = env.get_var(nom_var).map(|v| &v.0);
             Ok(Some(match maybe_var {
                 Some(var) => ASObj::ASTexte(var.get_type().to_string()),
@@ -36,49 +34,11 @@ as_mod! {
             } as i64)))
         }
     },
-    ASVar::new_with_value(
-        "afficher",
-        Some(ASType::Fonction),
-        true,
-        ASObj::native_fn(
-            "afficher",
-            None,
-            vec![ASFnParam {
-                name: "obj".into(),
-                static_type: ASType::any(),
-                default_value: Some(Expr::literal(ASObj::ASTexte("\n".into()))),
-            }],
-            |runner| {
-                let obj = {
-                    let env = runner.get_env();
-                    env.get_value(&"obj".into()).unwrap().to_string()
-                };
-                runner.send_data(Data::Afficher(obj));
-                Ok(None)
-            },
-            ASType::Rien,
-        ),
-    ),
-    ASVar::new_with_value(
-        "booleen",
-        Some(ASType::Fonction),
-        true,
-        ASObj::native_fn(
-            "booleen",
-            None,
-            vec![ASFnParam {
-                name: "obj".into(),
-                static_type: ASType::any(),
-                default_value: Some(Expr::literal(ASObj::ASBooleen(true))),
-            }],
-            |runner| {
-                let env = runner.get_env();
-                let obj = env.get_value(&"obj".into()).unwrap();
-                Ok(Some(ASObj::ASBooleen(obj.to_bool())))
-            },
-            ASType::Booleen,
-        ),
-    ),
+    as_fonction! {
+        booleen(obj: ASType::any() => ASObj::ASBooleen(true)) -> ASType::Booleen; {
+            Ok(Some(ASObj::ASBooleen(obj.to_bool())))
+        }
+    },
     ASVar::new_with_value(
         "entier",
         Some(ASType::Fonction),
@@ -139,14 +99,24 @@ as_mod! {
     ),
     as_fonction! {
         info(f: ASType::Fonction) -> ASType::Texte; {
-            let ASObj::ASFonc { name, docs, params, body, return_type } = f else {unreachable!()};
+            let ASObj::ASFonc(f) = f else {unreachable!()};
             Ok(Some(ASObj::ASTexte(format!(
                 "{}\n  {}",
                 f.to_string(),
-                docs.clone()
+                f.docs()
+                    .clone()
                     .map(|doc| doc.unindent().replace("\n", "\n  "))
                     .unwrap_or("<sans-documentation>".into()),
             ))))
         }
+    },
+    as_var! {
+        const ALPHABET: ASType::Texte => ASObj::ASTexte("abcdefghijklmnopqrstuvwxyz".into())
+    },
+    as_var! {
+        const CHIFFRES: ASType::Texte => ASObj::ASTexte("0123456789".into())
+    },
+    as_var! {
+        const SYMBOLES: ASType::Texte => ASObj::ASTexte("+-*/%&|!^~<>=()[]{}.,:;".into())
     }
 }

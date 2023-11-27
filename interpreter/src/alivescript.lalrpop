@@ -10,8 +10,8 @@ use crate::ast::{
     UnaryOpcode,
     BinLogiccode,
     FnParam,
-    StructField,
-    StructFieldVis,
+    ClasseField,
+    ClasseFieldVis,
     LireVar,
 };
 use crate::as_obj::ASObj;
@@ -57,28 +57,28 @@ pub Stmt: Box<Stmt> = {
     <docs:(<"DOCS"> "eos"*)?> "fonction" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
         <body:Script> "fin" "fonction" "eos" => Box::new(Stmt::DefFn { <> }),
 
-    <docs:(<"DOCS"> "eos"*)?> "structure" <name:"ident"> "eos" <fields:StructFieldDecl*> "fin" "structure" "eos"
-        => Box::new(Stmt::DefStruct { <> }),
+    <docs:(<"DOCS"> "eos"*)?> "classe" <name:"ident"> "eos" <fields:ClasseFieldDecl*> "fin" "classe" "eos"
+        => Box::new(Stmt::DefClasse { <> }),
 
     <then_stmt:SubStmt> "si" <cond:Expr> "eos" => 
       Box::new(Stmt::CondStmt { <> }),
 };
 
 #[inline]
-StructFieldDecl: StructField = {
+ClasseFieldDecl: ClasseField = {
     "var" <var_name:"ident"> <static_type:StaticType> <default_value:("assign" <Expr>)?> "eos" =>
-        StructField { 
+        ClasseField { 
             name: var_name.into(),
-            vis: StructFieldVis::Publique,
+            vis: ClasseFieldVis::Publique,
             static_type,
             default_value,
             is_const: false,
         },
 
     "const" <var_name:"ident"> <static_type:StaticType> <default_value:("assign" <Expr>)?> "eos" =>
-        StructField { 
+        ClasseField { 
             name: var_name.into(),
-            vis: StructFieldVis::Publique,
+            vis: ClasseFieldVis::Publique,
             static_type,
             default_value,
             is_const: true,
@@ -434,7 +434,7 @@ FnParam: FnParam = {
 //StructInst: Box<Expr> = <struct:Term> <fields:CommaCollection<"{", "}", StructField>>;
 
 #[inline]
-StructField: Box<Expr> = {
+ClasseField: Box<Expr> = {
     Paire,
     "ident" => Box::new(Expr::Ident(<>)),
 };
@@ -530,7 +530,7 @@ extern {
         "continuer" => Token::KwContinuer,
         "sortir" => Token::KwSortir,
 
-        "structure" => Token::KwStructure,
+        "classe" => Token::KwClasse,
 
         "ident" => Token::Ident(<String>),
         "int" => Token::Int(<i64>),

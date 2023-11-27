@@ -8,6 +8,7 @@ use std::{
 };
 
 use derive_new::new;
+use derive_getters::Getters;
 
 use crate::{
     ast::{Expr, Stmt},
@@ -37,28 +38,53 @@ pub enum ASObj {
     /// Les éléments du vecteur sont tous garanti d'être des [`ASObj::ASPaire`]
     ASDict(Vec<ASObj>),
 
-    ASFonc {
-        name: Option<String>,
-        docs: Option<String>,
-        params: Vec<ASFnParam>,
-        body: Vec<Box<Stmt>>,
-        return_type: ASType,
-    },
+    ASFonc(ASFonc),
 
-    ASStructure {
+    ASClasse {
         name: String,
         docs: Option<String>,
-        fields: Vec<ASStructField>,
+        fields: Vec<ASClasseField>,
     },
 
     ASModule {
         env: Rc<ASScope>,
     },
 
-    ASStructInst {
+    ASClasseInst {
         struct_parent: Box<ASObj>,
         env: ASScope,
     },
+}
+
+#[derive(Debug, Clone, new, Getters)]
+pub struct ASFonc {
+    name: Option<String>,
+    docs: Option<String>,
+    params: Vec<ASFnParam>,
+    body: Vec<Box<Stmt>>,
+    return_type: ASType,
+}
+
+impl PartialEq for ASFonc {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Display for ASFonc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let to_string = format!(
+            "{}({}) -> {}",
+            self.name.as_ref().unwrap_or(&"".into()),
+            self.params
+                .iter()
+                .map(ASFnParam::to_string)
+                .collect::<Vec<String>>()
+                .join(", "),
+            self.return_type
+        );
+        write!(f, "{}", to_string)
+    }
 }
 
 impl ASObj {
@@ -69,13 +95,7 @@ impl ASObj {
         body: Vec<Box<Stmt>>,
         return_type: Option<ASType>,
     ) -> Self {
-        Self::ASFonc {
-            name,
-            docs,
-            params,
-            body,
-            return_type: return_type.into(),
-        }
+        Self::ASFonc(ASFonc::new(name, docs, params, body, return_type.into()))
     }
 
     pub fn native_fn(
@@ -85,13 +105,13 @@ impl ASObj {
         body: fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>,
         return_type: ASType,
     ) -> ASObj {
-        Self::ASFonc {
-            name: Some(name.into()),
-            docs: docs.map(|docs| docs.into()),
+        Self::ASFonc(ASFonc::new(
+            Some(name.into()),
+            docs.map(|docs| docs.into()),
             params,
-            body: vec![Stmt::native_fn(body)],
+            vec![Stmt::native_fn(body)],
             return_type,
-        }
+        ))
     }
 
     pub fn get_type(&self) -> ASType {
@@ -151,7 +171,7 @@ impl ASObj {
                 .is_some()),
 
             (ASTuple(_), _) => todo!("Tuple pas encore (et peut-être jamais) dans le langage"),
-            (ASStructure { name, docs, fields }, _) => todo!("Check présense du field?"),
+            (ASClasse { name, docs, fields }, _) => todo!("Check présense du field?"),
             (ASModule { env }, _) => todo!(),
             _ => Err(ASErreurType::new_erreur_operation(
                 "dans".into(),
@@ -188,20 +208,8 @@ impl Clone for ASObj {
             ASTexte(t) => ASTexte(t.clone()),
             ASListe(l) => ASListe(Rc::clone(&l)),
             ASDict(d) => ASDict(d.clone()),
-            ASFonc {
-                name,
-                docs,
-                params,
-                body,
-                return_type,
-            } => ASFonc {
-                name: name.clone(),
-                docs: docs.clone(),
-                params: params.clone(),
-                body: body.clone(),
-                return_type: return_type.clone(),
-            },
-            ASStructure { name, docs, fields } => ASStructure {
+            ASFonc(fonc) => ASFonc(fonc.clone()),
+            ASClasse { name, docs, fields } => ASClasse {
                 name: name.clone(),
                 docs: docs.clone(),
                 fields: fields.clone(),
@@ -209,7 +217,7 @@ impl Clone for ASObj {
             ASModule { env } => ASModule {
                 env: Rc::clone(env),
             },
-            ASStructInst { struct_parent, env } => ASStructInst {
+            ASClasseInst { struct_parent, env } => ASClasseInst {
                 struct_parent: struct_parent.clone(),
                 env: env.clone(),
             },
@@ -229,8 +237,8 @@ impl PartialEq for ASObj {
             (ASBooleen(b1), ASBooleen(b2)) => b1 == b2,
             (ASListe(l1), ASListe(l2)) => l1 == l2,
             (ASDict(d1), ASDict(d2)) => d1 == d2,
-            (ASFonc { name: name1, .. }, ASFonc { name: name2, .. }) => name1 == name2,
-            (ASStructure { name: name1, .. }, ASStructure { name: name2, .. }) => name1 == name2,
+            (ASFonc(f1), ASFonc(f2)) => f1 == f2,
+            (ASClasse { name: name1, .. }, ASClasse { name: name2, .. }) => name1 == name2,
             (ASNul, ASNul) => true,
             _ => false,
         }
@@ -397,24 +405,7 @@ impl Display for ASObj {
                 "{{{}}}",
                 v.iter().map(Self::repr).collect::<Vec<String>>().join(", ")
             ),
-            ASFonc {
-                name,
-                docs,
-                params,
-                body,
-                return_type,
-            } => {
-                format!(
-                    "{}({}) -> {}",
-                    name.as_ref().unwrap_or(&"".into()),
-                    params
-                        .iter()
-                        .map(ASFnParam::to_string)
-                        .collect::<Vec<String>>()
-                        .join(", "),
-                    return_type
-                )
-            }
+            ASFonc(f) => f.to_string(),
             _ => String::from("ASObj sans to_string"),
         };
         write!(f, "{}", to_string)
@@ -461,16 +452,16 @@ impl Display for ASFnParam {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ASStructField {
+pub struct ASClasseField {
     pub name: String,
-    pub vis: ASStructFieldVis,
+    pub vis: ASClasseFieldVis,
     pub static_type: ASType,
     pub default_value: Option<Box<Expr>>,
     pub is_const: bool,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum ASStructFieldVis {
+pub enum ASClasseFieldVis {
     Publique,
     Privee,
 }
@@ -544,7 +535,7 @@ pub enum ASType {
     Dict,
 
     Fonction,
-    Structure,
+    Classe,
 
     Module,
     Objet(String),
@@ -574,7 +565,7 @@ impl ASType {
             },
             Dict => ASDict(vec![]),
             Fonction => todo!(),
-            Structure => todo!(),
+            Classe => todo!(),
             Module => todo!(),
             Objet(_) => todo!(),
             Union(_) => todo!(),
@@ -741,7 +732,7 @@ impl FromStr for ASType {
             "nul" => Ok(Self::Nul),
             "tout" => Ok(Self::Tout),
             "fonction" => Ok(Self::Fonction),
-            "structure" => Ok(Self::Structure),
+            "classe" => Ok(Self::Classe),
             "module" => Ok(Self::Module),
             other => Ok(Self::Objet(other.into())),
         }
@@ -772,7 +763,7 @@ impl Display for ASType {
             Objet(o) => o.clone(),
 
             Fonction => "fonction".into(),
-            Structure => "structure".into(),
+            Classe => "structure".into(),
 
             Union(types) => types
                 .iter()

@@ -68,7 +68,7 @@ macro_rules! as_var {
 }
 
 #[macro_export]
-macro_rules! unpack_as {
+macro_rules! as_cast {
     ($var:pat = $val:expr) => {
         let $var = $val else { std::unreachable!() };
     };
