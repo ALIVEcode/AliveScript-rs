@@ -8,11 +8,10 @@ use std::{
 use crate::{
     as_modules::ASModuleBuiltin,
     as_obj::{
-        ASClasseField, ASEnv, ASErreur, ASErreurType, ASFnParam, ASObj, ASScope, ASType,
-        ASVar,
+        ASClasseField, ASEnv, ASErreur, ASErreurType, ASFnParam, ASObj, ASScope, ASType, ASVar,
     },
     ast::{
-        AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, Expr, LireVar, Stmt, Type,
+        AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, DefFn, Expr, LireVar, Stmt, Type,
         TypeBinOpcode, UnaryOpcode,
     },
     data::{Data, Response},
@@ -1058,18 +1057,11 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_stmt_deffn(&mut self, stmt: &Stmt) {
-        if let Stmt::DefFn {
-            name,
-            docs,
-            params,
-            body,
-            return_type,
-        } = stmt
-        {
-            let return_type = eval!(opt_type, self, return_type, "Return Func type");
+        if let Stmt::DefFn(f) = stmt {
+            let return_type = eval!(opt_type, self, f.return_type(), "Return Func type");
 
-            let mut params_fonc = Vec::with_capacity(params.len());
-            for param in params {
+            let mut params_fonc = Vec::with_capacity(f.params().len());
+            for param in f.params() {
                 let param_type = eval!(opt_type, self, &param.static_type, "Param type");
 
                 params_fonc.push(ASFnParam::new(
@@ -1080,14 +1072,14 @@ impl Visitor for Runner<'_> {
             }
 
             let func = ASObj::asfonc(
-                Some(name.clone()),
-                docs.clone(),
+                Some(f.name().clone()),
+                f.docs().clone(),
                 params_fonc,
-                body.clone(),
+                f.body().clone(),
                 return_type,
             );
 
-            let func_var = ASVar::new(name.clone(), Some(ASType::Fonction), true);
+            let func_var = ASVar::new(f.name().clone(), Some(ASType::Fonction), true);
 
             self.env.declare(func_var, func);
         }

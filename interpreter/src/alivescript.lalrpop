@@ -1,5 +1,6 @@
 use crate::ast::{
     Stmt,
+    DefFn,
     Expr,
     Type,
     BinOpcode,
@@ -55,7 +56,7 @@ pub Stmt: Box<Stmt> = {
         Box::new(Stmt::Pour { <> }),
 
     <docs:(<"DOCS"> "eos"*)?> "fonction" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
-        <body:Script> "fin" "fonction" "eos" => Box::new(Stmt::DefFn { <> }),
+        <body:Script> "fin" "fonction" "eos" => Box::new(Stmt::DefFn(DefFn::new(<>))),
 
     <docs:(<"DOCS"> "eos"*)?> "classe" <name:"ident"> "eos" <fields:ClasseFieldDecl*> "fin" "classe" "eos"
         => Box::new(Stmt::DefClasse { <> }),
@@ -66,7 +67,7 @@ pub Stmt: Box<Stmt> = {
 
 #[inline]
 ClasseFieldDecl: ClasseField = {
-    "var" <var_name:"ident"> <static_type:StaticType> <default_value:("assign" <Expr>)?> "eos" =>
+    "var"? <var_name:"ident"> <static_type:StaticType> <default_value:("assign" <Expr>)?> "eos" =>
         ClasseField { 
             name: var_name.into(),
             vis: ClasseFieldVis::Publique,
@@ -84,6 +85,9 @@ ClasseFieldDecl: ClasseField = {
             is_const: true,
         },
 };
+
+// #[inline]
+// ClasseInit: 
 
 //#[inline]
 //StructMethode: Box<Stmt> = {

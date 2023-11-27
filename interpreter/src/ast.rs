@@ -1,5 +1,8 @@
+use derive_getters::Getters;
+use derive_new::new;
+
 use crate::{
-    as_obj::{ASErreurType, ASObj, ASClasseFieldVis},
+    as_obj::{ASClasseFieldVis, ASErreurType, ASObj},
     runner::Runner,
     visitor::{Visitable, Visitor},
 };
@@ -82,13 +85,7 @@ pub enum Stmt {
     Sortir,
 
     /// Définition d'une fonction
-    DefFn {
-        name: String,
-        docs: Option<String>,
-        params: Vec<FnParam>,
-        body: Vec<Box<Stmt>>,
-        return_type: Option<Box<Type>>,
-    },
+    DefFn(DefFn),
 
     DefClasse {
         name: String,
@@ -104,6 +101,15 @@ impl Stmt {
     pub fn native_fn(body: fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>) -> Box<Self> {
         Box::new(Stmt::Retourner(Some(Box::new(Expr::CallRust(body)))))
     }
+}
+
+#[derive(Clone, Debug, new, Getters, PartialEq)]
+pub struct DefFn {
+    docs: Option<String>,
+    name: String,
+    params: Vec<FnParam>,
+    return_type: Option<Box<Type>>,
+    body: Vec<Box<Stmt>>,
 }
 
 #[derive(Debug, PartialEq, Clone)]

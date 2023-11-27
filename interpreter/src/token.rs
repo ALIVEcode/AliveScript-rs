@@ -85,6 +85,9 @@ pub enum Token {
     #[token("classe")]
     KwClasse,
 
+    #[token("init")]
+    KwInit,
+
     #[token("methode")]
     #[token("méthode")]
     KwMethode,
@@ -263,27 +266,30 @@ impl fmt::Display for Token {
             Token::KwAfficher => "afficher".to_owned(),
             Token::KwVar => "var".to_owned(),
             Token::KwConst => "const".to_owned(),
+
             Token::KwFin => "fin".to_owned(),
+
             Token::KwSi => "si".to_owned(),
             Token::KwSinon => "sinon".to_owned(),
             Token::KwAlors => "alors".to_owned(),
+            Token::KwTantQue => "tant que".to_owned(),
+            Token::KwPour => "pour".to_owned(),
+            Token::KwFaire => "faire".to_owned(),
+            Token::KwRepeter => "repeter".to_owned(),
+            Token::KwSortir => "sortir".to_owned(),
+            Token::KwContinuer => "continuer".to_owned(),
+
             Token::KwPas => "pas".to_owned(),
             Token::KwNon => "non".to_owned(),
             Token::KwEt => "et".to_owned(),
             Token::KwOu => "ou".to_owned(),
             Token::KwXor => "xor".to_owned(),
-            Token::KwTantQue => "tant que".to_owned(),
-            Token::KwPour => "pour".to_owned(),
-            Token::KwFaire => "faire".to_owned(),
-            Token::KwRepeter => "repeter".to_owned(),
-            Token::KwDans => "dans".to_owned(),
-            Token::KwBond => "bond".to_owned(),
-            Token::KwSortir => "sortir".to_owned(),
-            Token::KwContinuer => "continuer".to_owned(),
+
             Token::KwFonction => "fonction".to_owned(),
             Token::KwRetourner => "retourner".to_owned(),
             Token::KwClasse => "classe".to_owned(),
             Token::KwMethode => "methode".to_owned(),
+            Token::KwInit => "init".to_owned(),
 
             Token::Nul => format!("NUL"),
             Token::Ident(v) => format!("IDENTIFIANT({v})"),
@@ -315,13 +321,17 @@ impl fmt::Display for Token {
             Token::CompLeq => "PLUS_PETIT_EGAL(<=, ≤)".to_owned(),
             Token::CompGth => "PLUS_GRAND(>)".to_owned(),
             Token::CompGeq => "PLUS_GRAND_EGAL(>=, ≥)".to_owned(),
+            Token::KwDans => "dans".to_owned(),
 
             Token::Assign => "AFFECTER(=, <-, ←)".to_owned(),
             Token::RightArrow => "FLECHE_DROITE(->, →)".to_owned(),
             Token::Dot => "POINT(.)".to_owned(),
             Token::QuestionMark => "POINT_INTER(?)".to_owned(),
+
             Token::RangeExcl => "SUITE_EXCL(.., jusqu'a, jusqu'à)".to_owned(),
             Token::RangeIncl => "SUITE_INCL(..=)".to_owned(),
+            Token::KwBond => "bond".to_owned(),
+
             Token::Comma => "VIRGULE(,)".to_owned(),
             Token::Colon => "DEUX_POINTS(:)".to_owned(),
             Token::LParen => "PARENT_G(()".to_owned(),
