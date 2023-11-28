@@ -44,6 +44,8 @@ pub enum ASObj {
         name: String,
         docs: Option<String>,
         fields: Vec<ASClasseField>,
+        init: Option<ASFonc>,
+        methods: Vec<ASFonc>,
     },
 
     ASModule {
@@ -51,7 +53,7 @@ pub enum ASObj {
     },
 
     ASClasseInst {
-        struct_parent: Box<ASObj>,
+        classe_parent: Box<ASObj>,
         env: ASScope,
     },
 }
@@ -217,8 +219,8 @@ impl Clone for ASObj {
             ASModule { env } => ASModule {
                 env: Rc::clone(env),
             },
-            ASClasseInst { struct_parent, env } => ASClasseInst {
-                struct_parent: struct_parent.clone(),
+            ASClasseInst { classe_parent: struct_parent, env } => ASClasseInst {
+                classe_parent: struct_parent.clone(),
                 env: env.clone(),
             },
             ASTuple(_) => todo!(),
@@ -801,6 +803,10 @@ impl ASScope {
 
     pub fn get(&self, var_name: &String) -> Option<&(ASVar, ASObj)> {
         self.0.get(var_name)
+    }
+
+    pub fn get_value(&self, var_name: &String) -> Option<&ASObj> {
+        self.0.get(var_name).map(|(_, val)| val)
     }
 
     pub fn insert(&mut self, var: ASVar, val: ASObj) -> Option<(ASVar, ASObj)> {

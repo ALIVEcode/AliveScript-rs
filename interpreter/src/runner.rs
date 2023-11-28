@@ -11,7 +11,7 @@ use crate::{
         ASClasseField, ASEnv, ASErreur, ASErreurType, ASFnParam, ASObj, ASScope, ASType, ASVar,
     },
     ast::{
-        AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, DefFn, Expr, LireVar, Stmt, Type,
+        AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, Expr, LireVar, Stmt, Type,
         TypeBinOpcode, UnaryOpcode,
     },
     data::{Data, Response},
@@ -263,7 +263,13 @@ impl Visitor for Runner<'_> {
 
             let result = match &obj_val {
                 ASObj::ASModule { env } => env.get(prop).expect("AccessProp prop").1.clone(),
-                ASObj::ASClasse { name, docs, fields } => {
+                ASObj::ASClasse {
+                    name,
+                    docs,
+                    fields,
+                    init,
+                    methods,
+                } => {
                     let field = fields.into_iter().find(|field| &field.name == prop);
                     if let Some(ASClasseField {
                         name,
@@ -288,6 +294,15 @@ impl Visitor for Runner<'_> {
                             ASErreurType::new_erreur_propriete_pas_init(obj_val, prop.clone())
                         );
                     }
+                }
+                ASObj::ASClasseInst { classe_parent, env } => {
+                    let Some(value) = env.get_value(prop) else {
+                        throw_err!(
+                            self,
+                            ASErreurType::new_erreur_access_propriete(obj_val, prop.clone())
+                        );
+                    };
+                    value.clone()
                 }
                 _ => todo!(),
             };
@@ -427,21 +442,23 @@ impl Visitor for Runner<'_> {
         }
     }
 
-    fn visit_expr_struct_inst(&mut self, expr: &Expr) {
-        let Expr::ClasseInst { structure, fields } = expr else {
+    fn visit_expr_classe_init(&mut self, expr: &Expr) {
+        let Expr::ClasseInst { classe, fields } = expr else {
             return;
         };
 
-        let struct_parent = eval!(expr, self, structure, "Classe");
+        let classe_parent = eval!(expr, self, classe, "Classe");
         let ASObj::ASClasse {
-            name: struct_name,
+            name: classe_name,
             docs,
             fields: parent_fields,
-        } = &struct_parent
+            init,
+            methods,
+        } = &classe_parent
         else {
             throw_err!(
                 self,
-                ASErreurType::new_erreur_type(ASType::Classe, struct_parent.get_type())
+                ASErreurType::new_erreur_type(ASType::Classe, classe_parent.get_type())
             )
         };
         let mut env = ASScope::new();
@@ -541,6 +558,10 @@ impl Visitor for Runner<'_> {
                 .collect();
             self.expr_results
                 .push(ASObj::ASListe(Rc::new(RefCell::new(range))));
+        } else if start_val == end_val && *is_incl {
+            self.push_value(ASObj::ASListe(Rc::new(RefCell::new(vec![
+                ASObj::ASEntier(start_val),
+            ]))));
         } else {
             self.push_value(ASObj::ASListe(Rc::new(RefCell::new(vec![]))));
         }
@@ -843,6 +864,18 @@ impl Visitor for Runner<'_> {
                         _ => todo!(),
                     }
                 }
+                AssignVar::AccessProp { obj, prop } => {
+                    let var_val = eval!(expr, self, obj, "Assign AccessProp Obj");
+                    match var_val {
+                        ASObj::ASClasseInst {
+                            classe_parent,
+                            mut env,
+                        } => {
+                            env.assign_strict(prop, value);
+                        }
+                        _ => todo!(),
+                    }
+                }
                 AssignVar::Decl(_) => todo!(),
             }
         }
@@ -899,6 +932,29 @@ impl Visitor for Runner<'_> {
                             let old_value = lst.borrow()[i as usize].clone();
                             *lst.borrow_mut().index_mut(i as usize) =
                                 Runner::<'_>::do_op(old_value, op, value);
+                        }
+                        _ => todo!(),
+                    }
+                }
+                AssignVar::AccessProp { obj, prop } => {
+                    let var_val = eval!(expr, self, obj, "Assign AccessProp Obj");
+
+                    match var_val {
+                        ASObj::ASClasseInst {
+                            classe_parent,
+                            mut env,
+                        } => {
+                            let Some(old_value) = env.get_value(prop) else {
+                                throw_err!(
+                                    self,
+                                    ASErreurType::new_erreur_access_propriete(
+                                        var_val.clone(),
+                                        prop.clone()
+                                    )
+                                );
+                            };
+                            let new_value = Runner::<'_>::do_op(old_value.clone(), op, value);
+                            env.assign_strict(prop, new_value);
                         }
                         _ => todo!(),
                     }
@@ -1098,8 +1154,15 @@ impl Visitor for Runner<'_> {
         }
     }
 
-    fn visit_stmt_defstruct(&mut self, stmt: &Stmt) {
-        if let Stmt::DefClasse { name, docs, fields } = stmt {
+    fn visit_stmt_defclasse(&mut self, stmt: &Stmt) {
+        if let Stmt::DefClasse {
+            name,
+            docs,
+            fields,
+            init,
+            methods,
+        } = stmt
+        {
             let mut as_fields = Vec::with_capacity(fields.len());
             for field in fields.into_iter() {
                 let field_type = eval!(opt_type, self, field.static_type.clone(), "Field Type");
@@ -1111,13 +1174,15 @@ impl Visitor for Runner<'_> {
                     default_value: field.default_value.clone(),
                 })
             }
-            let as_struct = ASObj::ASClasse {
+            let as_classe = ASObj::ASClasse {
                 name: name.clone(),
                 docs: docs.clone(),
                 fields: as_fields,
+                init: todo!(),
+                methods: todo!(),
             };
             let var = ASVar::new(name.clone(), Some(ASType::Classe), true);
-            let result = self.env.declare_strict(var, as_struct);
+            let result = self.env.declare_strict(var, as_classe);
             if result.is_err() {
                 throw_err!(self, result.err().unwrap());
             }

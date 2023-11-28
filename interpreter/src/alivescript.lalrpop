@@ -58,8 +58,12 @@ pub Stmt: Box<Stmt> = {
     <docs:(<"DOCS"> "eos"*)?> "fonction" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
         <body:Script> "fin" "fonction" "eos" => Box::new(Stmt::DefFn(DefFn::new(<>))),
 
-    <docs:(<"DOCS"> "eos"*)?> "classe" <name:"ident"> "eos" <fields:ClasseFieldDecl*> "fin" "classe" "eos"
-        => Box::new(Stmt::DefClasse { <> }),
+    <docs:(<"DOCS"> "eos"*)?> "classe" <name:"ident"> "eos" 
+        <fields:ClasseFieldDecl*> 
+        <init:ClasseInit?> 
+        <methods:ClasseMethode*> 
+        "fin" "classe" "eos" => 
+            Box::new(Stmt::DefClasse { <> }),
 
     <then_stmt:SubStmt> "si" <cond:Expr> "eos" => 
       Box::new(Stmt::CondStmt { <> }),
@@ -86,15 +90,18 @@ ClasseFieldDecl: ClasseField = {
         },
 };
 
-// #[inline]
-// ClasseInit: 
+#[inline]
+ClasseInit: DefFn = {
+    "init" "(" <params:Comma<FnParam>> ")" "eos"
+        <body:Script> "fin" "init" "eos" => 
+            DefFn::new(None, "@init".to_owned(), params, Some(Type::Lit("rien".to_owned())), body),
+};
 
-//#[inline]
-//StructMethode: Box<Stmt> = {
-//    // Def methode
-//    "methode" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
-//        <body:Stmt*> "fin" "fonction" "eos" => Box::new(Stmt::DefFn { <> }),
-//};
+#[inline]
+ClasseMethode: DefFn = {
+    <docs:(<"DOCS"> "eos"*)?> "methode" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
+        <body:Script> "fin" "methode" "eos" => DefFn::new(<>),
+};
 
 SubStmt: Box<Stmt> = {
     Expr => Box::new(Stmt::Expr(<>)),
@@ -535,6 +542,8 @@ extern {
         "sortir" => Token::KwSortir,
 
         "classe" => Token::KwClasse,
+        "init" => Token::KwInit,
+        "methode" => Token::KwMethode,
 
         "ident" => Token::Ident(<String>),
         "int" => Token::Int(<i64>),

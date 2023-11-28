@@ -17,6 +17,16 @@ as_mod!(
     },
 
     as_fonction! {
+        affirmerFaux(test: Booleen) -> Rien; {
+            if !test.to_bool() {
+                Ok(None)
+            } else {
+                Err(ASErreurType::new_erreur_affirmation("".into(), ASBooleen(false), ASBooleen(true)))
+            }
+        }
+    },
+
+    as_fonction! {
         affirmerEgal(obj1: ASType::any(), obj2: ASType::any()) -> ASType::Rien; {
             if obj1 == obj2 {
                 Ok(None)

@@ -11,3 +11,8 @@ fn entiers() {
 fn suite() {
     run_test("tests/test_suite.as", &vec![]);
 }
+
+#[test]
+fn booleen() {
+    run_test("tests/test_data/test_bool.as", &vec![]);
+}

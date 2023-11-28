@@ -91,6 +91,8 @@ pub enum Stmt {
         name: String,
         docs: Option<String>,
         fields: Vec<ClasseField>,
+        init: Option<DefFn>,
+        methods: Vec<DefFn>,
     },
 
     Retourner(Option<Box<Expr>>),
@@ -157,6 +159,7 @@ pub enum DeclVar {
 pub enum AssignVar {
     Decl(DeclVar),
     Slice { obj: Box<Expr>, slice: Box<Expr> },
+    AccessProp { obj: Box<Expr>, prop: String },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -203,7 +206,7 @@ pub enum Expr {
     },
 
     ClasseInst {
-        structure: Box<Expr>,
+        classe: Box<Expr>,
         fields: Vec<Box<Expr>>,
     },
 
@@ -316,7 +319,7 @@ impl Visitable for Expr {
             Range { .. } => visitor.visit_expr_suite(self),
             Slice { .. } => visitor.visit_expr_slice(self),
             CallRust(..) => visitor.visit_expr_callrust(self),
-            ClasseInst { .. } => visitor.visit_expr_struct_inst(self),
+            ClasseInst { .. } => visitor.visit_expr_classe_init(self),
         }
     }
 }
@@ -338,7 +341,7 @@ impl Visitable for Stmt {
             TantQue { .. } => visitor.visit_stmt_tantque(self),
             Pour { .. } => visitor.visit_stmt_pour(self),
             DefFn { .. } => visitor.visit_stmt_deffn(self),
-            DefClasse { .. } => visitor.visit_stmt_defstruct(self),
+            DefClasse { .. } => visitor.visit_stmt_defclasse(self),
             Retourner(..) => visitor.visit_stmt_retourner(self),
             Sortir => visitor.visit_stmt_sortir(self),
             Continuer => visitor.visit_stmt_continuer(self),

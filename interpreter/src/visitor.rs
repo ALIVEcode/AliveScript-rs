@@ -17,7 +17,7 @@ pub trait Visitor {
     fn visit_expr_slice(&mut self, expr: &Expr);
 
     fn visit_expr_fncall(&mut self, expr: &Expr);
-    fn visit_expr_struct_inst(&mut self, expr: &Expr);
+    fn visit_expr_classe_init(&mut self, expr: &Expr);
     fn visit_expr_callrust(&mut self, expr: &Expr);
 
     fn visit_expr_unaryop(&mut self, expr: &Expr);
@@ -51,7 +51,7 @@ pub trait Visitor {
     fn visit_stmt_deffn(&mut self, stmt: &Stmt);
     fn visit_stmt_retourner(&mut self, stmt: &Stmt);
 
-    fn visit_stmt_defstruct(&mut self, stmt: &Stmt);
+    fn visit_stmt_defclasse(&mut self, stmt: &Stmt);
 
     // Types
     fn visit_type_lit(&mut self, t: &Type);
