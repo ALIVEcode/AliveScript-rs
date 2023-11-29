@@ -8,11 +8,12 @@ use std::{
 use crate::{
     as_modules::ASModuleBuiltin,
     as_obj::{
-        ASClasseField, ASEnv, ASErreur, ASErreurType, ASFnParam, ASObj, ASScope, ASType, ASVar,
+        ASClasse, ASClasseField, ASClasseInst, ASEnv, ASErreur, ASErreurType, ASFnParam, ASFonc,
+        ASMethode, ASObj, ASScope, ASType, ASVar,
     },
     ast::{
-        AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, Expr, LireVar, Stmt, Type,
-        TypeBinOpcode, UnaryOpcode,
+        AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, Expr, FnParam, LireVar, Stmt,
+        Type, TypeBinOpcode, UnaryOpcode,
     },
     data::{Data, Response},
     io::InterpretorIO,
@@ -184,6 +185,26 @@ impl<'a> Runner<'a> {
     fn early_exit_matches(&self, early_exit: EarlyExit) -> bool {
         matches!(self.early_exit, Some(reason) if reason == early_exit)
     }
+
+    fn parse_fn_params(&mut self, params: &Vec<FnParam>) -> Option<Vec<ASFnParam>> {
+        let mut params_fonc = Vec::with_capacity(params.len());
+        for param in params {
+            param.static_type.as_ref().map(|t| t.accept(self));
+
+            if self.error_thrown() {
+                return None;
+            }
+
+            let param_type = self.type_results.pop();
+
+            params_fonc.push(ASFnParam::new(
+                param.name.clone(),
+                param_type,
+                param.default_value.clone(),
+            ))
+        }
+        Some(params_fonc)
+    }
 }
 
 impl Visitor for Runner<'_> {
@@ -263,14 +284,11 @@ impl Visitor for Runner<'_> {
 
             let result = match &obj_val {
                 ASObj::ASModule { env } => env.get(prop).expect("AccessProp prop").1.clone(),
-                ASObj::ASClasse {
-                    name,
-                    docs,
-                    fields,
-                    init,
-                    methods,
-                } => {
-                    let field = fields.into_iter().find(|field| &field.name == prop);
+                ASObj::ASClasse(classe) => {
+                    let field = classe
+                        .fields()
+                        .into_iter()
+                        .find(|field| &field.name == prop);
                     if let Some(ASClasseField {
                         name,
                         vis,
@@ -295,16 +313,23 @@ impl Visitor for Runner<'_> {
                         );
                     }
                 }
-                ASObj::ASClasseInst { classe_parent, env } => {
-                    let Some(value) = env.get_value(prop) else {
+                ASObj::ASClasseInst(inst) => {
+                    let env_borrow = inst.env().borrow();
+                    let Some(value) = env_borrow.get_value(prop) else {
                         throw_err!(
                             self,
-                            ASErreurType::new_erreur_access_propriete(obj_val, prop.clone())
+                            ASErreurType::new_erreur_access_propriete(
+                                obj_val.clone(),
+                                prop.clone()
+                            )
                         );
                     };
                     value.clone()
                 }
-                _ => todo!(),
+                obj => throw_err!(
+                    self,
+                    ASErreurType::new_erreur_access_propriete(obj.clone(), prop.clone())
+                ),
             };
             self.push_value(result);
         }
@@ -366,9 +391,13 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_expr_fncall(&mut self, expr: &Expr) {
-        if let Expr::FnCall { func, args } = expr {
-            let expr = eval!(expr, self, func, "FnCall Fonc");
-            if let ASObj::ASFonc(f) = expr {
+        let Expr::FnCall { func, args } = expr else {
+            unreachable!()
+        };
+
+        let expr = eval!(expr, self, func, "FnCall Fonc");
+        match expr {
+            ASObj::ASFonc(f) => {
                 let mut env = ASScope::new();
                 let mut args_iter = args.iter();
 
@@ -402,12 +431,13 @@ impl Visitor for Runner<'_> {
                 self.visit_body(f.body());
 
                 // Clean up
-                self.clear_early_exit();
                 self.env.pop_scope();
 
                 if self.error_thrown() {
                     return;
                 }
+
+                self.clear_early_exit();
 
                 // Fonction termine sans de "retourner" ou "error"
                 if !self.should_early_exit() {
@@ -436,7 +466,86 @@ impl Visitor for Runner<'_> {
                         }
                     );
                 }
-            } else {
+            }
+            ASObj::ASClasse(classe) => {
+                let env = Rc::new(RefCell::new(ASScope::new()));
+
+                for field in classe.fields() {
+                    let field_value = eval!(
+                        opt_expr,
+                        self,
+                        field.default_value.clone(),
+                        "Classe default value"
+                    );
+                    let field_var = ASVar::new(
+                        field.name.clone(),
+                        Some(field.static_type.clone()),
+                        field.is_const,
+                    );
+                    if let Some(value) = field_value {
+                        env.borrow_mut().declare(field_var, value);
+                    } else {
+                        env.borrow_mut().declare(field_var, ASObj::ASNoValue);
+                    }
+                }
+
+                let inst = Rc::new(ASClasseInst::new(Rc::clone(&classe), Rc::clone(&env)));
+
+                for methode in classe.methods() {
+                    env.borrow_mut().declare(
+                        ASVar::new(
+                            methode.name().as_ref().unwrap().clone(),
+                            Some(ASType::Fonction),
+                            true,
+                        ),
+                        ASObj::ASMethode(ASMethode::new(methode.clone(), Rc::downgrade(&inst))),
+                    );
+                }
+
+                let init_env = ASScope::from(vec![(
+                    ASVar::new(
+                        "inst".into(),
+                        Some(ASType::Objet(classe.name().clone())),
+                        true,
+                    ),
+                    ASObj::ASClasseInst(Rc::clone(&inst)),
+                )]);
+
+                if let Some(init) = classe.init() {
+                    let to_call = Expr::FnCall {
+                        func: Expr::literal(ASObj::ASFonc(init.clone())),
+                        args: args.clone(),
+                    };
+                    self.env.push_scope(init_env);
+                    self.visit_expr_fncall(&to_call);
+                    self.env.pop_scope();
+                    if self.error_thrown() {
+                        return;
+                    }
+                }
+
+                self.push_value(ASObj::ASClasseInst(Rc::clone(&inst)));
+            }
+            ASObj::ASMethode(methode) => {
+                let inst: ASObj = methode
+                    .inst()
+                    .upgrade()
+                    .expect("L'instance n'existe plus")
+                    .into();
+
+                let methode_env = ASScope::from(vec![(
+                    ASVar::new("inst".into(), Some(inst.get_type()), true),
+                    inst,
+                )]);
+                let to_call = Expr::FnCall {
+                    func: Expr::literal(ASObj::ASFonc(methode.func().clone())),
+                    args: args.clone(),
+                };
+                self.env.push_scope(methode_env);
+                self.visit_expr_fncall(&to_call);
+                self.env.pop_scope();
+            }
+            _ => {
                 panic!("Impossible d'appeler '{:?}'", expr);
             }
         }
@@ -444,18 +553,11 @@ impl Visitor for Runner<'_> {
 
     fn visit_expr_classe_init(&mut self, expr: &Expr) {
         let Expr::ClasseInst { classe, fields } = expr else {
-            return;
+            unreachable!();
         };
 
         let classe_parent = eval!(expr, self, classe, "Classe");
-        let ASObj::ASClasse {
-            name: classe_name,
-            docs,
-            fields: parent_fields,
-            init,
-            methods,
-        } = &classe_parent
-        else {
+        let ASObj::ASClasse(classe) = &classe_parent else {
             throw_err!(
                 self,
                 ASErreurType::new_erreur_type(ASType::Classe, classe_parent.get_type())
@@ -463,7 +565,7 @@ impl Visitor for Runner<'_> {
         };
         let mut env = ASScope::new();
 
-        for field in parent_fields {
+        for field in classe.fields() {
             let field_value = eval!(
                 opt_expr,
                 self,
@@ -816,25 +918,7 @@ impl Visitor for Runner<'_> {
                     is_const,
                 }) => {
                     if let Some((var, _old_val)) = self.env.get_var(name) {
-                        // if var.is_const() {
-                        //     throw_err!(
-                        //         self,
-                        //         ASErreurType::AffectationConstante {
-                        //             var_name: name.clone()
-                        //         }
-                        //     )
-                        // }
-                        // if !var.type_match(&value.get_type()) {
-                        //     throw_err!(
-                        //         self,
-                        //         ASErreurType::ErreurType {
-                        //             type_attendu: var.get_type().clone(),
-                        //             type_obtenu: value.get_type()
-                        //         }
-                        //     );
-                        // }
-
-                        throw_err!(?, self, self.env.assign_strict(name, value));
+                        throw_err!(?, self, self.env.assign(name, value));
                     } else {
                         let static_type = eval!(opt_type, self, static_type, "Assign var type");
                         if static_type.is_some()
@@ -867,11 +951,8 @@ impl Visitor for Runner<'_> {
                 AssignVar::AccessProp { obj, prop } => {
                     let var_val = eval!(expr, self, obj, "Assign AccessProp Obj");
                     match var_val {
-                        ASObj::ASClasseInst {
-                            classe_parent,
-                            mut env,
-                        } => {
-                            env.assign_strict(prop, value);
+                        ASObj::ASClasseInst(inst) => {
+                            throw_err!(?, self, inst.env().borrow_mut().assign(prop, value));
                         }
                         _ => todo!(),
                     }
@@ -882,85 +963,75 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_stmt_opassign(&mut self, stmt: &Stmt) {
-        if let Stmt::OpAssign {
+        let Stmt::OpAssign {
             var: assign_var,
             op,
             val,
         } = stmt
-        {
-            let value = eval!(expr, self, val, "Assign valeur");
-            match assign_var {
-                AssignVar::Decl(DeclVar::Var {
-                    name,
-                    static_type,
-                    is_const,
-                }) => {
-                    if let Some((var, old_val)) = self.env.get_var(name) {
-                        if var.is_const() {
-                            throw_err!(
-                                self,
-                                ASErreurType::AffectationConstante {
-                                    var_name: name.clone()
-                                }
-                            )
-                        }
+        else {
+            unreachable!()
+        };
 
-                        let value = Runner::<'_>::do_op(old_val.clone(), op, value);
-
-                        if !var.type_match(&value.get_type()) {
-                            throw_err!(
-                                self,
-                                ASErreurType::ErreurType {
-                                    type_attendu: var.get_type().clone(),
-                                    type_obtenu: value.get_type()
-                                }
-                            );
-                        }
-
-                        self.env.assign(name, value);
-                    } else {
-                        throw_err!(self, ASErreurType::new_variable_inconnue(name.clone()))
+        let value = eval!(expr, self, val, "Assign valeur");
+        match assign_var {
+            AssignVar::Decl(DeclVar::Var {
+                name,
+                static_type,
+                is_const,
+            }) => {
+                if let Some((var, old_val)) = self.env.get_var(name) {
+                    if var.is_const() {
+                        throw_err!(
+                            self,
+                            ASErreurType::AffectationConstante {
+                                var_name: name.clone()
+                            }
+                        )
                     }
-                }
-                AssignVar::Slice { obj, slice } => {
-                    use ASObj::*;
 
-                    let var_val = eval!(expr, self, obj, "Assign Slice Obj");
-                    let slice_val = eval!(expr, self, slice, "Assign Slice Slice");
-                    match (var_val, slice_val) {
-                        (ASListe(lst), ASEntier(i)) => {
-                            let old_value = lst.borrow()[i as usize].clone();
-                            *lst.borrow_mut().index_mut(i as usize) =
-                                Runner::<'_>::do_op(old_value, op, value);
-                        }
-                        _ => todo!(),
-                    }
-                }
-                AssignVar::AccessProp { obj, prop } => {
-                    let var_val = eval!(expr, self, obj, "Assign AccessProp Obj");
+                    let value = Runner::<'_>::do_op(old_val.clone(), op, value);
 
-                    match var_val {
-                        ASObj::ASClasseInst {
-                            classe_parent,
-                            mut env,
-                        } => {
-                            let Some(old_value) = env.get_value(prop) else {
-                                throw_err!(
-                                    self,
-                                    ASErreurType::new_erreur_access_propriete(
-                                        var_val.clone(),
-                                        prop.clone()
-                                    )
-                                );
-                            };
-                            let new_value = Runner::<'_>::do_op(old_value.clone(), op, value);
-                            env.assign_strict(prop, new_value);
-                        }
-                        _ => todo!(),
-                    }
+                    throw_err!(?, self, self.env.assign(name, value));
+                } else {
+                    throw_err!(self, ASErreurType::new_variable_inconnue(name.clone()))
                 }
-                AssignVar::Decl(_) => todo!(),
             }
+            AssignVar::Slice { obj, slice } => {
+                use ASObj::*;
+
+                let var_val = eval!(expr, self, obj, "Assign Slice Obj");
+                let slice_val = eval!(expr, self, slice, "Assign Slice Slice");
+                match (var_val, slice_val) {
+                    (ASListe(lst), ASEntier(i)) => {
+                        let old_value = lst.borrow()[i as usize].clone();
+                        *lst.borrow_mut().index_mut(i as usize) =
+                            Runner::<'_>::do_op(old_value, op, value);
+                    }
+                    _ => todo!(),
+                }
+            }
+            AssignVar::AccessProp { obj, prop } => {
+                let var_val = eval!(expr, self, obj, "Assign AccessProp Obj");
+
+                match &var_val {
+                    ASObj::ASClasseInst(inst) => {
+                        let mut env_borrow = inst.env().borrow_mut();
+                        let Some(old_value) = env_borrow.get_value(prop) else {
+                            throw_err!(
+                                self,
+                                ASErreurType::new_erreur_access_propriete(
+                                    var_val.clone(),
+                                    prop.clone()
+                                )
+                            );
+                        };
+                        let new_value = Runner::<'_>::do_op(old_value.clone(), op, value);
+                        throw_err!(?, self, env_borrow.assign(prop, new_value));
+                    }
+                    _ => todo!(),
+                }
+            }
+            AssignVar::Decl(_) => todo!(),
         }
     }
 
@@ -1174,13 +1245,51 @@ impl Visitor for Runner<'_> {
                     default_value: field.default_value.clone(),
                 })
             }
-            let as_classe = ASObj::ASClasse {
-                name: name.clone(),
-                docs: docs.clone(),
-                fields: as_fields,
-                init: todo!(),
-                methods: todo!(),
-            };
+            let as_classe = ASObj::ASClasse(Rc::new(ASClasse::new(
+                name.clone(),
+                docs.clone(),
+                as_fields,
+                {
+                    if let Some(init) = init {
+                        let init_params = self.parse_fn_params(init.params());
+                        if init_params.is_none() {
+                            return;
+                        }
+                        let return_type =
+                            eval!(opt_type, self, init.return_type(), "Init return type");
+
+                        Some(ASFonc::new(
+                            Some(init.name().clone()),
+                            init.docs().clone(),
+                            init_params.unwrap(),
+                            init.body().clone(),
+                            return_type.into(),
+                        ))
+                    } else {
+                        None
+                    }
+                },
+                {
+                    let mut methods_final = Vec::with_capacity(methods.len());
+                    for method in methods.into_iter() {
+                        let method_params = self.parse_fn_params(method.params());
+                        if method_params.is_none() {
+                            return;
+                        }
+                        let return_type =
+                            eval!(opt_type, self, method.return_type(), "Method return type");
+
+                        methods_final.push(ASFonc::new(
+                            Some(method.name().clone()),
+                            method.docs().clone(),
+                            method_params.unwrap(),
+                            method.body().clone(),
+                            return_type.into(),
+                        ))
+                    }
+                    methods_final
+                },
+            )));
             let var = ASVar::new(name.clone(), Some(ASType::Classe), true);
             let result = self.env.declare_strict(var, as_classe);
             if result.is_err() {

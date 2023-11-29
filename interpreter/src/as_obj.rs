@@ -3,12 +3,12 @@ use std::{
     collections::HashMap,
     fmt::Display,
     ops::{Add, BitXor, Div, Mul, Rem, Sub},
-    rc::Rc,
+    rc::{Rc, Weak},
     str::FromStr,
 };
 
-use derive_new::new;
 use derive_getters::Getters;
+use derive_new::new;
 
 use crate::{
     ast::{Expr, Stmt},
@@ -40,22 +40,24 @@ pub enum ASObj {
 
     ASFonc(ASFonc),
 
-    ASClasse {
-        name: String,
-        docs: Option<String>,
-        fields: Vec<ASClasseField>,
-        init: Option<ASFonc>,
-        methods: Vec<ASFonc>,
-    },
+    ASMethode(ASMethode),
+
+    ASClasse(Rc<ASClasse>),
 
     ASModule {
         env: Rc<ASScope>,
     },
 
-    ASClasseInst {
-        classe_parent: Box<ASObj>,
-        env: ASScope,
-    },
+    ASClasseInst(Rc<ASClasseInst>),
+}
+
+#[derive(Debug, Clone, new, Getters, PartialEq)]
+pub struct ASClasse {
+    name: String,
+    docs: Option<String>,
+    fields: Vec<ASClasseField>,
+    init: Option<ASFonc>,
+    methods: Vec<ASFonc>,
 }
 
 #[derive(Debug, Clone, new, Getters)]
@@ -65,6 +67,24 @@ pub struct ASFonc {
     params: Vec<ASFnParam>,
     body: Vec<Box<Stmt>>,
     return_type: ASType,
+}
+
+#[derive(Debug, Clone, new, Getters)]
+pub struct ASClasseInst {
+    classe_parent: Rc<ASClasse>,
+    env: Rc<RefCell<ASScope>>,
+}
+
+impl Into<ASObj> for Rc<ASClasseInst> {
+    fn into(self) -> ASObj {
+        ASObj::ASClasseInst(Rc::clone(&self))
+    }
+}
+
+#[derive(Debug, Clone, new, Getters)]
+pub struct ASMethode {
+    func: ASFonc,
+    inst: Weak<ASClasseInst>,
 }
 
 impl PartialEq for ASFonc {
@@ -129,6 +149,8 @@ impl ASObj {
             ASFonc { .. } => ASType::Fonction,
             ASPaire { .. } => ASType::Paire,
             ASDict(..) => ASType::Dict,
+            ASClasse(..) => ASType::Classe,
+            ASClasseInst(inst) => ASType::Objet(inst.classe_parent().name().clone()),
             as_type => todo!("Type inconnue {:?}", as_type),
         }
     }
@@ -173,7 +195,7 @@ impl ASObj {
                 .is_some()),
 
             (ASTuple(_), _) => todo!("Tuple pas encore (et peut-être jamais) dans le langage"),
-            (ASClasse { name, docs, fields }, _) => todo!("Check présense du field?"),
+            (ASClasse(classe), _) => todo!("Check présense du field?"),
             (ASModule { env }, _) => todo!(),
             _ => Err(ASErreurType::new_erreur_operation(
                 "dans".into(),
@@ -211,18 +233,12 @@ impl Clone for ASObj {
             ASListe(l) => ASListe(Rc::clone(&l)),
             ASDict(d) => ASDict(d.clone()),
             ASFonc(fonc) => ASFonc(fonc.clone()),
-            ASClasse { name, docs, fields } => ASClasse {
-                name: name.clone(),
-                docs: docs.clone(),
-                fields: fields.clone(),
-            },
+            ASClasse(classe) => ASClasse(Rc::clone(classe)),
             ASModule { env } => ASModule {
                 env: Rc::clone(env),
             },
-            ASClasseInst { classe_parent: struct_parent, env } => ASClasseInst {
-                classe_parent: struct_parent.clone(),
-                env: env.clone(),
-            },
+            ASClasseInst(inst) => ASClasseInst(Rc::clone(inst)),
+            ASMethode(methode) => ASMethode(methode.clone()),
             ASTuple(_) => todo!(),
         }
     }
@@ -240,7 +256,7 @@ impl PartialEq for ASObj {
             (ASListe(l1), ASListe(l2)) => l1 == l2,
             (ASDict(d1), ASDict(d2)) => d1 == d2,
             (ASFonc(f1), ASFonc(f2)) => f1 == f2,
-            (ASClasse { name: name1, .. }, ASClasse { name: name2, .. }) => name1 == name2,
+            (ASClasse(classe1), ASClasse(classe2)) => classe1 == classe2,
             (ASNul, ASNul) => true,
             _ => false,
         }
@@ -408,6 +424,10 @@ impl Display for ASObj {
                 v.iter().map(Self::repr).collect::<Vec<String>>().join(", ")
             ),
             ASFonc(f) => f.to_string(),
+            ASClasse(classe) => format!("classe {}", classe.name()),
+            ASClasseInst(inst) => {
+                format!("instance de classe {}", inst.classe_parent().name())
+            }
             _ => String::from("ASObj sans to_string"),
         };
         write!(f, "{}", to_string)
@@ -825,18 +845,20 @@ impl ASScope {
         self.0.into_iter()
     }
 
-    pub fn assign(&mut self, var_name: &String, val: ASObj) -> Option<(ASVar, ASObj)> {
+    pub fn assign_force(&mut self, var_name: &String, val: ASObj) -> Option<(ASVar, ASObj)> {
         let var = self.get(var_name).unwrap().0.clone();
         self.insert(var, val)
     }
 
-    pub fn assign_strict(
+    pub fn assign(
         &mut self,
         var_name: &String,
         val: ASObj,
     ) -> Result<Option<(ASVar, ASObj)>, ASErreurType> {
-        let var = &self.get(var_name).unwrap().0;
-        if var.is_const() {
+        let Some((var, old_val)) = &self.get(var_name) else {
+            return Err(ASErreurType::new_variable_inconnue(var_name.clone()));
+        };
+        if var.is_const() && old_val != &ASObj::ASNoValue {
             Err(ASErreurType::new_affectation_constante(var_name.clone()))
         } else if !var.type_match(&val.get_type()) {
             Err(ASErreurType::new_erreur_type(
@@ -927,19 +949,18 @@ impl ASEnv {
         }
     }
 
-    pub fn assign(&mut self, var_name: &String, val: ASObj) -> Option<(ASVar, ASObj)> {
+    pub fn assign_force(&mut self, var_name: &String, val: ASObj) -> Option<(ASVar, ASObj)> {
         let scope = self.get_env_of_var(var_name);
-        let var = scope.get(var_name).unwrap().0.clone();
-        self.get_env_of_var(var_name).insert(var, val)
+        scope.assign_force(var_name, val)
     }
 
-    pub fn assign_strict(
+    pub fn assign(
         &mut self,
         var_name: &String,
         val: ASObj,
     ) -> Result<Option<(ASVar, ASObj)>, ASErreurType> {
         let scope = self.get_env_of_var(var_name);
-        scope.assign_strict(var_name, val)
+        scope.assign(var_name, val)
     }
 }
 
@@ -1075,9 +1096,9 @@ impl Display for ASErreurType {
 
             ErreurClef { mauvaise_clef } => format!("La clef {} n'est pas dans le dictionnaire", mauvaise_clef.repr()),
 
-            ErreurAccessPropriete { obj, prop } => format!("La propriété {} n'existe pas dans {}", obj, prop),
+            ErreurAccessPropriete { obj, prop } => format!("La propriété {} n'existe pas dans {}", prop, obj),
 
-            ErreurProprietePasInit { obj, prop } => format!("La propriété {} n'est pas initialisé dans {}", obj, prop),
+            ErreurProprietePasInit { obj, prop } => format!("La propriété {} n'est pas initialisé dans {}", prop, obj),
 
             ErreurSuiteInvalide { start, end, step } => {
                 format!("Suite invalide: {} .. {} bond {}", start, end, step)

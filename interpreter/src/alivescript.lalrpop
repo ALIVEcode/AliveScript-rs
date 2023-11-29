@@ -59,9 +59,9 @@ pub Stmt: Box<Stmt> = {
         <body:Script> "fin" "fonction" "eos" => Box::new(Stmt::DefFn(DefFn::new(<>))),
 
     <docs:(<"DOCS"> "eos"*)?> "classe" <name:"ident"> "eos" 
-        <fields:ClasseFieldDecl*> 
-        <init:ClasseInit?> 
-        <methods:ClasseMethode*> 
+        <fields:(<ClasseFieldDecl> "eos"*)*> 
+        <init:(<ClasseInit> "eos"*)?> 
+        <methods:(<ClasseMethode> "eos"*)*> 
         "fin" "classe" "eos" => 
             Box::new(Stmt::DefClasse { <> }),
 
@@ -94,7 +94,7 @@ ClasseFieldDecl: ClasseField = {
 ClasseInit: DefFn = {
     "init" "(" <params:Comma<FnParam>> ")" "eos"
         <body:Script> "fin" "init" "eos" => 
-            DefFn::new(None, "@init".to_owned(), params, Some(Type::Lit("rien".to_owned())), body),
+            DefFn::new(None, "@init".to_owned(), params, Some(Box::new(Type::Lit("rien".to_owned()))), body),
 };
 
 #[inline]
@@ -326,7 +326,7 @@ pub Term: Box<Expr> = {
 
   //StructInst,
 
-  <obj:Term> "." <prop:"ident"> => Box::new(Expr::AccessProp{<>}),
+  AccessProp,
 
   "ident" => Box::new(Expr::Ident(<>)),
 
@@ -338,6 +338,10 @@ pub Term: Box<Expr> = {
 
   Collection,
 };
+
+#[inline]
+AccessProp: Box<Expr> = 
+    <obj:Term> "." <prop:"ident"> => Box::new(Expr::AccessProp{<>});
 
 #[inline]
 TermExpr: Box<Expr> = "(" "eos"* <Expr> "eos"* ")";
@@ -422,8 +426,17 @@ AssignVar: AssignVar = {
             },
             _ => unreachable!(),
         }
+    },
+    <expr:AccessProp> => {
+        match *expr {
+            Expr::AccessProp { obj, prop } => AssignVar::AccessProp {
+                obj,
+                prop,
+            },
+            _ => unreachable!(),
+        }
     }
-}
+};
 
 Lit: Expr = {
   "bool" => Expr::Lit(ASObj::ASBooleen(<>)),
