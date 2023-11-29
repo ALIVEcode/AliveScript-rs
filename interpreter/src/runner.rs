@@ -508,14 +508,17 @@ impl Visitor for Runner<'_> {
 
                 let inst = Rc::new(ASClasseInst::new(Rc::clone(&classe), Rc::clone(&env)));
 
-                for methode in classe.methods() {
+                for fonction in classe.methods() {
                     env.borrow_mut().declare(
                         ASVar::new(
-                            methode.name().as_ref().unwrap().clone(),
+                            fonction.name().as_ref().unwrap().clone(),
                             Some(ASType::Fonction),
                             true,
                         ),
-                        ASObj::ASMethode(ASMethode::new(methode.clone(), Rc::downgrade(&inst))),
+                        ASObj::ASMethode(Rc::new(ASMethode::new(
+                            Rc::clone(fonction),
+                            Rc::clone(&inst),
+                        ))),
                     );
                 }
 
@@ -530,7 +533,7 @@ impl Visitor for Runner<'_> {
 
                 if let Some(init) = classe.init() {
                     let to_call = Expr::FnCall {
-                        func: Expr::literal(ASObj::ASFonc(init.clone())),
+                        func: Expr::literal(ASObj::ASFonc(Rc::clone(init))),
                         args: args.clone(),
                     };
                     self.env.push_scope(init_env);
@@ -555,11 +558,7 @@ impl Visitor for Runner<'_> {
                 self.push_value(ASObj::ASClasseInst(Rc::clone(&inst)));
             }
             ASObj::ASMethode(methode) => {
-                let inst: ASObj = methode
-                    .inst()
-                    .upgrade()
-                    .expect("L'instance n'existe plus")
-                    .into();
+                let inst: ASObj = methode.inst().into();
 
                 let methode_env = ASScope::from(vec![(
                     ASVar::new("inst".into(), Some(inst.get_type()), true),
@@ -1226,17 +1225,17 @@ impl Visitor for Runner<'_> {
                 ))
             }
 
-            let func = ASObj::asfonc(
+            let func = Rc::new(ASFonc::new(
                 Some(f.name().clone()),
                 f.docs().clone(),
                 params_fonc,
                 f.body().clone(),
-                return_type,
-            );
+                return_type.into(),
+            ));
 
             let func_var = ASVar::new(f.name().clone(), Some(ASType::Fonction), true);
 
-            self.env.declare(func_var, func);
+            self.env.declare(func_var, ASObj::ASFonc(func));
         }
     }
 
@@ -1286,13 +1285,13 @@ impl Visitor for Runner<'_> {
                         let return_type =
                             eval!(opt_type, self, init.return_type(), "Init return type");
 
-                        Some(ASFonc::new(
+                        Some(Rc::new(ASFonc::new(
                             Some(format!("{}@init", name)),
                             init.docs().clone(),
                             init_params.unwrap(),
                             init.body().clone(),
                             return_type.into(),
-                        ))
+                        )))
                     } else {
                         None
                     }
@@ -1307,13 +1306,13 @@ impl Visitor for Runner<'_> {
                         let return_type =
                             eval!(opt_type, self, method.return_type(), "Method return type");
 
-                        methods_final.push(ASFonc::new(
+                        methods_final.push(Rc::new(ASFonc::new(
                             Some(method.name().clone()),
                             method.docs().clone(),
                             method_params.unwrap(),
                             method.body().clone(),
                             return_type.into(),
-                        ))
+                        )))
                     }
                     methods_final
                 },

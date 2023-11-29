@@ -16,3 +16,8 @@ fn suite() {
 fn booleen() {
     run_test("tests/test_data/test_bool.as", &vec![]);
 }
+
+#[test]
+fn test_classe1() {
+    run_test("tests/test_classe/test1.as", &vec![]);
+}

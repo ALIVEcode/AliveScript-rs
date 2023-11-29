@@ -3,7 +3,8 @@ use std::{
     collections::HashMap,
     fmt::Display,
     ops::{Add, BitXor, Div, Mul, Rem, Sub},
-    rc::{Rc, Weak},
+    ptr,
+    rc::Rc,
     str::FromStr,
 };
 
@@ -38,9 +39,9 @@ pub enum ASObj {
     /// Les éléments du vecteur sont tous garanti d'être des [`ASObj::ASPaire`]
     ASDict(Vec<ASObj>),
 
-    ASFonc(ASFonc),
+    ASFonc(Rc<ASFonc>),
 
-    ASMethode(ASMethode),
+    ASMethode(Rc<ASMethode>),
 
     ASClasse(Rc<ASClasse>),
 
@@ -56,8 +57,8 @@ pub struct ASClasse {
     name: String,
     docs: Option<String>,
     fields: Vec<ASClasseField>,
-    init: Option<ASFonc>,
-    methods: Vec<ASFonc>,
+    init: Option<Rc<ASFonc>>,
+    methods: Vec<Rc<ASFonc>>,
 }
 
 #[derive(Debug, Clone, new, Getters)]
@@ -69,48 +70,9 @@ pub struct ASFonc {
     return_type: ASType,
 }
 
-#[derive(Debug, Clone, new, Getters)]
-pub struct ASClasseInst {
-    classe_parent: Rc<ASClasse>,
-    env: Rc<RefCell<ASScope>>,
-}
-
-impl Into<ASObj> for Rc<ASClasseInst> {
-    fn into(self) -> ASObj {
-        ASObj::ASClasseInst(Rc::clone(&self))
-    }
-}
-
-impl Display for ASClasseInst {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let to_string = format!(
-            "{}({})",
-            self.classe_parent.name(),
-            self.classe_parent
-                .fields()
-                .iter()
-                .map(|field| format!(
-                    "{}={}",
-                    field.name,
-                    self.env.borrow().get_value(&field.name).unwrap().repr()
-                ))
-                .collect::<Vec<String>>()
-                .join(", ")
-        );
-
-        write!(f, "{}", to_string)
-    }
-}
-
-#[derive(Debug, Clone, new, Getters)]
-pub struct ASMethode {
-    func: ASFonc,
-    inst: Weak<ASClasseInst>,
-}
-
 impl PartialEq for ASFonc {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
+        ptr::eq(self, other)
     }
 }
 
@@ -130,17 +92,89 @@ impl Display for ASFonc {
     }
 }
 
-impl ASObj {
-    pub fn asfonc(
-        name: Option<String>,
-        docs: Option<String>,
-        params: Vec<ASFnParam>,
-        body: Vec<Box<Stmt>>,
-        return_type: Option<ASType>,
-    ) -> Self {
-        Self::ASFonc(ASFonc::new(name, docs, params, body, return_type.into()))
-    }
+#[derive(Debug, Clone, new, Getters)]
+pub struct ASClasseInst {
+    classe_parent: Rc<ASClasse>,
+    env: Rc<RefCell<ASScope>>,
+}
 
+type ObjPtr = usize;
+type Label = usize;
+type Seen = bool;
+
+impl ASClasseInst {
+    pub fn recursive_repr(
+        &self,
+        seen_map: Option<Rc<RefCell<HashMap<ObjPtr, (Label, Seen)>>>>,
+    ) -> String {
+        let seen_map = seen_map.unwrap_or_else(|| Rc::new(RefCell::new(HashMap::new())));
+
+        let hash = self as *const ASClasseInst as usize;
+        let maybe_label = {
+            let seen_map_borrow = seen_map.borrow();
+            seen_map_borrow.get(&hash).map(|(label, seen)| *label)
+        };
+        if let Some(label) = maybe_label {
+            seen_map.borrow_mut().insert(hash, (label, true));
+            return format!("{}@{}(...)", label, self.classe_parent.name());
+        }
+
+        let label = seen_map.borrow().len() + 1;
+        {
+            let mut seen_t = seen_map.borrow_mut();
+            seen_t.insert(hash, (label, false));
+        }
+
+        let env = self.env.borrow();
+        let fields = self
+            .classe_parent
+            .fields()
+            .iter()
+            .map(|field| {
+                let field_val = env.get_value(&field.name).unwrap();
+                format!("{}={}", field.name, field_val.recursive_repr(Some(Rc::clone(&seen_map))))
+            })
+            .collect::<Vec<String>>();
+
+        let seen = seen_map.borrow()[&hash].1;
+        format!(
+            "{}{}({})",
+            if seen {
+                format!("{}@", label)
+            } else {
+                "".into()
+            },
+            self.classe_parent.name(),
+            fields.join(", "),
+        )
+    }
+}
+
+impl PartialEq for ASClasseInst {
+    fn eq(&self, other: &Self) -> bool {
+        ptr::eq(self, other)
+    }
+}
+
+impl Into<ASObj> for &Rc<ASClasseInst> {
+    fn into(self) -> ASObj {
+        ASObj::ASClasseInst(Rc::clone(self))
+    }
+}
+
+impl Display for ASClasseInst {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.recursive_repr(None))
+    }
+}
+
+#[derive(Debug, Clone, new, Getters)]
+pub struct ASMethode {
+    func: Rc<ASFonc>,
+    inst: Rc<ASClasseInst>,
+}
+
+impl ASObj {
     pub fn native_fn(
         name: &str,
         docs: Option<&str>,
@@ -148,13 +182,13 @@ impl ASObj {
         body: fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>,
         return_type: ASType,
     ) -> ASObj {
-        Self::ASFonc(ASFonc::new(
+        Self::ASFonc(Rc::new(ASFonc::new(
             Some(name.into()),
             docs.map(|docs| docs.into()),
             params,
             vec![Stmt::native_fn(body)],
             return_type,
-        ))
+        )))
     }
 
     pub fn get_type(&self) -> ASType {
@@ -227,10 +261,92 @@ impl ASObj {
     }
 
     pub fn repr(&self) -> String {
+        self.recursive_repr(None)
+    }
+
+    /// Repr récursif, utilisé pour les listes, les dicts, etc.
+    pub fn recursive_repr(
+        &self,
+        seen_map: Option<Rc<RefCell<HashMap<ObjPtr, (Label, Seen)>>>>,
+    ) -> String {
         use ASObj::*;
+
+        let seen_map = seen_map.unwrap_or_else(|| Rc::new(RefCell::new(HashMap::new())));
 
         match self {
             ASTexte(s) => format!("\"{}\"", s),
+            ASListe(l) => {
+                let hash = l.as_ptr() as usize;
+                let maybe_label = {
+                    let seen_map_borrow = seen_map.borrow();
+                    seen_map_borrow.get(&hash).map(|(label, seen)| *label)
+                };
+                if let Some(label) = maybe_label {
+                    seen_map.borrow_mut().insert(hash, (label, true));
+                    return format!("{}@[...]", label);
+                }
+
+                let label = seen_map.borrow().len() + 1;
+
+                {
+                    let mut seen_t = seen_map.borrow_mut();
+                    seen_t.insert(hash, (label, false));
+                }
+
+                let res = l
+                    .borrow()
+                    .iter()
+                    .map(|el| el.recursive_repr(Some(Rc::clone(&seen_map))))
+                    .collect::<Vec<_>>();
+
+                let seen = seen_map.borrow()[&hash].1;
+
+                format!(
+                    "{}[{}]",
+                    if seen {
+                        format!("{}@", label)
+                    } else {
+                        "".into()
+                    },
+                    res.join(", ")
+                )
+            }
+            ASDict(d) => {
+                let hash = d.as_ptr() as usize;
+                let maybe_label = {
+                    let seen_map_borrow = seen_map.borrow();
+                    seen_map_borrow.get(&hash).map(|(label, seen)| *label)
+                };
+                if let Some(label) = maybe_label {
+                    seen_map.borrow_mut().insert(hash, (label, true));
+                    return format!("{}@{{...}}", label);
+                }
+
+                let label = seen_map.borrow().len() + 1;
+
+                {
+                    let mut seen_t = seen_map.borrow_mut();
+                    seen_t.insert(hash, (label, false));
+                }
+
+                let res = d
+                    .iter()
+                    .map(|el| el.recursive_repr(Some(Rc::clone(&seen_map))))
+                    .collect::<Vec<_>>();
+
+                let seen = seen_map.borrow()[&hash].1;
+
+                format!(
+                    "{}{{{}}}",
+                    if seen {
+                        format!("{}@", label)
+                    } else {
+                        "".into()
+                    },
+                    res.join(", ")
+                )
+            }
+            ASClasseInst(inst) => inst.recursive_repr(Some(Rc::clone(&seen_map))),
             o => o.to_string(),
         }
     }
@@ -278,6 +394,7 @@ impl PartialEq for ASObj {
             (ASDict(d1), ASDict(d2)) => d1 == d2,
             (ASFonc(f1), ASFonc(f2)) => f1 == f2,
             (ASClasse(classe1), ASClasse(classe2)) => classe1 == classe2,
+            (ASClasseInst(inst1), ASClasseInst(inst2)) => inst1 == inst2,
             (ASNul, ASNul) => true,
             _ => false,
         }
@@ -587,31 +704,29 @@ pub enum ASType {
 }
 
 impl ASType {
-    pub fn default_value(&self) -> ASObj {
+    pub fn default_value(&self) -> Result<ASObj, ASErreurType> {
         use ASObj::*;
         use ASType::*;
 
         match self {
-            Tout => ASEntier(0),
-            Rien => todo!(),
-            Nul => ASNul,
-            Entier => ASEntier(0),
-            Decimal => ASDecimal(0f64),
-            Booleen => ASBooleen(false),
-            Texte => ASTexte("".into()),
-            Liste => ASListe(Rc::new(RefCell::new(vec![]))),
-            Paire => ASPaire {
+            Rien | Nul | Optional(_) => Ok(ASNul),
+            Tout => Ok(ASEntier(0)),
+            Entier => Ok(ASEntier(0)),
+            Decimal => Ok(ASDecimal(0f64)),
+            Booleen => Ok(ASBooleen(false)),
+            Texte => Ok(ASTexte("".into())),
+            Liste => Ok(ASListe(Rc::new(RefCell::new(vec![])))),
+            Paire => Ok(ASPaire {
                 key: Box::new(ASNul),
                 val: Box::new(ASNul),
-            },
-            Dict => ASDict(vec![]),
+            }),
+            Dict => Ok(ASDict(vec![])),
             Fonction => todo!(),
             Classe => todo!(),
             Module => todo!(),
             Objet(_) => todo!(),
             Union(_) => todo!(),
             Tuple(_) => todo!(),
-            Optional(_) => todo!(),
         }
     }
 
