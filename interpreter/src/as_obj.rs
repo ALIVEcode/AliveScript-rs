@@ -116,7 +116,7 @@ impl ASClasseInst {
         };
         if let Some(label) = maybe_label {
             seen_map.borrow_mut().insert(hash, (label, true));
-            return format!("{}@{}(...)", label, self.classe_parent.name());
+            return format!("{}@<{}>(...)", self.classe_parent.name(), label);
         }
 
         let label = seen_map.borrow().len() + 1;
@@ -132,19 +132,23 @@ impl ASClasseInst {
             .iter()
             .map(|field| {
                 let field_val = env.get_value(&field.name).unwrap();
-                format!("{}={}", field.name, field_val.recursive_repr(Some(Rc::clone(&seen_map))))
+                format!(
+                    "{}={}",
+                    field.name,
+                    field_val.recursive_repr(Some(Rc::clone(&seen_map)))
+                )
             })
             .collect::<Vec<String>>();
 
         let seen = seen_map.borrow()[&hash].1;
         format!(
             "{}{}({})",
+            self.classe_parent.name(),
             if seen {
-                format!("{}@", label)
+                format!("@<{}>", label)
             } else {
                 "".into()
             },
-            self.classe_parent.name(),
             fields.join(", "),
         )
     }
@@ -283,7 +287,7 @@ impl ASObj {
                 };
                 if let Some(label) = maybe_label {
                     seen_map.borrow_mut().insert(hash, (label, true));
-                    return format!("{}@[...]", label);
+                    return format!("<{}>@[...]", label);
                 }
 
                 let label = seen_map.borrow().len() + 1;
@@ -304,7 +308,7 @@ impl ASObj {
                 format!(
                     "{}[{}]",
                     if seen {
-                        format!("{}@", label)
+                        format!("<{}>@", label)
                     } else {
                         "".into()
                     },
@@ -319,7 +323,7 @@ impl ASObj {
                 };
                 if let Some(label) = maybe_label {
                     seen_map.borrow_mut().insert(hash, (label, true));
-                    return format!("{}@{{...}}", label);
+                    return format!("<{}>@{{...}}", label);
                 }
 
                 let label = seen_map.borrow().len() + 1;
@@ -339,7 +343,7 @@ impl ASObj {
                 format!(
                     "{}{{{}}}",
                     if seen {
-                        format!("{}@", label)
+                        format!("<{}>@", label)
                     } else {
                         "".into()
                     },
