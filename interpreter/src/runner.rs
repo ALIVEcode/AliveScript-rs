@@ -264,7 +264,7 @@ impl Visitor for Runner<'_> {
                 let val = eval!(expr, self, expr, "Element de dict");
                 dict.push(val);
             }
-            self.push_value(ASObj::ASDict(dict));
+            self.push_value(ASObj::ASDict(Rc::new(RefCell::new(dict))));
         }
     }
 
@@ -374,7 +374,8 @@ impl Visitor for Runner<'_> {
                     ASObj::ASTexte(txt_final)
                 }
                 (ASObj::ASDict(dict), clef) => {
-                    let el = dict.into_iter().find(
+                    let d = dict.borrow();
+                    let el = d.iter().find(
                         |el| matches!(el, ASObj::ASPaire { key, val } if *key.deref() == clef),
                     );
                     match el {
@@ -971,6 +972,23 @@ impl Visitor for Runner<'_> {
                     match (var_val, slice_val) {
                         (ASListe(lst), ASEntier(i)) => {
                             *lst.borrow_mut().index_mut(i as usize) = value;
+                        }
+                        (ASDict(d), obj) => {
+                            let mut d = d.borrow_mut();
+                            let el = d.iter_mut().find(
+                                |el| matches!(el, ASPaire { key, val } if key.as_ref() == &obj),
+                            );
+                            if let Some(el) = el {
+                                *el = ASObj::ASPaire {
+                                    key: Box::new(obj),
+                                    val: Box::new(value),
+                                };
+                            } else {
+                                d.push(ASObj::ASPaire {
+                                    key: Box::new(obj),
+                                    val: Box::new(value),
+                                });
+                            }
                         }
                         _ => todo!(),
                     }

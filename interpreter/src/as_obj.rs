@@ -37,7 +37,7 @@ pub enum ASObj {
     ASTexte(String),
     ASListe(Rc<RefCell<Vec<ASObj>>>),
     /// Les éléments du vecteur sont tous garanti d'être des [`ASObj::ASPaire`]
-    ASDict(Vec<ASObj>),
+    ASDict(Rc<RefCell<Vec<ASObj>>>),
 
     ASFonc(Rc<ASFonc>),
 
@@ -116,7 +116,7 @@ impl ASClasseInst {
         };
         if let Some(label) = maybe_label {
             seen_map.borrow_mut().insert(hash, (label, true));
-            return format!("{}@<{}>(...)", self.classe_parent.name(), label);
+            return format!("{}@<{}>", self.classe_parent.name(), label);
         }
 
         let label = seen_map.borrow().len() + 1;
@@ -224,7 +224,7 @@ impl ASObj {
             ASBooleen(b) => *b,
             ASNul => false,
             ASListe(l) => !l.borrow().is_empty(),
-            ASDict(d) => !d.is_empty(),
+            ASDict(d) => !d.borrow().is_empty(),
             _ => true,
         }
     }
@@ -249,7 +249,8 @@ impl ASObj {
             (ASTexte(s), ASTexte(sub_s)) => Ok(s.contains(sub_s)),
             (ASListe(l), rhs) => Ok(l.borrow().contains(rhs)),
             (ASDict(d), rhs) => Ok(d
-                .into_iter()
+                .borrow()
+                .iter()
                 .find(|el| matches!(el, ASPaire { key, val } if key.as_ref() == rhs))
                 .is_some()),
 
@@ -287,7 +288,7 @@ impl ASObj {
                 };
                 if let Some(label) = maybe_label {
                     seen_map.borrow_mut().insert(hash, (label, true));
-                    return format!("<{}>@[...]", label);
+                    return format!("[<{}>]", label);
                 }
 
                 let label = seen_map.borrow().len() + 1;
@@ -323,7 +324,7 @@ impl ASObj {
                 };
                 if let Some(label) = maybe_label {
                     seen_map.borrow_mut().insert(hash, (label, true));
-                    return format!("<{}>@{{...}}", label);
+                    return format!("{{<{}>}}", label);
                 }
 
                 let label = seen_map.borrow().len() + 1;
@@ -334,6 +335,7 @@ impl ASObj {
                 }
 
                 let res = d
+                    .borrow()
                     .iter()
                     .map(|el| el.recursive_repr(Some(Rc::clone(&seen_map))))
                     .collect::<Vec<_>>();
@@ -350,6 +352,11 @@ impl ASObj {
                     res.join(", ")
                 )
             }
+            ASPaire { key, val } => format!(
+                "{}: {}",
+                key.recursive_repr(Some(Rc::clone(&seen_map))),
+                val.recursive_repr(Some(Rc::clone(&seen_map)))
+            ),
             ASClasseInst(inst) => inst.recursive_repr(Some(Rc::clone(&seen_map))),
             o => o.to_string(),
         }
@@ -552,22 +559,8 @@ impl Display for ASObj {
             ASTexte(s) => s.clone(),
             ASBooleen(b) => if *b { "vrai" } else { "faux" }.into(),
             ASNul => "nul".into(),
-            ASPaire { key, val } => format!("{}: {}", key.repr(), val.repr()),
-            ASListe(v) => format!(
-                "[{}]",
-                v.borrow()
-                    .iter()
-                    .map(Self::repr)
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            ASDict(v) => format!(
-                "{{{}}}",
-                v.iter().map(Self::repr).collect::<Vec<String>>().join(", ")
-            ),
-            ASFonc(f) => f.to_string(),
+            ASPaire { .. } | ASListe(_) | ASDict(_) | ASClasseInst(_) => self.repr(),
             ASClasse(classe) => format!("classe {}", classe.name()),
-            ASClasseInst(inst) => inst.to_string(),
             _ => String::from("ASObj sans to_string"),
         };
         write!(f, "{}", to_string)
@@ -724,7 +717,7 @@ impl ASType {
                 key: Box::new(ASNul),
                 val: Box::new(ASNul),
             }),
-            Dict => Ok(ASDict(vec![])),
+            Dict => Ok(ASDict(Rc::new(RefCell::new(vec![])))),
             Fonction => todo!(),
             Classe => todo!(),
             Module => todo!(),

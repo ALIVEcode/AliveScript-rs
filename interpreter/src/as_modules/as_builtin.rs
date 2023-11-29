@@ -29,7 +29,7 @@ as_mod! {
             Ok(Some(ASObj::ASEntier(match obj {
                 ASObj::ASTexte(t) => t.len(),
                 ASObj::ASListe(l) => l.borrow().len(),
-                ASObj::ASDict(d) => d.len(),
+                ASObj::ASDict(d) => d.borrow().len(),
                 _ => unreachable!()
             } as i64)))
         }

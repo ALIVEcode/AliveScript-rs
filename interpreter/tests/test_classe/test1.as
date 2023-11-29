@@ -52,3 +52,6 @@ x[2] = x
 x[2][0] = 7
 afficher x[2][2][2]
 
+y = { a: "1", b: 23 }
+y["c"] = y
+afficher y
