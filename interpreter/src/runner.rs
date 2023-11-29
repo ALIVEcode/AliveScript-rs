@@ -399,6 +399,16 @@ impl Visitor for Runner<'_> {
         match expr {
             ASObj::ASFonc(f) => {
                 let mut env = ASScope::new();
+                if f.params().len() < args.len() {
+                    throw_err!(
+                        self,
+                        ASErreurType::new_erreur_nb_args(
+                            f.name().clone(),
+                            f.params().len(),
+                            args.len()
+                        )
+                    );
+                }
                 let mut args_iter = args.iter();
 
                 // Set params dans env local de la fonction
@@ -422,7 +432,14 @@ impl Visitor for Runner<'_> {
                         let default_val = eval!(expr, self, default_expr, "FnCall default param");
                         env.insert(param.to_asvar(), default_val);
                     } else {
-                        panic!("Paramètre sans valeur")
+                        throw_err!(
+                            self,
+                            ASErreurType::new_erreur_nb_args(
+                                f.name().clone(),
+                                f.params().len(),
+                                args.len()
+                            )
+                        );
                     }
                 }
 
@@ -521,6 +538,17 @@ impl Visitor for Runner<'_> {
                     self.env.pop_scope();
                     if self.error_thrown() {
                         return;
+                    }
+                } else {
+                    if args.len() > 0 {
+                        throw_err!(
+                            self,
+                            ASErreurType::new_erreur_nb_args(
+                                Some(format!("{}@init", classe.name().clone())),
+                                0,
+                                args.len()
+                            )
+                        );
                     }
                 }
 
@@ -1259,7 +1287,7 @@ impl Visitor for Runner<'_> {
                             eval!(opt_type, self, init.return_type(), "Init return type");
 
                         Some(ASFonc::new(
-                            Some(init.name().clone()),
+                            Some(format!("{}@init", name)),
                             init.docs().clone(),
                             init_params.unwrap(),
                             init.body().clone(),

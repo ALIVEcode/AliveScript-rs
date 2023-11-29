@@ -81,6 +81,27 @@ impl Into<ASObj> for Rc<ASClasseInst> {
     }
 }
 
+impl Display for ASClasseInst {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let to_string = format!(
+            "{}({})",
+            self.classe_parent.name(),
+            self.classe_parent
+                .fields()
+                .iter()
+                .map(|field| format!(
+                    "{}={}",
+                    field.name,
+                    self.env.borrow().get_value(&field.name).unwrap().repr()
+                ))
+                .collect::<Vec<String>>()
+                .join(", ")
+        );
+
+        write!(f, "{}", to_string)
+    }
+}
+
 #[derive(Debug, Clone, new, Getters)]
 pub struct ASMethode {
     func: ASFonc,
@@ -425,9 +446,7 @@ impl Display for ASObj {
             ),
             ASFonc(f) => f.to_string(),
             ASClasse(classe) => format!("classe {}", classe.name()),
-            ASClasseInst(inst) => {
-                format!("instance de classe {}", inst.classe_parent().name())
-            }
+            ASClasseInst(inst) => inst.to_string(),
             _ => String::from("ASObj sans to_string"),
         };
         write!(f, "{}", to_string)
@@ -990,6 +1009,11 @@ pub enum ASErreurType {
         type_attendu: ASType,
         type_obtenu: ASType,
     },
+    ErreurNbArgs {
+        func_name: Option<String>,
+        nb_attendu: usize,
+        nb_obtenu: usize,
+    },
     ErreurOperation {
         op: String,
         lhs_type: ASType,
@@ -1038,6 +1062,7 @@ impl ASErreurType {
             ASErreurType::ErreurSuiteInvalide { .. } => "SuiteInvalide",
             ASErreurType::ErreurValeur { .. } => "ErreurValeur",
             ASErreurType::ErreurAffirmation { .. } => "ErreurAffirmation",
+            ASErreurType::ErreurNbArgs { .. } => "ErreurNbArgs",
         }
     }
 }
@@ -1060,6 +1085,17 @@ impl Display for ASErreurType {
             } => format!(
                 "Erreur de type. Type attendu: '{}', type obtenu: '{}'",
                 type_attendu, type_obtenu,
+            ),
+
+            ErreurNbArgs {
+                func_name,
+                nb_attendu,
+                nb_obtenu,
+            } => format!(
+                "Nombre d'arguments invalide pour la fonction '{}'. Attendu: {}, obtenu: {}",
+                func_name.as_ref().unwrap_or(&"<sans-nom>".to_string()),
+                nb_attendu,
+                nb_obtenu,
             ),
 
             ErreurTypeRetour {

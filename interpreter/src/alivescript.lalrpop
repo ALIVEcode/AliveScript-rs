@@ -94,7 +94,7 @@ ClasseFieldDecl: ClasseField = {
 ClasseInit: DefFn = {
     "init" "(" <params:Comma<FnParam>> ")" "eos"
         <body:Script> "fin" "init" "eos" => 
-            DefFn::new(None, "@init".to_owned(), params, Some(Box::new(Type::Lit("rien".to_owned()))), body),
+            DefFn::new(None, String::new(), params, Some(Box::new(Type::Lit("rien".to_owned()))), body),
 };
 
 #[inline]
