@@ -1,4 +1,7 @@
-utiliser Test {affirmer, affirmerEgal}
+utiliser Test {
+    affirmer, 
+    affirmerEgal,
+}
 
 classe Personne
     nom: texte
