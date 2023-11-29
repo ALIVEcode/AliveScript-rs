@@ -2,7 +2,7 @@ use unindent::Unindent;
 
 use crate::{
     as_cast, as_fonction, as_mod,
-    as_obj::{ASFnParam, ASObj, ASType, ASVar},
+    as_obj::{ASErreurType, ASFnParam, ASObj, ASType, ASVar},
     as_var,
 };
 
@@ -37,6 +37,11 @@ as_mod! {
     as_fonction! {
         booleen(obj: ASType::any() => ASObj::ASBooleen(true)) -> ASType::Booleen; {
             Ok(Some(ASObj::ASBooleen(obj.to_bool())))
+        }
+    },
+    as_fonction! {
+        texte(obj: ASType::any() => ASObj::ASTexte("".to_owned())) -> ASType::Texte; {
+            Ok(Some(ASObj::ASTexte(obj.to_string())))
         }
     },
     ASVar::new_with_value(
@@ -108,6 +113,31 @@ as_mod! {
                     .map(|doc| doc.unindent().replace("\n", "\n  "))
                     .unwrap_or("<sans-documentation>".into()),
             ))))
+        }
+    },
+    as_fonction! {
+        get_attr(obj: ASType::any(), attr: ASType::Texte) -> ASType::any(); {
+            as_cast!(ASObj::ASTexte(attr) = attr);
+
+            match obj {
+                ASObj::ASClasseInst(inst) => inst
+                    .env()
+                    .borrow()
+                    .get_value(attr)
+                    .map(|v| Some(v.clone()))
+                    .ok_or_else(|| ASErreurType::new_erreur_access_propriete(obj.clone(), attr.clone())),
+                _ => Err(ASErreurType::new_erreur_access_propriete(obj.clone(), attr.clone()))
+            }
+        }
+    },
+    as_fonction! {
+        contient_attr(obj: ASType::any(), attr: ASType::Texte) -> ASType::Booleen; {
+            as_cast!(ASObj::ASTexte(attr) = attr);
+
+            match obj {
+                ASObj::ASClasseInst(inst) => Ok(Some(ASObj::ASBooleen(inst.env().borrow().get_value(attr).is_some()))),
+                _ => Err(ASErreurType::new_erreur_access_propriete(obj.clone(), attr.clone()))
+            }
         }
     },
     as_var! {
