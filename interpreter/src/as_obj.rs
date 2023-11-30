@@ -1159,6 +1159,9 @@ pub enum ASErreurType {
     ErreurFichierIntrouvable {
         fichier: String,
     },
+    ErreurModuleInvalide {
+        module: String,
+    },
 }
 
 impl ASErreurType {
@@ -1179,6 +1182,7 @@ impl ASErreurType {
             ASErreurType::ErreurAffirmation { .. } => "ErreurAffirmation",
             ASErreurType::ErreurNbArgs { .. } => "ErreurNbArgs",
             ASErreurType::ErreurFichierIntrouvable { .. } => "ErreurFichierIntrouvable",
+            ASErreurType::ErreurModuleInvalide { .. } => "ErreurModuleInvalide",
         }
     }
 }
@@ -1264,6 +1268,7 @@ impl Display for ASErreurType {
             }
 
             ErreurFichierIntrouvable { fichier } => format!("Fichier introuvable: {}", fichier),
+            ErreurModuleInvalide { module } => format!("Module introuvable: {}", module),
         };
 
         write!(f, "{}: {}", self.error_name(), to_string)

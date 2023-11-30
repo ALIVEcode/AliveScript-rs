@@ -1,6 +1,7 @@
 use std::{
     cell::RefCell,
     ops::{Deref, IndexMut},
+    path::Path,
     rc::Rc,
     str::FromStr,
 };
@@ -914,6 +915,14 @@ impl Visitor for Runner<'_> {
         } = stmt
         {
             if *is_path {
+                let p = Path::new(module);
+                let module_name = p.file_name().unwrap().to_str().unwrap().strip_suffix(".as");
+                if module_name.is_none() {
+                    throw_err!(
+                        self,
+                        ASErreurType::new_erreur_module_invalide(module.clone())
+                    );
+                }
                 let script = self.request_data(Data::GetFichier(module.clone()));
                 let Some(Response::Text(script)) = script else {
                     throw_err!(
@@ -922,7 +931,13 @@ impl Visitor for Runner<'_> {
                     );
                 };
                 let mod_scope = &Rc::new(self.run_script(script).unwrap());
-                ASModuleBuiltin::load_from_scope(mod_scope, "".into(), alias, vars, &mut self.env)
+                ASModuleBuiltin::load_from_scope(
+                    mod_scope,
+                    module_name.unwrap().to_owned(),
+                    alias,
+                    vars,
+                    &mut self.env,
+                )
             } else {
                 ASModuleBuiltin::from(module.as_str()).load(alias, vars, &mut self.env);
             }
