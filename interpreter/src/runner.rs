@@ -17,6 +17,7 @@ use crate::{
     },
     data::{Data, Response},
     io::InterpretorIO,
+    run_script_with_runner,
     visitor::{Visitable, Visitor},
 };
 
@@ -204,6 +205,19 @@ impl<'a> Runner<'a> {
             ))
         }
         Some(params_fonc)
+    }
+
+    fn run_script(&mut self, script: String) -> Option<ASScope> {
+        let expr_results = self.expr_results.clone();
+        let type_results = self.type_results.clone();
+        self.env.push_scope(ASScope::new());
+        run_script_with_runner(script, self);
+        if self.error_thrown() {
+            return None;
+        }
+        self.expr_results = expr_results;
+        self.type_results = type_results;
+        self.env.pop_scope()
     }
 }
 
@@ -896,9 +910,22 @@ impl Visitor for Runner<'_> {
             module,
             alias,
             vars,
+            is_path,
         } = stmt
         {
-            ASModuleBuiltin::from(module.as_str()).load(alias, vars, &mut self.env);
+            if *is_path {
+                let script = self.request_data(Data::GetFichier(module.clone()));
+                let Some(Response::Text(script)) = script else {
+                    throw_err!(
+                        self,
+                        ASErreurType::new_erreur_fichier_introuvable(module.clone())
+                    );
+                };
+                let mod_scope = &Rc::new(self.run_script(script).unwrap());
+                ASModuleBuiltin::load_from_scope(mod_scope, "".into(), alias, vars, &mut self.env)
+            } else {
+                ASModuleBuiltin::from(module.as_str()).load(alias, vars, &mut self.env);
+            }
         }
     }
 

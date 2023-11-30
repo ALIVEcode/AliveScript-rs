@@ -18,6 +18,7 @@ pub enum Stmt {
         alias: Option<String>,
         // None signifie tout utiliser
         vars: Option<Vec<String>>,
+        is_path: bool,
     },
 
     /// Afficher

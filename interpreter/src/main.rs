@@ -15,9 +15,7 @@ impl InterpretorIO for IO {
         match data {
             Data::Afficher(s) => println!("{}", s),
             Data::Erreur { texte, ligne } => println!("{}", texte),
-            Data::Demander { prompt } => todo!(),
-            Data::NotifInfo { msg } => todo!(),
-            Data::NotifErr { msg } => todo!(),
+            _ => todo!(),
         }
     }
     fn request(&mut self, data: Data) -> Option<Response> {
@@ -30,6 +28,10 @@ impl InterpretorIO for IO {
                 let mut line = String::new();
                 std::io::stdin().read_line(&mut line).unwrap();
                 Some(Response::Text(line))
+            }
+            Data::GetFichier(file_path) => {
+                let content = std::fs::read_to_string(file_path).ok()?;
+                Some(Response::Text(content))
             }
             Data::NotifInfo { msg } => todo!(),
             Data::NotifErr { msg } => todo!(),

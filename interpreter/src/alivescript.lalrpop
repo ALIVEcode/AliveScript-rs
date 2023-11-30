@@ -27,11 +27,18 @@ pub Stmt: Box<Stmt> = {
     <SubStmt> "eos",
 
     "utiliser" <module:"ident"> "eos" => 
-        Box::new(Stmt::Utiliser { module, alias: None, vars: None } ),
+        Box::new(Stmt::Utiliser { module, alias: None, vars: None, is_path: false } ),
     "utiliser" <module:"ident"> <alias:ModuleIdent?> <vars:CommaCollection<"{", "}", "ident">> "eos" => 
-        Box::new(Stmt::Utiliser { module, alias, vars: Some(vars) } ),
+        Box::new(Stmt::Utiliser { module, alias, vars: Some(vars), is_path: false } ),
     "utiliser" <module:"ident"> <alias:ModuleIdent?> "{" "*" "}" "eos" => 
-        Box::new(Stmt::Utiliser { module, alias, vars: Some(vec![String::from("*")]) }),
+        Box::new(Stmt::Utiliser { module, alias, vars: Some(vec![String::from("*")]), is_path: false }),
+
+    "utiliser" <module:"text"> <alias:"ident"> "eos" => 
+        Box::new(Stmt::Utiliser { module, alias: Some(alias), vars: None, is_path: true } ),
+    "utiliser" <module:"text"> <alias:ModuleIdent?> <vars:CommaCollection<"{", "}", "ident">> "eos" => 
+        Box::new(Stmt::Utiliser { module, alias, vars: Some(vars), is_path: true } ),
+    "utiliser" <module:"text"> <alias:ModuleIdent?> "{" "*" "}" "eos" => 
+        Box::new(Stmt::Utiliser { module, alias, vars: Some(vec![String::from("*")]), is_path: true }),
 
     <var:DeclVar> "assign" <val:Expr> "eos" => Box::new(Stmt::Decl { <> }),
 

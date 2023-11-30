@@ -5,6 +5,7 @@ pub enum Data {
     Afficher(String),
     Erreur { texte: String, ligne: usize },
     Demander { prompt: Option<String> },
+    GetFichier(String),
     NotifInfo { msg: String },
     NotifErr { msg: String },
 }
@@ -17,5 +18,5 @@ impl Data {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Response {
-    Text(String)
+    Text(String),
 }

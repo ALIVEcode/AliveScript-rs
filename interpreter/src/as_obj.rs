@@ -1156,6 +1156,9 @@ pub enum ASErreurType {
         attendu: ASObj,
         obtenu: ASObj,
     },
+    ErreurFichierIntrouvable {
+        fichier: String,
+    },
 }
 
 impl ASErreurType {
@@ -1175,6 +1178,7 @@ impl ASErreurType {
             ASErreurType::ErreurValeur { .. } => "ErreurValeur",
             ASErreurType::ErreurAffirmation { .. } => "ErreurAffirmation",
             ASErreurType::ErreurNbArgs { .. } => "ErreurNbArgs",
+            ASErreurType::ErreurFichierIntrouvable { .. } => "ErreurFichierIntrouvable",
         }
     }
 }
@@ -1258,6 +1262,8 @@ impl Display for ASErreurType {
                         attendu,
                         obtenu)
             }
+
+            ErreurFichierIntrouvable { fichier } => format!("Fichier introuvable: {}", fichier),
         };
 
         write!(f, "{}: {}", self.error_name(), to_string)

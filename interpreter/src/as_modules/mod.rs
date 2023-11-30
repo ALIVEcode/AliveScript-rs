@@ -45,7 +45,23 @@ impl ASModuleBuiltin {
     pub fn load(&self, alias: &Option<String>, vars: &Option<Vec<String>>, env: &mut ASEnv) {
         let mod_scope = AS_MODULES;
         let mod_scope = mod_scope.get(self).expect("Module that exists");
+        ASModuleBuiltin::load_from_scope(mod_scope, self.name(), alias, vars, env);
+    }
 
+    pub fn name(&self) -> String {
+        match self {
+            ASModuleBuiltin::Builtin => "builtin",
+            ASModuleBuiltin::Liste => "Liste",
+            ASModuleBuiltin::Texte => "Texte",
+            ASModuleBuiltin::Math => "Math",
+            ASModuleBuiltin::Temps => "Temps",
+            ASModuleBuiltin::Voiture => "Voiture",
+            ASModuleBuiltin::Test => "Test",
+        }
+        .into()
+    }
+
+    pub fn load_from_scope(mod_scope: &Rc<ASScope>, name: String, alias: &Option<String>, vars: &Option<Vec<String>>, env: &mut ASEnv) {
         match alias {
             // Some() => mod_scope.iter().for_each(|(_name, (var, val))| {
             //     env.declare(var.clone(), val.clone());
@@ -91,7 +107,7 @@ impl ASModuleBuiltin {
             None => match vars.as_deref() {
                 None => {
                     env.declare(
-                        ASVar::new(self.name(), Some(ASType::Module), true),
+                        ASVar::new(name, Some(ASType::Module), true),
                         ASObj::ASModule {
                             env: Rc::clone(mod_scope),
                         },
@@ -113,19 +129,6 @@ impl ASModuleBuiltin {
                 }
             },
         };
-    }
-
-    pub fn name(&self) -> String {
-        match self {
-            ASModuleBuiltin::Builtin => "builtin",
-            ASModuleBuiltin::Liste => "Liste",
-            ASModuleBuiltin::Texte => "Texte",
-            ASModuleBuiltin::Math => "Math",
-            ASModuleBuiltin::Temps => "Temps",
-            ASModuleBuiltin::Voiture => "Voiture",
-            ASModuleBuiltin::Test => "Test",
-        }
-        .into()
     }
 }
 
