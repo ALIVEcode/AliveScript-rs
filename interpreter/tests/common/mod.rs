@@ -35,6 +35,10 @@ impl InterpretorIO for TestIO {
                 ));
                 self.inputs.next()
             }
+            Data::GetFichier(path) => {
+                let content = std::fs::read_to_string(path).unwrap();
+                Some(Response::Text(content))
+            }
             Data::NotifInfo { msg } => todo!(),
             Data::NotifErr { msg } => todo!(),
         }

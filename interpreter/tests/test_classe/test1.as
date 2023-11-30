@@ -36,25 +36,16 @@ fin classe
 mathis = Personne("Mathis", 20)
 enric = Personne("Enric", 20)
 
-afficher mathis.getAge()
+# afficher mathis.getAge()
 mathis.age += 1
-afficher mathis.getAge()
+# afficher mathis.getAge()
 
-afficher mathis.getAmi()
+# afficher mathis.getAmi()
 mathis.setAmi(enric)
-afficher mathis
-afficher mathis.getAmi().getNom()
+# afficher mathis
+# afficher mathis.getAmi().getNom()
 mathis.getAmi().setAmi(mathis)
 mathis.ami2 = mathis
-afficher enric.getAmi()
+# afficher enric.getAmi()
 enric.ami2 = enric
-afficher enric
-
-x = [1, 2, 3]
-x[2] = x
-x[2][0] = 7
-afficher x[2][2][2]
-
-y = { a: "1", b: 23 }
-y["c"] = y
-afficher y
+# afficher enric

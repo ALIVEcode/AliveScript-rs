@@ -1,5 +1,6 @@
 mod common;
 
+use alivescript_rust::data::Data;
 use common::run_test;
 
 #[test]
@@ -20,4 +21,15 @@ fn booleen() {
 #[test]
 fn test_classe1() {
     run_test("tests/test_classe/test1.as", &vec![]);
+}
+
+#[test]
+fn test_print_recursive() {
+    run_test(
+        "tests/test_print_recursive.as",
+        &vec![
+            Data::Afficher("<1>@[1, [<1>], 3]".into()),
+            Data::Afficher(r#"<1>@{"a": 1, "b": 2, "c": {<1>}}"#.into()),
+        ],
+    )
 }
