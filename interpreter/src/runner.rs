@@ -1,3 +1,5 @@
+use lalrpop_util::ParseError;
+
 use std::{
     cell::RefCell,
     ops::{Deref, IndexMut},
@@ -17,6 +19,7 @@ use crate::{
         Type, TypeBinOpcode, UnaryOpcode,
     },
     data::{Data, Response},
+    get_err_line,
     io::InterpretorIO,
     run_script_with_runner,
     visitor::{Visitable, Visitor},
@@ -110,6 +113,7 @@ pub struct Runner<'a> {
     io: &'a mut dyn InterpretorIO,
     env: ASEnv,
     early_exit: Option<EarlyExit>,
+    stmt_result: Option<ASObj>,
 }
 
 impl<'a> Runner<'a> {
@@ -120,6 +124,7 @@ impl<'a> Runner<'a> {
             io: intepretor_io,
             env: ASEnv::new(),
             early_exit: None,
+            stmt_result: None,
         };
         ASModuleBuiltin::Builtin.load(&None, &Some(vec!["*".into()]), &mut new.env);
         new
@@ -143,6 +148,10 @@ impl<'a> Runner<'a> {
 
     pub fn pop_value(&mut self) -> Option<ASObj> {
         self.expr_results.pop()
+    }
+
+    pub fn get_stmt_result(&mut self) -> Option<ASObj> {
+        self.stmt_result.take()
     }
 
     fn do_op(lhs: ASObj, op: &BinOpcode, rhs: ASObj) -> ASObj {
@@ -172,15 +181,21 @@ impl<'a> Runner<'a> {
         }
     }
 
-    fn clear_early_exit(&mut self) {
+    pub fn clear_early_exit(&mut self) {
         self.set_early_exit(None);
+    }
+
+    pub fn remove_error_status(&mut self) {
+        if self.error_thrown() {
+            self.early_exit = None;
+        }
     }
 
     fn should_early_exit(&self) -> bool {
         self.early_exit.is_some()
     }
 
-    fn error_thrown(&self) -> bool {
+    pub fn error_thrown(&self) -> bool {
         self.early_exit_matches(EarlyExit::Erreur)
     }
 
@@ -212,12 +227,30 @@ impl<'a> Runner<'a> {
         let expr_results = self.expr_results.clone();
         let type_results = self.type_results.clone();
         self.env.push_scope(ASScope::new());
-        run_script_with_runner(script, self);
+        if let Err(err) = run_script_with_runner(&script, self) {
+            let err_txt = match err {
+                ParseError::UnrecognizedToken { token, expected } => {
+                    let (line, line_num) = get_err_line(&script, token.0, token.2);
+                    format!("À la ligne {} ('{}'). Jeton non reconnu: {}. Jetons valides dans cette position: {}",
+                             line_num, line, token.1, expected.join(", "))
+                }
+                ParseError::InvalidToken { location } => todo!(),
+                ParseError::UnrecognizedEof { location, expected } => todo!(),
+                ParseError::ExtraToken { token } => todo!(),
+                ParseError::User { error } => todo!(),
+            };
+            self.send_data(Data::Erreur {
+                texte: format!("ErreurSyntaxe: {}", err_txt),
+                ligne: 0,
+            });
+            return None;
+        }
         if self.error_thrown() {
             return None;
         }
         self.expr_results = expr_results;
         self.type_results = type_results;
+        self.stmt_result = None;
         self.env.pop_scope()
     }
 }
@@ -470,6 +503,7 @@ impl Visitor for Runner<'_> {
                     return;
                 }
 
+                // FIXME: on clear avant le check
                 self.clear_early_exit();
 
                 // Fonction termine sans de "retourner" ou "error"
@@ -798,7 +832,7 @@ impl Visitor for Runner<'_> {
     fn visit_stmt_expr(&mut self, stmt: &Stmt) {
         if let Stmt::Expr(expr) = stmt {
             expr.accept(self);
-            self.expr_results.pop();
+            self.stmt_result = self.expr_results.pop();
         }
     }
 
@@ -939,7 +973,7 @@ impl Visitor for Runner<'_> {
                     &mut self.env,
                 )
             } else {
-                ASModuleBuiltin::from(module.as_str()).load(alias, vars, &mut self.env);
+                throw_err!(?, self, ASModuleBuiltin::try_from(module.as_str()));
             }
         }
     }

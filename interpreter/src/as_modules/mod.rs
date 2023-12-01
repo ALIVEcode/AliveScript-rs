@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::as_obj::{ASEnv, ASObj, ASScope, ASType, ASVar};
+use crate::as_obj::{ASEnv, ASErreurType, ASObj, ASScope, ASType, ASVar};
 
 use self::as_builtin::BUILTIN_MOD;
 use self::as_liste::LISTE_MOD;
@@ -61,7 +61,13 @@ impl ASModuleBuiltin {
         .into()
     }
 
-    pub fn load_from_scope(mod_scope: &Rc<ASScope>, name: String, alias: &Option<String>, vars: &Option<Vec<String>>, env: &mut ASEnv) {
+    pub fn load_from_scope(
+        mod_scope: &Rc<ASScope>,
+        name: String,
+        alias: &Option<String>,
+        vars: &Option<Vec<String>>,
+        env: &mut ASEnv,
+    ) {
         match alias {
             // Some() => mod_scope.iter().for_each(|(_name, (var, val))| {
             //     env.declare(var.clone(), val.clone());
@@ -132,19 +138,21 @@ impl ASModuleBuiltin {
     }
 }
 
-impl From<&str> for ASModuleBuiltin {
-    fn from(mod_name: &str) -> ASModuleBuiltin {
+impl TryFrom<&str> for ASModuleBuiltin {
+    type Error = ASErreurType;
+
+    fn try_from(mod_name: &str) -> Result<ASModuleBuiltin, Self::Error> {
         use ASModuleBuiltin::*;
 
         match mod_name {
-            "builtin" => Builtin,
-            "Math" => Math,
-            "Liste" => Liste,
-            "Texte" => Texte,
-            "Temps" => Temps,
-            "Voiture" => Voiture,
-            "Test" => Test,
-            _ => todo!("Implement {}", mod_name),
+            "builtin" => Ok(Builtin),
+            "Math" => Ok(Math),
+            "Liste" => Ok(Liste),
+            "Texte" => Ok(Texte),
+            "Temps" => Ok(Temps),
+            "Voiture" => Ok(Voiture),
+            "Test" => Ok(Test),
+            _ => Err(ASErreurType::new_erreur_module_invalide(mod_name.into())),
         }
     }
 }

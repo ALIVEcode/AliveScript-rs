@@ -52,7 +52,7 @@ where
     let script = std::fs::read_to_string(file_path).unwrap();
 
     let mut test_io = TestIO::default();
-    run_script(script, &mut test_io);
+    run_script(&script, &mut test_io);
 
     assert_eq!(test_io.outputs(), expected);
 }
