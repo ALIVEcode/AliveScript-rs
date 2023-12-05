@@ -114,6 +114,8 @@ pub struct Runner<'a> {
     env: ASEnv,
     early_exit: Option<EarlyExit>,
     stmt_result: Option<ASObj>,
+    current_file: Option<String>,
+    used_files: Vec<String>,
 }
 
 impl<'a> Runner<'a> {
@@ -125,6 +127,23 @@ impl<'a> Runner<'a> {
             env: ASEnv::new(),
             early_exit: None,
             stmt_result: None,
+            current_file: None,
+            used_files: vec![],
+        };
+        ASModuleBuiltin::Builtin.load(&None, &Some(vec!["*".into()]), &mut new.env);
+        new
+    }
+
+    pub fn new_with_file<IO: InterpretorIO + 'a>(intepretor_io: &'a mut IO, file: String) -> Self {
+        let mut new = Self {
+            expr_results: vec![],
+            type_results: vec![],
+            io: intepretor_io,
+            env: ASEnv::new(),
+            early_exit: None,
+            stmt_result: None,
+            current_file: Some(file.clone()),
+            used_files: vec![file],
         };
         ASModuleBuiltin::Builtin.load(&None, &Some(vec!["*".into()]), &mut new.env);
         new
@@ -223,9 +242,11 @@ impl<'a> Runner<'a> {
         Some(params_fonc)
     }
 
-    fn run_script(&mut self, script: String) -> Option<ASScope> {
+    fn run_script(&mut self, script: String, path: Option<String>) -> Option<ASScope> {
         let expr_results = self.expr_results.clone();
         let type_results = self.type_results.clone();
+        let old_file = self.current_file.take();
+        self.current_file = path;
         self.env.push_scope(ASScope::new());
         if let Err(err) = run_script_with_runner(&script, self) {
             let err_txt = match err {
@@ -248,6 +269,7 @@ impl<'a> Runner<'a> {
         if self.error_thrown() {
             return None;
         }
+        self.current_file = old_file;
         self.expr_results = expr_results;
         self.type_results = type_results;
         self.stmt_result = None;
@@ -957,6 +979,20 @@ impl Visitor for Runner<'_> {
                         ASErreurType::new_erreur_module_invalide(module.clone())
                     );
                 }
+
+                let mut module = module.clone();
+                // Si le module est relatif, on le rend absolu en ajoutant le
+                // chemin du fichier courant
+                if p.is_relative() && self.current_file.is_some() {
+                    let current_path = Path::new(self.current_file.as_ref().unwrap());
+                    module = current_path.parent().unwrap().to_str().unwrap().to_owned()
+                        + "/"
+                        + module.as_str();
+                }
+                // Si le module est déjà utilisé, on ne le réutilise pas
+                if self.used_files.contains(&module) {
+                    return;
+                }
                 let script = self.request_data(Data::GetFichier(module.clone()));
                 let Some(Response::Text(script)) = script else {
                     throw_err!(
@@ -964,7 +1000,8 @@ impl Visitor for Runner<'_> {
                         ASErreurType::new_erreur_fichier_introuvable(module.clone())
                     );
                 };
-                let mod_scope = &Rc::new(self.run_script(script).unwrap());
+                self.used_files.push(module.clone());
+                let mod_scope = &Rc::new(self.run_script(script, Some(module)).unwrap());
                 ASModuleBuiltin::load_from_scope(
                     mod_scope,
                     module_name.unwrap().to_owned(),

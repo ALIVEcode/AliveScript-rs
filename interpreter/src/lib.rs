@@ -63,6 +63,34 @@ pub fn run_script<'a, IO: InterpretorIO + 'a>(script: &String, interpretor_io: &
     };
 }
 
+pub fn run_script_from_file<'a, IO: InterpretorIO + 'a>(script: &String, interpretor_io: &mut IO, script_file: String) {
+    let lexer = Lexer::new(&script[..]);
+    let result_stmts = alivescript::ScriptParser::new().parse(lexer);
+
+    match result_stmts {
+        Ok(stmts) => {
+            let mut visitor = Runner::new_with_file(interpretor_io, script_file);
+            visitor.visit_body(&stmts);
+        }
+        Err(err) => {
+            let err_txt = match err {
+                ParseError::UnrecognizedToken { token, expected } => {
+                    let (line, line_num) = get_err_line(&script, token.0, token.2);
+                    format!("À la ligne {} ('{}'). Jeton non reconnu: {}. Jetons valides dans cette position: {}",
+                             line_num, line, token.1, expected.join(", "))
+                }
+                ParseError::InvalidToken { location } => todo!(),
+                ParseError::UnrecognizedEof { location, expected } => todo!(),
+                ParseError::ExtraToken { token } => todo!(),
+                ParseError::User { error } => todo!(),
+            };
+            interpretor_io.send(Data::Erreur {
+                texte: format!("ErreurSyntaxe: {}", err_txt),
+                ligne: 0,
+            })
+        }
+    };
+}
 pub fn run_script_with_runner<'a>(
     script: &String,
     runner: &mut Runner<'a>,

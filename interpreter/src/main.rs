@@ -7,7 +7,7 @@ use alivescript_rust::{
     data::{Data, Response},
     get_err_line,
     io::InterpretorIO,
-    run_script, run_script_with_runner,
+    run_script, run_script_with_runner, run_script_from_file,
 };
 
 struct IO {}
@@ -78,8 +78,8 @@ impl InterpretorIO for ReplIO {
 fn main() -> std::io::Result<()> {
     if let Some(script_file) = env::args().nth(1) {
         let mut io = IO {};
-        let script = std::fs::read_to_string(script_file).unwrap();
-        run_script(&script, &mut io);
+        let script = std::fs::read_to_string(&script_file).unwrap();
+        run_script_from_file(&script, &mut io, script_file);
         return Ok(());
     }
     let console = Rc::new(RefCell::new(console::Term::stdout()));
