@@ -561,6 +561,7 @@ impl Display for ASObj {
             ASNul => "nul".into(),
             ASPaire { .. } | ASListe(_) | ASDict(_) | ASClasseInst(_) => self.repr(),
             ASClasse(classe) => format!("classe {}", classe.name()),
+            ASFonc(fonc) => fonc.to_string(),
             _ => String::from("ASObj sans to_string"),
         };
         write!(f, "{}", to_string)

@@ -70,6 +70,14 @@ fn py_obj_to_as_obj(py: Python<'_>, py_obj: &PyAny) -> ASObj {
             .unwrap()
             .extract::<String>()
             .unwrap();
+        let nparams = f
+            .as_ref(py)
+            .getattr("__code__")
+            .unwrap()
+            .getattr("co_argcount")
+            .unwrap()
+            .extract::<usize>()
+            .unwrap();
         let params = f
             .as_ref(py)
             .getattr("__code__")
@@ -79,6 +87,7 @@ fn py_obj_to_as_obj(py: Python<'_>, py_obj: &PyAny) -> ASObj {
             .extract::<Vec<String>>()
             .unwrap()
             .into_iter()
+            .take(nparams)
             .map(|param| ASFnParam::new(param, None, None))
             .collect::<Vec<ASFnParam>>();
         return ASObj::native_fn(
@@ -102,7 +111,10 @@ fn py_obj_to_as_obj(py: Python<'_>, py_obj: &PyAny) -> ASObj {
             ASType::any(),
         );
     }
-    todo!("finir py_obj_to_as_obj")
+    if let Ok(module) = py_obj.extract::<Py<PyModule>>() {
+        return ASObj::ASNul;
+    }
+    todo!("finir py_obj_to_as_obj {}", py_obj)
 }
 
 fn as_obj_to_py_obj(py: Python<'_>, as_obj: &ASObj) -> PyObject {

@@ -2,3 +2,4 @@
 **/asdoc/book/
 interpreter/*.als
 interpreter/*.as
+interpreter/*.py
