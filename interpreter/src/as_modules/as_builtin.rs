@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use unindent::Unindent;
 
 use crate::{
@@ -15,7 +17,7 @@ as_mod! {
     },
     as_fonction! {
         typeVar[runner](nomVar: ASType::Texte) -> ASType::Texte; {
-            let env = runner.get_env();
+            let env = runner.get_env_mut();
             as_cast!(ASObj::ASTexte(nom_var) = nomVar);
             let maybe_var = env.get_var(nom_var).map(|v| &v.0);
             Ok(Some(match maybe_var {
@@ -59,8 +61,8 @@ as_mod! {
                 ),
                 ASFnParam::native("base", ASType::Entier, Some(ASObj::ASEntier(10))),
             ],
-            |runner| {
-                let env = runner.get_env();
+            Rc::new(|runner| {
+                let env = runner.get_env_mut();
                 let obj = env.get_value(&"obj".into()).unwrap();
                 let ASObj::ASEntier(base) = env.get_value(&"base".into()).unwrap() else {
                     unreachable!()
@@ -73,7 +75,7 @@ as_mod! {
                     }
                     _ => unreachable!(),
                 }))
-            },
+            }),
             ASType::Entier,
         ),
     ),
@@ -89,8 +91,8 @@ as_mod! {
                 ASType::union_of(ASType::Decimal, ASType::Texte),
                 Some(ASObj::ASDecimal(0f64)),
             )],
-            |runner| {
-                let env = runner.get_env();
+            Rc::new(|runner| {
+                let env = runner.get_env_mut();
                 let obj = env.get_value(&"obj".into()).unwrap();
                 Ok(Some(match obj {
                     ASObj::ASEntier(i) => ASObj::ASDecimal(*i as f64),
@@ -98,7 +100,7 @@ as_mod! {
                     ASObj::ASTexte(s) => ASObj::ASDecimal(s.parse().unwrap()),
                     _ => unreachable!(),
                 }))
-            },
+            }),
             ASType::Decimal,
         ),
     ),

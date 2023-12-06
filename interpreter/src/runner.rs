@@ -14,9 +14,10 @@ use crate::{
         ASClasse, ASClasseField, ASClasseInst, ASEnv, ASErreur, ASErreurType, ASFnParam, ASFonc,
         ASMethode, ASObj, ASScope, ASType, ASVar,
     },
+    as_py::run_python_script,
     ast::{
         AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, Expr, FnParam, LireVar, Stmt,
-        Type, TypeBinOpcode, UnaryOpcode,
+        Type, TypeBinOpcode, UnaryOpcode, CallRust,
     },
     data::{Data, Response},
     get_err_line,
@@ -31,6 +32,12 @@ enum EarlyExit {
     Continuer, // remonter au début d'une boucle
     Sortir,    // sortir d'une boucle
     Erreur,    // Erreur
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum ModuleType {
+    AliveScript,
+    Python,
 }
 
 macro_rules! eval {
@@ -149,8 +156,12 @@ impl<'a> Runner<'a> {
         new
     }
 
-    pub fn get_env(&mut self) -> &mut ASEnv {
+    pub fn get_env_mut(&mut self) -> &mut ASEnv {
         &mut self.env
+    }
+
+    pub fn get_env(&self) -> &ASEnv {
+        &self.env
     }
 
     pub fn send_data(&mut self, data: Data) {
@@ -696,7 +707,7 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_expr_callrust(&mut self, expr: &Expr) {
-        let Expr::CallRust(proc) = expr else { return };
+        let Expr::CallRust(CallRust(proc)) = expr else { return };
 
         let result = proc(self);
         match result {
@@ -972,7 +983,17 @@ impl Visitor for Runner<'_> {
         {
             if *is_path {
                 let p = Path::new(module);
-                let module_name = p.file_name().unwrap().to_str().unwrap().strip_suffix(".as");
+                let module_type = match p.extension() {
+                    Some(ext) if ext == "as" => ModuleType::AliveScript,
+                    Some(ext) if ext == "py" => ModuleType::Python,
+                    _ => {
+                        throw_err!(
+                            self,
+                            ASErreurType::new_erreur_module_invalide(module.clone())
+                        );
+                    }
+                };
+                let module_name = p.file_stem().map(|s| s.to_str().unwrap().to_owned());
                 if module_name.is_none() {
                     throw_err!(
                         self,
@@ -983,11 +1004,15 @@ impl Visitor for Runner<'_> {
                 let mut module = module.clone();
                 // Si le module est relatif, on le rend absolu en ajoutant le
                 // chemin du fichier courant
-                if p.is_relative() && self.current_file.is_some() {
+                if self.current_file.is_some() {
                     let current_path = Path::new(self.current_file.as_ref().unwrap());
-                    module = current_path.parent().unwrap().to_str().unwrap().to_owned()
-                        + "/"
-                        + module.as_str();
+                    module = current_path
+                        .parent()
+                        .unwrap()
+                        .join(module)
+                        .to_str()
+                        .unwrap()
+                        .to_owned();
                 }
                 // Si le module est déjà utilisé, on ne le réutilise pas
                 if self.used_files.contains(&module) {
@@ -1001,7 +1026,12 @@ impl Visitor for Runner<'_> {
                     );
                 };
                 self.used_files.push(module.clone());
-                let mod_scope = &Rc::new(self.run_script(script, Some(module)).unwrap());
+
+                let mod_scope = &Rc::new(match module_type {
+                    ModuleType::AliveScript => self.run_script(script, Some(module)).unwrap(),
+                    ModuleType::Python => run_python_script(script).unwrap(),
+                });
+
                 ASModuleBuiltin::load_from_scope(
                     mod_scope,
                     module_name.unwrap().to_owned(),

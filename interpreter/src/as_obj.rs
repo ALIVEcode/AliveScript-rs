@@ -183,14 +183,14 @@ impl ASObj {
         name: &str,
         docs: Option<&str>,
         params: Vec<ASFnParam>,
-        body: fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>,
+        body: Rc<dyn Fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>>,
         return_type: ASType,
     ) -> ASObj {
         Self::ASFonc(Rc::new(ASFonc::new(
             Some(name.into()),
             docs.map(|docs| docs.into()),
             params,
-            vec![Stmt::native_fn(body)],
+            vec![Stmt::native_fn(Rc::clone(&body))],
             return_type,
         )))
     }

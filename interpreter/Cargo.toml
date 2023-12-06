@@ -21,6 +21,7 @@ thiserror = "1.0.47"
 unindent = "0.2.3"
 derive-getters = "0.3.0"
 console = "0.15.7"
+pyo3 = { version = "0.19.2", features = ["auto-initialize"] }
 # console = { version = "0.15.7", optional = true }
 #
 # [features]
@@ -29,4 +30,3 @@ console = "0.15.7"
 # [[bin]]
 # name = "alivescript_rust"
 # required-features = ["build-binary"]
-

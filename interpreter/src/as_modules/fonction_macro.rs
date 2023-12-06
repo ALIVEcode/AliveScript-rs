@@ -37,14 +37,14 @@ macro_rules! as_fonction {
                 },
                 )*],
                 #[allow(non_snake_case)]
-                |runner| {
+                std::rc::Rc::new(|runner: &mut $crate::runner::Runner| {
                     let env = runner.get_env().clone();
                     $(
                     let $param_name = env.get_value(&std::stringify!($param_name).into()).unwrap();
                     )*
                     $(let $runner = runner;)?
                     $body
-                },
+                }),
                 $return_type,
                 ),
         )

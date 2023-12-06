@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use derive_getters::Getters;
 use derive_new::new;
 
@@ -101,8 +103,12 @@ pub enum Stmt {
 
 impl Stmt {
     /// Body en rust d'une fonction
-    pub fn native_fn(body: fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>) -> Box<Self> {
-        Box::new(Stmt::Retourner(Some(Box::new(Expr::CallRust(body)))))
+    pub fn native_fn(
+        body: Rc<dyn Fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>>,
+    ) -> Box<Self> {
+        Box::new(Stmt::Retourner(Some(Box::new(Expr::CallRust(CallRust(
+            Rc::clone(&body),
+        ))))))
     }
 }
 
@@ -234,7 +240,25 @@ pub enum Expr {
         op: UnaryOpcode,
     },
 
-    CallRust(fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>),
+    CallRust(CallRust),
+}
+
+pub struct CallRust(pub Rc<dyn Fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>>);
+
+impl Clone for CallRust {
+    fn clone(&self) -> Self {
+        Self(Rc::clone(&self.0))
+    }
+}
+impl PartialEq for CallRust {
+    fn eq(&self, _: &Self) -> bool {
+        false
+    }
+}
+impl std::fmt::Debug for CallRust {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("définition interne")
+    }
 }
 
 impl Expr {

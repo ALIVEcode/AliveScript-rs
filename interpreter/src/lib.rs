@@ -2,6 +2,7 @@
 
 mod as_modules;
 mod visitor;
+mod as_py;
 
 pub(crate) mod as_obj;
 pub(crate) mod ast;

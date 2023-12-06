@@ -7,7 +7,7 @@ use alivescript_rust::{
     data::{Data, Response},
     get_err_line,
     io::InterpretorIO,
-    run_script, run_script_with_runner, run_script_from_file,
+    run_script_with_runner, run_script_from_file,
 };
 
 struct IO {}
