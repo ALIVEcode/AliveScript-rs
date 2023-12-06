@@ -241,6 +241,18 @@ impl ASObj {
         }
     }
 
+    pub fn pow(&self, rhs: Self) -> ASObj {
+        use ASObj::*;
+
+        match (self, rhs) {
+            (ASEntier(x), ASEntier(y)) => ASEntier(x.pow(y as u32)),
+            (ASDecimal(x), ASEntier(y)) => ASDecimal(x.powi(y as i32)),
+            (ASEntier(x), ASDecimal(y)) => ASDecimal((*x as f64).powf(y)),
+            (ASDecimal(x), ASDecimal(y)) => ASDecimal(x.powf(y)),
+            _ => unimplemented!(),
+        }
+    }
+
     pub fn contains(&self, rhs: &Self) -> Result<bool, ASErreurType> {
         use ASObj::*;
 

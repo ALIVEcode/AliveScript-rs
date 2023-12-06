@@ -115,7 +115,7 @@ impl Stmt {
 #[derive(Clone, Debug, new, Getters, PartialEq)]
 pub struct DefFn {
     docs: Option<String>,
-    name: String,
+    name: Option<String>,
     params: Vec<FnParam>,
     return_type: Option<Box<Type>>,
     body: Vec<Box<Stmt>>,
@@ -189,6 +189,9 @@ pub enum Expr {
     Dict(Vec<Box<Expr>>), // Expr est garanti d'être Expr::Paire
 
     Ident(String),
+
+    /// Définition d'une fonction
+    DefFn(DefFn),
 
     AccessProp {
         obj: Box<Expr>,
@@ -345,6 +348,7 @@ impl Visitable for Expr {
             Slice { .. } => visitor.visit_expr_slice(self),
             CallRust(..) => visitor.visit_expr_callrust(self),
             ClasseInst { .. } => visitor.visit_expr_classe_init(self),
+            DefFn { .. } => visitor.visit_expr_deffn(self),
         }
     }
 }

@@ -63,7 +63,7 @@ pub Stmt: Box<Stmt> = {
         Box::new(Stmt::Pour { <> }),
 
     <docs:(<"DOCS"> "eos"*)?> "fonction" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
-        <body:Script> "fin" "fonction" "eos" => Box::new(Stmt::DefFn(DefFn::new(<>))),
+        <body:Script> "fin" "fonction" "eos" => Box::new(Stmt::DefFn(DefFn::new(docs, Some(name), params, return_type, body))),
 
     <docs:(<"DOCS"> "eos"*)?> "classe" <name:"ident"> "eos" 
         <fields:(<ClasseFieldDecl> "eos"*)*> 
@@ -101,13 +101,13 @@ ClasseFieldDecl: ClasseField = {
 ClasseInit: DefFn = {
     "init" "(" <params:Comma<FnParam>> ")" "eos"
         <body:Script> "fin" "init" "eos" => 
-            DefFn::new(None, String::new(), params, Some(Box::new(Type::Lit("rien".to_owned()))), body),
+            DefFn::new(None, Some(String::new()), params, Some(Box::new(Type::Lit("rien".to_owned()))), body),
 };
 
 #[inline]
 ClasseMethode: DefFn = {
     <docs:(<"DOCS"> "eos"*)?> "methode" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
-        <body:Script> "fin" "methode" "eos" => DefFn::new(<>),
+        <body:Script> "fin" "methode" "eos" => DefFn::new(docs, Some(name), params, return_type, body),
 };
 
 SubStmt: Box<Stmt> = {
@@ -324,12 +324,20 @@ pub Expr: Box<Expr> = {
       rhs
     })
   },
+
+  #[precedence(level="9")]
+  "fonction" <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> ":" <body:Expr> => 
+    Box::new(Expr::DefFn(DefFn::new(None, None, params, return_type, vec![Box::new(Stmt::Retourner(Some(body)))]))),
+
 };
 
 pub Term: Box<Expr> = {
   Lit => Box::new(<>),
 
-  <func:Term> "(" <args:Comma<Expr>> ")" => Box::new(Expr::FnCall{<>}),
+  <func:Term> <args:CommaCollection<"(", ")", Expr>> => Box::new(Expr::FnCall{<>}),
+
+  //<docs:(<"DOCS"> "eos"*)?> "fonction" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
+  //    <body:Script> "fin" "fonction" "eos" => Box::new(Expr::DefFn(DefFn::new(docs, Some(name), params, return_type, body))),
 
   //StructInst,
 

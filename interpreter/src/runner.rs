@@ -16,8 +16,8 @@ use crate::{
     },
     as_py::run_python_script,
     ast::{
-        AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, Expr, FnParam, LireVar, Stmt,
-        Type, TypeBinOpcode, UnaryOpcode, CallRust,
+        AssignVar, BinCompcode, BinLogiccode, BinOpcode, CallRust, DeclVar, Expr, FnParam, LireVar,
+        Stmt, Type, TypeBinOpcode, UnaryOpcode,
     },
     data::{Data, Response},
     get_err_line,
@@ -195,6 +195,7 @@ impl<'a> Runner<'a> {
             DivInt => lhs.div_int(rhs),
             Mod => lhs % rhs,
             BitwiseXor => (lhs ^ rhs).unwrap(),
+            Exp => lhs.pow(rhs),
             _ => todo!(),
         }
     }
@@ -472,6 +473,33 @@ impl Visitor for Runner<'_> {
         }
     }
 
+    fn visit_expr_deffn(&mut self, expr: &Expr) {
+        if let Expr::DefFn(f) = expr {
+            let return_type = eval!(opt_type, self, f.return_type(), "Return Func type");
+
+            let mut params_fonc = Vec::with_capacity(f.params().len());
+            for param in f.params() {
+                let param_type = eval!(opt_type, self, &param.static_type, "Param type");
+
+                params_fonc.push(ASFnParam::new(
+                    param.name.clone(),
+                    param_type,
+                    param.default_value.clone(),
+                ))
+            }
+
+            let func = Rc::new(ASFonc::new(
+                f.name().as_ref().cloned(),
+                f.docs().clone(),
+                params_fonc,
+                f.body().clone(),
+                return_type.into(),
+            ));
+
+            self.push_value(ASObj::ASFonc(func));
+        }
+    }
+
     fn visit_expr_fncall(&mut self, expr: &Expr) {
         let Expr::FnCall { func, args } = expr else {
             unreachable!()
@@ -707,7 +735,9 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_expr_callrust(&mut self, expr: &Expr) {
-        let Expr::CallRust(CallRust(proc)) = expr else { return };
+        let Expr::CallRust(CallRust(proc)) = expr else {
+            return;
+        };
 
         let result = proc(self);
         match result {
@@ -1371,6 +1401,19 @@ impl Visitor for Runner<'_> {
         self.set_early_exit(Some(EarlyExit::Sortir));
     }
 
+    fn visit_stmt_retourner(&mut self, stmt: &Stmt) {
+        if let Stmt::Retourner(expr) = stmt {
+            if let Some(val_expr) = expr {
+                // retourner valeur
+                val_expr.accept(self);
+            } else {
+                // retourner
+                self.push_value(ASObj::ASNul);
+            }
+            self.set_early_exit(Some(EarlyExit::Retourner));
+        }
+    }
+
     fn visit_stmt_deffn(&mut self, stmt: &Stmt) {
         if let Stmt::DefFn(f) = stmt {
             let return_type = eval!(opt_type, self, f.return_type(), "Return Func type");
@@ -1387,29 +1430,20 @@ impl Visitor for Runner<'_> {
             }
 
             let func = Rc::new(ASFonc::new(
-                Some(f.name().clone()),
+                f.name().as_ref().cloned(),
                 f.docs().clone(),
                 params_fonc,
                 f.body().clone(),
                 return_type.into(),
             ));
 
-            let func_var = ASVar::new(f.name().clone(), Some(ASType::Fonction), true);
+            let func_var = ASVar::new(
+                f.name().as_ref().unwrap().clone(),
+                Some(ASType::Fonction),
+                true,
+            );
 
             self.env.declare(func_var, ASObj::ASFonc(func));
-        }
-    }
-
-    fn visit_stmt_retourner(&mut self, stmt: &Stmt) {
-        if let Stmt::Retourner(expr) = stmt {
-            if let Some(val_expr) = expr {
-                // retourner valeur
-                val_expr.accept(self);
-            } else {
-                // retourner
-                self.push_value(ASObj::ASNul);
-            }
-            self.set_early_exit(Some(EarlyExit::Retourner));
         }
     }
 
@@ -1468,7 +1502,7 @@ impl Visitor for Runner<'_> {
                             eval!(opt_type, self, method.return_type(), "Method return type");
 
                         methods_final.push(Rc::new(ASFonc::new(
-                            Some(method.name().clone()),
+                            method.name().clone(),
                             method.docs().clone(),
                             method_params.unwrap(),
                             method.body().clone(),

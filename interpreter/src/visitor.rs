@@ -27,6 +27,8 @@ pub trait Visitor {
 
     fn visit_expr_suite(&mut self, expr: &Expr);
 
+    fn visit_expr_deffn(&mut self, stmt: &Expr);
+
     // Statements
     fn visit_stmt_expr(&mut self, stmt: &Stmt);
     fn visit_stmt_afficher(&mut self, stmt: &Stmt);
@@ -48,9 +50,9 @@ pub trait Visitor {
     fn visit_stmt_continuer(&mut self, stmt: &Stmt);
     fn visit_stmt_sortir(&mut self, stmt: &Stmt);
 
-    fn visit_stmt_deffn(&mut self, stmt: &Stmt);
     fn visit_stmt_retourner(&mut self, stmt: &Stmt);
 
+    fn visit_stmt_deffn(&mut self, stmt: &Stmt);
     fn visit_stmt_defclasse(&mut self, stmt: &Stmt);
 
     // Types
