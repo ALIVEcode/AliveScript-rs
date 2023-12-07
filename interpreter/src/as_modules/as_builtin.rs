@@ -19,7 +19,7 @@ as_mod! {
         typeVar[runner](nomVar: ASType::Texte) -> ASType::Texte; {
             let env = runner.get_env_mut();
             as_cast!(ASObj::ASTexte(nom_var) = nomVar);
-            let maybe_var = env.get_var(nom_var).map(|v| &v.0);
+            let maybe_var = env.get_var(&nom_var).map(|v| v.0);
             Ok(Some(match maybe_var {
                 Some(var) => ASObj::ASTexte(var.get_type().to_string()),
                 None => ASObj::ASNul,
@@ -69,9 +69,9 @@ as_mod! {
                 };
                 Ok(Some(match obj {
                     ASObj::ASEntier(_) => obj.clone(),
-                    ASObj::ASDecimal(d) => ASObj::ASEntier(*d as i64),
+                    ASObj::ASDecimal(d) => ASObj::ASEntier(d as i64),
                     ASObj::ASTexte(s) => {
-                        ASObj::ASEntier(i64::from_str_radix(s, *base as u32).unwrap())
+                        ASObj::ASEntier(i64::from_str_radix(&s, base as u32).unwrap())
                     }
                     _ => unreachable!(),
                 }))
@@ -95,7 +95,7 @@ as_mod! {
                 let env = runner.get_env_mut();
                 let obj = env.get_value(&"obj".into()).unwrap();
                 Ok(Some(match obj {
-                    ASObj::ASEntier(i) => ASObj::ASDecimal(*i as f64),
+                    ASObj::ASEntier(i) => ASObj::ASDecimal(i as f64),
                     ASObj::ASDecimal(_) => obj.clone(),
                     ASObj::ASTexte(s) => ASObj::ASDecimal(s.parse().unwrap()),
                     _ => unreachable!(),
@@ -122,10 +122,10 @@ as_mod! {
             as_cast!(ASObj::ASTexte(attr) = attr);
 
             match obj {
-                ASObj::ASClasseInst(inst) => inst
+                ASObj::ASClasseInst(ref inst) => inst
                     .env()
                     .borrow()
-                    .get_value(attr)
+                    .get_value(&attr)
                     .map(|v| Some(v.clone()))
                     .ok_or_else(|| ASErreurType::new_erreur_access_propriete(obj.clone(), attr.clone())),
                 _ => Err(ASErreurType::new_erreur_access_propriete(obj.clone(), attr.clone()))
@@ -137,7 +137,7 @@ as_mod! {
             as_cast!(ASObj::ASTexte(attr) = attr);
 
             match obj {
-                ASObj::ASClasseInst(inst) => Ok(Some(ASObj::ASBooleen(inst.env().borrow().get_value(attr).is_some()))),
+                ASObj::ASClasseInst(inst) => Ok(Some(ASObj::ASBooleen(inst.env().borrow().get_value(&attr).is_some()))),
                 _ => Err(ASErreurType::new_erreur_access_propriete(obj.clone(), attr.clone()))
             }
         }

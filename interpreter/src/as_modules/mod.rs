@@ -7,6 +7,7 @@ mod as_texte;
 mod fonction_macro;
 
 use once_cell::sync::Lazy;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -30,7 +31,7 @@ pub enum ASModuleBuiltin {
     Test,
 }
 
-const AS_MODULES: Lazy<HashMap<ASModuleBuiltin, Rc<ASScope>>> = Lazy::new(|| {
+const AS_MODULES: Lazy<HashMap<ASModuleBuiltin, Rc<RefCell<ASScope>>>> = Lazy::new(|| {
     let mut modules = HashMap::new();
     modules.insert(ASModuleBuiltin::Builtin, Rc::clone(&*BUILTIN_MOD));
     modules.insert(ASModuleBuiltin::Math, Rc::clone(&*MATH_MOD));
@@ -45,7 +46,7 @@ impl ASModuleBuiltin {
     pub fn load(&self, alias: &Option<String>, vars: &Option<Vec<String>>, env: &mut ASEnv) {
         let mod_scope = AS_MODULES;
         let mod_scope = mod_scope.get(self).expect("Module that exists");
-        ASModuleBuiltin::load_from_scope(mod_scope, self.name(), alias, vars, env);
+        ASModuleBuiltin::load_from_scope(Rc::clone(&mod_scope), self.name(), alias, vars, env);
     }
 
     pub fn name(&self) -> String {
@@ -62,7 +63,7 @@ impl ASModuleBuiltin {
     }
 
     pub fn load_from_scope(
-        mod_scope: &Rc<ASScope>,
+        mod_scope: Rc<RefCell<ASScope>>,
         name: String,
         alias: &Option<String>,
         vars: &Option<Vec<String>>,
@@ -77,19 +78,19 @@ impl ASModuleBuiltin {
                     env.declare(
                         ASVar::new(alias_name.clone(), Some(ASType::Module), true),
                         ASObj::ASModule {
-                            env: Rc::clone(mod_scope),
+                            env: Rc::clone(&mod_scope),
                         },
                     );
                 }
                 Some([x]) if x == "*" => {
                     let mut mod_env = ASScope::new();
-                    mod_scope.iter().for_each(|(_name, (var, val))| {
+                    mod_scope.borrow().iter().for_each(|(_name, (var, val))| {
                         mod_env.insert(var.clone(), val.clone());
                     });
                     env.declare(
                         ASVar::new(alias_name.clone(), Some(ASType::Module), true),
                         ASObj::ASModule {
-                            env: Rc::new(mod_env),
+                            env: Rc::new(RefCell::new(mod_env)),
                         },
                     );
                 }
@@ -97,6 +98,7 @@ impl ASModuleBuiltin {
                     let mut mod_env = ASScope::new();
                     used_vars.iter().for_each(|var_name| {
                         let var = mod_scope
+                            .borrow()
                             .get(var_name)
                             .expect("Variable qui existe dans module.")
                             .clone();
@@ -105,7 +107,7 @@ impl ASModuleBuiltin {
                     env.declare(
                         ASVar::new(alias_name.clone(), Some(ASType::Module), true),
                         ASObj::ASModule {
-                            env: Rc::new(mod_env),
+                            env: Rc::new(RefCell::new(mod_env)),
                         },
                     );
                 }
@@ -115,18 +117,19 @@ impl ASModuleBuiltin {
                     env.declare(
                         ASVar::new(name, Some(ASType::Module), true),
                         ASObj::ASModule {
-                            env: Rc::clone(mod_scope),
+                            env: Rc::clone(&mod_scope),
                         },
                     );
                 }
                 Some([x]) if x == "*" => {
-                    mod_scope.iter().for_each(|(_name, (var, val))| {
+                    mod_scope.borrow().iter().for_each(|(_name, (var, val))| {
                         env.declare(var.clone(), val.clone());
                     });
                 }
                 Some(used_vars) => {
                     used_vars.iter().for_each(|var_name| {
                         let var = mod_scope
+                            .borrow()
                             .get(var_name)
                             .expect("Variable qui existe dans module.")
                             .clone();

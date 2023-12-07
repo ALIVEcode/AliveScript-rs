@@ -329,6 +329,8 @@ pub Expr: Box<Expr> = {
   "fonction" <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> ":" <body:Expr> => 
     Box::new(Expr::DefFn(DefFn::new(None, None, params, return_type, vec![Box::new(Stmt::Retourner(Some(body)))]))),
 
+  //"fonction" <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> "eos" <body:Script> "eos" "fin" "fonction" => 
+  //  Box::new(Expr::DefFn(DefFn::new(None, None, params, return_type, body))),
 };
 
 pub Term: Box<Expr> = {

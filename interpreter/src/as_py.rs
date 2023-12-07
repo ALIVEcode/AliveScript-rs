@@ -7,7 +7,7 @@ use pyo3::{prelude::*, types::PyFunction};
 use crate::as_obj::{ASFnParam, ASObj, ASScope, ASType, ASVar};
 use crate::runner::Runner;
 
-pub fn run_python_script(script: String) -> Option<ASScope> {
+pub fn run_python_script(script: String) -> Option<Rc<RefCell<ASScope>>> {
     let mut env = ASScope::new();
     let result: PyResult<()> = Python::with_gil(|py| {
         let locals = PyDict::new(py);
@@ -24,7 +24,7 @@ pub fn run_python_script(script: String) -> Option<ASScope> {
         return None;
     }
 
-    Some(env)
+    Some(Rc::new(RefCell::new(env)))
 }
 
 fn py_obj_to_as_obj(py: Python<'_>, py_obj: &PyAny) -> ASObj {
@@ -100,7 +100,7 @@ fn py_obj_to_as_obj(py: Python<'_>, py_obj: &PyAny) -> ASObj {
                     for param in params.iter() {
                         args.append(as_obj_to_py_obj(
                             py,
-                            runner.get_env().get_value(&param.name).unwrap(),
+                            &runner.get_env().get_value(&param.name).unwrap(),
                         ))
                         .unwrap();
                     }

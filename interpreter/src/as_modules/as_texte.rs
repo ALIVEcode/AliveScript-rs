@@ -22,7 +22,7 @@ as_mod! {
             as_cast!(ASObj::ASTexte(txt) = txt);
             as_cast!(ASObj::ASTexte(subtxt) = subtxt);
 
-            let maybe_i = txt.find(subtxt);
+            let maybe_i = txt.find(&subtxt);
             Ok(Some(match maybe_i {
                 Some(i) => ASObj::ASEntier(i as i64),
                 None => ASObj::ASNul,
@@ -39,9 +39,9 @@ as_mod! {
             as_cast!(ASObj::ASTexte(pattern) = pattern);
             as_cast!(ASObj::ASTexte(remplacement) = remplacement);
             Ok(Some(match n {
-                ASObj::ASNul => ASObj::ASTexte(txt.replace(pattern, remplacement)),
+                ASObj::ASNul => ASObj::ASTexte(txt.replace(&pattern, &remplacement)),
                 ASObj::ASEntier(n) => {
-                    ASObj::ASTexte(txt.replacen(pattern, remplacement, *n as usize))
+                    ASObj::ASTexte(txt.replacen(&pattern, &remplacement, n as usize))
                 }
                 _ => unreachable!(),
             }))

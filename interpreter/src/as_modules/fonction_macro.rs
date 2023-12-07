@@ -77,8 +77,8 @@ macro_rules! as_cast {
 #[macro_export]
 macro_rules! as_mod {
     ($name:ident, $($var:expr),* $(,)?) => {
-        pub const $name: once_cell::sync::Lazy<std::rc::Rc<$crate::as_obj::ASScope>> = once_cell::sync::Lazy::new(|| {
-            std::rc::Rc::new($crate::as_obj::ASScope::from(std::vec![$($var),*]))
+        pub const $name: once_cell::sync::Lazy<std::rc::Rc<std::cell::RefCell<$crate::as_obj::ASScope>>> = once_cell::sync::Lazy::new(|| {
+            std::rc::Rc::new(std::cell::RefCell::new($crate::as_obj::ASScope::from(std::vec![$($var),*])))
         });
 
     };

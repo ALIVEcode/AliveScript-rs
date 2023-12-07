@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{RefCell, RefMut},
     collections::HashMap,
     fmt::Display,
     ops::{Add, BitXor, Div, Mul, Rem, Sub},
@@ -46,7 +46,7 @@ pub enum ASObj {
     ASClasse(Rc<ASClasse>),
 
     ASModule {
-        env: Rc<ASScope>,
+        env: Rc<RefCell<ASScope>>,
     },
 
     ASClasseInst(Rc<ASClasseInst>),
@@ -68,6 +68,7 @@ pub struct ASFonc {
     params: Vec<ASFnParam>,
     body: Vec<Box<Stmt>>,
     return_type: ASType,
+    env: ASEnv,
 }
 
 impl PartialEq for ASFonc {
@@ -192,6 +193,7 @@ impl ASObj {
             params,
             vec![Stmt::native_fn(Rc::clone(&body))],
             return_type,
+            ASEnv::new(),
         )))
     }
 
@@ -516,10 +518,10 @@ impl Rem for ASObj {
         use ASObj::*;
 
         match (self, rhs) {
-            (ASEntier(x), ASEntier(y)) => ASEntier(x % y),
-            (ASDecimal(x), ASEntier(y)) => ASDecimal(x % y as f64),
-            (ASEntier(x), ASDecimal(y)) => ASDecimal(x as f64 % y),
-            (ASDecimal(x), ASDecimal(y)) => ASDecimal(x % y),
+            (ASEntier(x), ASEntier(y)) => ASEntier((x % y + y) % y),
+            (ASDecimal(x), ASEntier(y)) => ASDecimal((x % y as f64 + y as f64) % y as f64),
+            (ASEntier(x), ASDecimal(y)) => ASDecimal((x as f64 % y + y) % y),
+            (ASDecimal(x), ASDecimal(y)) => ASDecimal((x % y + y) % y),
             _ => unimplemented!(),
         }
     }
@@ -1034,44 +1036,68 @@ impl ASScope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct ASEnv(Vec<ASScope>);
+#[derive(Debug, PartialEq)]
+pub struct ASEnv(Vec<Rc<RefCell<ASScope>>>);
+
+impl Clone for ASEnv {
+    fn clone(&self) -> Self {
+        Self(self.0.iter().map(|scope| Rc::clone(scope)).collect())
+    }
+}
 
 impl ASEnv {
     pub fn new() -> Self {
-        Self(vec![ASScope::new()])
+        Self(vec![Rc::new(RefCell::new(ASScope::new()))])
     }
 
-    fn get_env_of_var(&mut self, var_name: &String) -> &mut ASScope {
+    pub fn is_global(&self) -> bool {
+        self.0.len() == 1
+    }
+
+    fn get_env_of_var(&mut self, var_name: &String) -> RefMut<'_, ASScope> {
         self.0
             .iter_mut()
             .rev()
-            .find(|env| env.get(var_name).is_some())
+            .find(|env| env.borrow().get(var_name).is_some())
             .unwrap()
+            .borrow_mut()
     }
 
-    pub fn get_curr_scope(&mut self) -> &mut ASScope {
-        self.0.last_mut().unwrap()
+    pub fn get_curr_scope(&mut self) -> RefMut<'_, ASScope> {
+        self.0.last_mut().unwrap().borrow_mut()
     }
 
-    pub fn push_scope(&mut self, scope: ASScope) {
+    pub fn push_new_scope(&mut self, scope: ASScope) {
+        self.0.push(Rc::new(RefCell::new(scope)));
+    }
+
+    pub fn push_scope(&mut self, scope: Rc<RefCell<ASScope>>) {
         self.0.push(scope);
     }
 
-    pub fn pop_scope(&mut self) -> Option<ASScope> {
+    pub fn pop_scope(&mut self) -> Option<Rc<RefCell<ASScope>>> {
         self.0.pop()
     }
 
-    pub fn get_var(&self, var_name: &String) -> Option<&(ASVar, ASObj)> {
-        self.0.iter().rev().find_map(|env| env.get(var_name))
+    pub fn get_var(&self, var_name: &String) -> Option<(ASVar, ASObj)> {
+        self.0
+            .iter()
+            .rev()
+            .find_map(|env| env.borrow().get(var_name).cloned())
     }
 
-    pub fn get_value(&self, var_name: &String) -> Option<&ASObj> {
-        Some(&self.0.iter().rev().find_map(|env| env.get(var_name))?.1)
+    pub fn get_value(&self, var_name: &String) -> Option<ASObj> {
+        Some(
+            self.0
+                .iter()
+                .rev()
+                .find_map(|env| env.borrow().get(var_name).cloned())?
+                .1,
+        )
     }
 
     pub fn declare(&mut self, var: ASVar, val: ASObj) -> Option<(ASVar, ASObj)> {
-        self.0.last_mut().unwrap().insert(var, val)
+        self.0.last().unwrap().borrow_mut().insert(var, val)
     }
 
     pub fn declare_strict(
@@ -1082,19 +1108,20 @@ impl ASEnv {
         let var_name = var.get_name();
         if self
             .0
-            .last_mut()
+            .last()
             .unwrap()
+            .borrow()
             .get(var_name)
             .is_some_and(|(v, _)| v.is_const())
         {
             Err(ASErreurType::new_affectation_constante(var_name.clone()))
         } else {
-            Ok(self.0.last_mut().unwrap().insert(var, val))
+            Ok(self.0.last().unwrap().borrow_mut().insert(var, val))
         }
     }
 
     pub fn assign_force(&mut self, var_name: &String, val: ASObj) -> Option<(ASVar, ASObj)> {
-        let scope = self.get_env_of_var(var_name);
+        let mut scope = self.get_env_of_var(var_name);
         scope.assign_force(var_name, val)
     }
 
@@ -1103,7 +1130,7 @@ impl ASEnv {
         var_name: &String,
         val: ASObj,
     ) -> Result<Option<(ASVar, ASObj)>, ASErreurType> {
-        let scope = self.get_env_of_var(var_name);
+        let mut scope = self.get_env_of_var(var_name);
         scope.assign(var_name, val)
     }
 }

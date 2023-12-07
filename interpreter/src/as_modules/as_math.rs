@@ -7,7 +7,7 @@ as_mod! {
         sin(x: ASType::nombre()) -> ASType::Decimal; {
             Ok(Some(match x {
                     ASObj::ASDecimal(n) => ASObj::ASDecimal(n.sin()),
-                    ASObj::ASEntier(i) => ASObj::ASDecimal((*i as f64).sin()),
+                    ASObj::ASEntier(i) => ASObj::ASDecimal((i as f64).sin()),
                     _ => unreachable!(),
                 }))
         }
@@ -16,7 +16,7 @@ as_mod! {
         cos(x: ASType::nombre()) -> ASType::Decimal; {
             Ok(Some(match x {
                     ASObj::ASDecimal(n) => ASObj::ASDecimal(n.cos()),
-                    ASObj::ASEntier(i) => ASObj::ASDecimal((*i as f64).cos()),
+                    ASObj::ASEntier(i) => ASObj::ASDecimal((i as f64).cos()),
                     _ => unreachable!(),
                 }))
         }
@@ -25,7 +25,7 @@ as_mod! {
         tan(x: ASType::nombre()) -> ASType::Decimal; {
             Ok(Some(match x {
                 ASObj::ASDecimal(i) => ASObj::ASDecimal(i.tan()),
-                ASObj::ASEntier(i) => ASObj::ASDecimal((*i as f64).tan()),
+                ASObj::ASEntier(i) => ASObj::ASDecimal((i as f64).tan()),
                 _ => unreachable!()
             }))
         }

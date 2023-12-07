@@ -254,12 +254,12 @@ impl<'a> Runner<'a> {
         Some(params_fonc)
     }
 
-    fn run_script(&mut self, script: String, path: Option<String>) -> Option<ASScope> {
+    fn run_script(&mut self, script: String, path: Option<String>) -> Option<Rc<RefCell<ASScope>>> {
         let expr_results = self.expr_results.clone();
         let type_results = self.type_results.clone();
         let old_file = self.current_file.take();
         self.current_file = path;
-        self.env.push_scope(ASScope::new());
+        self.env.push_scope(Rc::new(RefCell::new(ASScope::new())));
         if let Err(err) = run_script_with_runner(&script, self) {
             let err_txt = match err {
                 ParseError::UnrecognizedToken { token, expected } => {
@@ -293,9 +293,9 @@ impl Visitor for Runner<'_> {
     fn visit_body(&mut self, stmts: &Vec<Box<Stmt>>) {
         for stmt in stmts.iter() {
             if self.should_early_exit() {
-                break;
+                return;
             }
-            self.expr_results.clear();
+            // self.expr_results.clear();
             stmt.accept(self);
         }
     }
@@ -365,7 +365,7 @@ impl Visitor for Runner<'_> {
             let obj_val = eval!(expr, self, obj, "AccessProp obj");
 
             let result = match &obj_val {
-                ASObj::ASModule { env } => env.get(prop).expect("AccessProp prop").1.clone(),
+                ASObj::ASModule { env } => env.borrow().get(prop).expect("AccessProp prop").1.clone(),
                 ASObj::ASClasse(classe) => {
                     let field = classe
                         .fields()
@@ -432,7 +432,7 @@ impl Visitor for Runner<'_> {
                         } else {
                             throw_err!(
                                 self,
-                                ASErreurType::new_erreur_type(ASType::Entier, obj.get_type(),)
+                                ASErreurType::new_erreur_type(ASType::Entier, obj.get_type())
                             );
                         }
                     }
@@ -494,6 +494,7 @@ impl Visitor for Runner<'_> {
                 params_fonc,
                 f.body().clone(),
                 return_type.into(),
+                self.env.clone(),
             ));
 
             self.push_value(ASObj::ASFonc(func));
@@ -554,18 +555,18 @@ impl Visitor for Runner<'_> {
                 }
 
                 // Exec Body
-                self.env.push_scope(env);
+                let old_env = self.env.clone();
+                self.env = f.env().clone();
+                self.env.push_scope(Rc::new(RefCell::new(env)));
+
                 self.visit_body(f.body());
 
                 // Clean up
-                self.env.pop_scope();
+                self.env = old_env;
 
                 if self.error_thrown() {
                     return;
                 }
-
-                // FIXME: on clear avant le check
-                self.clear_early_exit();
 
                 // Fonction termine sans de "retourner" ou "error"
                 if !self.should_early_exit() {
@@ -577,6 +578,9 @@ impl Visitor for Runner<'_> {
                 } else if !self.early_exit_matches(EarlyExit::Retourner) {
                     panic!("Sortie d'une fonction autrement qu'avec `retourner`")
                 }
+
+                // FIXME: on clear avant le check
+                self.clear_early_exit();
 
                 // Retourner
                 let type_returned = if let Some(returned_value) = self.expr_results.last() {
@@ -647,7 +651,7 @@ impl Visitor for Runner<'_> {
                         func: Expr::literal(ASObj::ASFonc(Rc::clone(init))),
                         args: args.clone(),
                     };
-                    self.env.push_scope(init_env);
+                    self.env.push_scope(Rc::new(RefCell::new(init_env)));
                     self.visit_expr_fncall(&to_call);
                     self.env.pop_scope();
                     if self.error_thrown() {
@@ -679,7 +683,7 @@ impl Visitor for Runner<'_> {
                     func: Expr::literal(ASObj::ASFonc(methode.func().clone())),
                     args: args.clone(),
                 };
-                self.env.push_scope(methode_env);
+                self.env.push_scope(Rc::new(RefCell::new(methode_env)));
                 self.visit_expr_fncall(&to_call);
                 self.env.pop_scope();
             }
@@ -1057,7 +1061,7 @@ impl Visitor for Runner<'_> {
                 };
                 self.used_files.push(module.clone());
 
-                let mod_scope = &Rc::new(match module_type {
+                let mod_scope = Rc::clone(&match module_type {
                     ModuleType::AliveScript => self.run_script(script, Some(module)).unwrap(),
                     ModuleType::Python => run_python_script(script).unwrap(),
                 });
@@ -1311,7 +1315,7 @@ impl Visitor for Runner<'_> {
                     }
                     counter += 1;
                 }
-                self.env.push_scope(ASScope::new());
+                self.env.push_scope(Rc::new(RefCell::new(ASScope::new())));
                 self.visit_body(body);
                 self.env.pop_scope();
                 match self.early_exit {
@@ -1358,7 +1362,7 @@ impl Visitor for Runner<'_> {
 
             for val in iter.borrow().iter() {
                 self.env
-                    .push_scope(ASScope::from(vec![(var.clone(), val.clone())]));
+                    .push_new_scope(ASScope::from(vec![(var.clone(), val.clone())]));
                 self.visit_body(body);
                 self.env.pop_scope();
                 match self.early_exit {
@@ -1377,7 +1381,7 @@ impl Visitor for Runner<'_> {
     fn visit_stmt_tantque(&mut self, stmt: &Stmt) {
         if let Stmt::TantQue { cond, body } = stmt {
             while eval!(expr, self, cond, "Si cond").to_bool() {
-                self.env.push_scope(ASScope::new());
+                self.env.push_new_scope(ASScope::new());
                 self.visit_body(body);
                 self.env.pop_scope();
                 match self.early_exit {
@@ -1405,7 +1409,8 @@ impl Visitor for Runner<'_> {
         if let Stmt::Retourner(expr) = stmt {
             if let Some(val_expr) = expr {
                 // retourner valeur
-                val_expr.accept(self);
+                let result = eval!(expr, self, val_expr, "retourner");
+                self.push_value(result);
             } else {
                 // retourner
                 self.push_value(ASObj::ASNul);
@@ -1435,6 +1440,7 @@ impl Visitor for Runner<'_> {
                 params_fonc,
                 f.body().clone(),
                 return_type.into(),
+                self.env.clone(),
             ));
 
             let func_var = ASVar::new(
@@ -1486,6 +1492,7 @@ impl Visitor for Runner<'_> {
                             init_params.unwrap(),
                             init.body().clone(),
                             return_type.into(),
+                            self.env.clone(),
                         )))
                     } else {
                         None
@@ -1507,6 +1514,7 @@ impl Visitor for Runner<'_> {
                             method_params.unwrap(),
                             method.body().clone(),
                             return_type.into(),
+                            self.env.clone(),
                         )))
                     }
                     methods_final
