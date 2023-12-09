@@ -12,6 +12,7 @@ use derive_getters::Getters;
 use derive_new::new;
 
 use crate::{
+    as_obj_utils::{Label, ObjPtr, RecursiveRepr, Seen},
     ast::{Expr, Stmt},
     data::Data,
     lexer::LexicalError,
@@ -20,24 +21,20 @@ use crate::{
 
 #[derive(Debug)]
 pub enum ASObj {
+    // A placeholder value for representing the absence of values
+    ASNoValue,
+
     ASEntier(i64),
     ASDecimal(f64),
     ASBooleen(bool),
     ASNul,
-    // A placeholder value for representing the absence of values
-    ASNoValue,
-
-    ASPaire {
-        key: Box<ASObj>,
-        val: Box<ASObj>,
-    },
 
     ASTuple(Vec<ASObj>),
 
     ASTexte(String),
     ASListe(Rc<RefCell<Vec<ASObj>>>),
-    /// Les éléments du vecteur sont tous garanti d'être des [`ASObj::ASPaire`]
-    ASDict(Rc<RefCell<Vec<ASObj>>>),
+
+    ASDict(Rc<RefCell<ASDict>>),
 
     ASFonc(Rc<ASFonc>),
 
@@ -45,11 +42,123 @@ pub enum ASObj {
 
     ASClasse(Rc<ASClasse>),
 
-    ASModule {
-        env: Rc<RefCell<ASScope>>,
-    },
+    ASModule { env: Rc<RefCell<ASScope>> },
 
     ASClasseInst(Rc<ASClasseInst>),
+}
+
+#[derive(Debug, Clone, new, PartialEq, Default)]
+pub struct ASDict(Vec<ASPaire>);
+
+impl ASDict {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn contains(&self, key: &ASObj) -> bool {
+        self.0.iter().any(|pair| pair.key() == key)
+    }
+
+    pub fn get(&self, key: &ASObj) -> Option<&ASPaire> {
+        self.0.iter().find(|pair| pair.key() == key)
+    }
+
+    pub fn get_mut(&mut self, key: &ASObj) -> Option<&mut ASPaire> {
+        self.0.iter_mut().find(|pair| pair.key() == key)
+    }
+
+    pub fn insert(&mut self, key: ASObj, val: ASObj) {
+        if let Some(pair) = self.get_mut(&key) {
+            pair.set_val(Box::new(val));
+            return;
+        }
+        self.0.push(ASPaire::new(Box::new(key), Box::new(val)));
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn items(&self) -> impl Iterator<Item = &ASPaire> {
+        self.0.iter()
+    }
+}
+
+impl RecursiveRepr for ASDict {
+    fn recursive_repr(
+        &self,
+        seen_map: Option<Rc<RefCell<HashMap<ObjPtr, (Label, Seen)>>>>,
+    ) -> String {
+        let seen_map = seen_map.unwrap_or_else(|| Rc::new(RefCell::new(HashMap::new())));
+
+        let d = &self.0;
+        let hash = d.as_ptr() as usize;
+        let maybe_label = {
+            let seen_map_borrow = seen_map.borrow();
+            seen_map_borrow.get(&hash).map(|(label, seen)| *label)
+        };
+        if let Some(label) = maybe_label {
+            seen_map.borrow_mut().insert(hash, (label, true));
+            return format!("{{<{}>}}", label);
+        }
+
+        let label = seen_map.borrow().len() + 1;
+
+        {
+            let mut seen_t = seen_map.borrow_mut();
+            seen_t.insert(hash, (label, false));
+        }
+
+        let res = d
+            .iter()
+            .map(|el| el.recursive_repr(Some(Rc::clone(&seen_map))))
+            .collect::<Vec<_>>();
+
+        let seen = seen_map.borrow()[&hash].1;
+
+        format!(
+            "{}{{{}}}",
+            if seen {
+                format!("<{}>@", label)
+            } else {
+                "".into()
+            },
+            res.join(", ")
+        )
+    }
+}
+
+#[derive(Debug, Clone, new, PartialEq)]
+pub struct ASPaire {
+    key: Box<ASObj>,
+    val: Box<ASObj>,
+}
+impl ASPaire {
+    pub fn set_val(&mut self, val: Box<ASObj>) {
+        self.val = val;
+    }
+
+    pub fn key(&self) -> &ASObj {
+        self.key.as_ref()
+    }
+
+    pub fn val(&self) -> &ASObj {
+        self.val.as_ref()
+    }
+}
+impl RecursiveRepr for ASPaire {
+    fn recursive_repr(
+        &self,
+        seen_map: Option<Rc<RefCell<HashMap<ObjPtr, (Label, Seen)>>>>,
+    ) -> String {
+        let seen_map = seen_map.unwrap_or_else(|| Rc::new(RefCell::new(HashMap::new())));
+
+        format!(
+            "{}: {}",
+            self.key.recursive_repr(Some(Rc::clone(&seen_map))),
+            self.val.recursive_repr(Some(Rc::clone(&seen_map)))
+        )
+    }
 }
 
 #[derive(Debug, Clone, new, Getters, PartialEq)]
@@ -99,12 +208,8 @@ pub struct ASClasseInst {
     env: Rc<RefCell<ASScope>>,
 }
 
-type ObjPtr = usize;
-type Label = usize;
-type Seen = bool;
-
-impl ASClasseInst {
-    pub fn recursive_repr(
+impl RecursiveRepr for ASClasseInst {
+    fn recursive_repr(
         &self,
         seen_map: Option<Rc<RefCell<HashMap<ObjPtr, (Label, Seen)>>>>,
     ) -> String {
@@ -208,7 +313,6 @@ impl ASObj {
             ASBooleen(..) => ASType::Booleen,
             ASListe(..) => ASType::Liste,
             ASFonc { .. } => ASType::Fonction,
-            ASPaire { .. } => ASType::Paire,
             ASDict(..) => ASType::Dict,
             ASClasse(..) => ASType::Classe,
             ASClasseInst(inst) => ASType::Objet(inst.classe_parent().name().clone()),
@@ -259,14 +363,9 @@ impl ASObj {
         use ASObj::*;
 
         match (self, rhs) {
-            (ASPaire { key, val }, rhs) => todo!(),
             (ASTexte(s), ASTexte(sub_s)) => Ok(s.contains(sub_s)),
             (ASListe(l), rhs) => Ok(l.borrow().contains(rhs)),
-            (ASDict(d), rhs) => Ok(d
-                .borrow()
-                .iter()
-                .find(|el| matches!(el, ASPaire { key, val } if key.as_ref() == rhs))
-                .is_some()),
+            (ASDict(d), rhs) => Ok(d.borrow().contains(rhs)),
 
             (ASTuple(_), _) => todo!("Tuple pas encore (et peut-être jamais) dans le langage"),
             (ASClasse(classe), _) => todo!("Check présense du field?"),
@@ -282,9 +381,11 @@ impl ASObj {
     pub fn repr(&self) -> String {
         self.recursive_repr(None)
     }
+}
 
+impl RecursiveRepr for ASObj {
     /// Repr récursif, utilisé pour les listes, les dicts, etc.
-    pub fn recursive_repr(
+    fn recursive_repr(
         &self,
         seen_map: Option<Rc<RefCell<HashMap<ObjPtr, (Label, Seen)>>>>,
     ) -> String {
@@ -330,47 +431,12 @@ impl ASObj {
                     res.join(", ")
                 )
             }
-            ASDict(d) => {
-                let hash = d.as_ptr() as usize;
-                let maybe_label = {
-                    let seen_map_borrow = seen_map.borrow();
-                    seen_map_borrow.get(&hash).map(|(label, seen)| *label)
-                };
-                if let Some(label) = maybe_label {
-                    seen_map.borrow_mut().insert(hash, (label, true));
-                    return format!("{{<{}>}}", label);
-                }
-
-                let label = seen_map.borrow().len() + 1;
-
-                {
-                    let mut seen_t = seen_map.borrow_mut();
-                    seen_t.insert(hash, (label, false));
-                }
-
-                let res = d
-                    .borrow()
-                    .iter()
-                    .map(|el| el.recursive_repr(Some(Rc::clone(&seen_map))))
-                    .collect::<Vec<_>>();
-
-                let seen = seen_map.borrow()[&hash].1;
-
-                format!(
-                    "{}{{{}}}",
-                    if seen {
-                        format!("<{}>@", label)
-                    } else {
-                        "".into()
-                    },
-                    res.join(", ")
-                )
-            }
-            ASPaire { key, val } => format!(
-                "{}: {}",
-                key.recursive_repr(Some(Rc::clone(&seen_map))),
-                val.recursive_repr(Some(Rc::clone(&seen_map)))
-            ),
+            ASDict(d) => d.borrow().recursive_repr(Some(Rc::clone(&seen_map))),
+            // ASPaire { key, val } => format!(
+            //     "{}: {}",
+            //     key.recursive_repr(Some(Rc::clone(&seen_map))),
+            //     val.recursive_repr(Some(Rc::clone(&seen_map)))
+            // ),
             ASClasseInst(inst) => inst.recursive_repr(Some(Rc::clone(&seen_map))),
             o => o.to_string(),
         }
@@ -387,13 +453,9 @@ impl Clone for ASObj {
             ASBooleen(b) => ASBooleen(*b),
             ASNul => ASNul,
             ASNoValue => ASNoValue,
-            ASPaire { key, val } => ASPaire {
-                key: key.clone(),
-                val: val.clone(),
-            },
             ASTexte(t) => ASTexte(t.clone()),
             ASListe(l) => ASListe(Rc::clone(&l)),
-            ASDict(d) => ASDict(d.clone()),
+            ASDict(d) => ASDict(Rc::clone(&d)),
             ASFonc(fonc) => ASFonc(fonc.clone()),
             ASClasse(classe) => ASClasse(Rc::clone(classe)),
             ASModule { env } => ASModule {
@@ -573,7 +635,7 @@ impl Display for ASObj {
             ASTexte(s) => s.clone(),
             ASBooleen(b) => if *b { "vrai" } else { "faux" }.into(),
             ASNul => "nul".into(),
-            ASPaire { .. } | ASListe(_) | ASDict(_) | ASClasseInst(_) => self.repr(),
+            ASListe(_) | ASDict(_) | ASClasseInst(_) => self.repr(),
             ASClasse(classe) => format!("classe {}", classe.name()),
             ASFonc(fonc) => fonc.to_string(),
             _ => String::from("ASObj sans to_string"),
@@ -701,7 +763,6 @@ pub enum ASType {
     Texte,
 
     Liste,
-    Paire,
     Dict,
 
     Fonction,
@@ -717,6 +778,7 @@ pub enum ASType {
 
 impl ASType {
     pub fn default_value(&self) -> Result<ASObj, ASErreurType> {
+        use crate::as_obj::ASDict as ASDictObj;
         use ASObj::*;
         use ASType::*;
 
@@ -728,11 +790,7 @@ impl ASType {
             Booleen => Ok(ASBooleen(false)),
             Texte => Ok(ASTexte("".into())),
             Liste => Ok(ASListe(Rc::new(RefCell::new(vec![])))),
-            Paire => Ok(ASPaire {
-                key: Box::new(ASNul),
-                val: Box::new(ASNul),
-            }),
-            Dict => Ok(ASDict(Rc::new(RefCell::new(vec![])))),
+            Dict => Ok(ASDict(Rc::new(RefCell::new(ASDictObj::default())))),
             Fonction => todo!(),
             Classe => todo!(),
             Module => todo!(),
@@ -925,7 +983,6 @@ impl Display for ASType {
 
             Liste => "liste".into(),
             Dict => "dict".into(),
-            Paire => "paire".into(),
 
             Module => "module".into(),
             Objet(o) => o.clone(),

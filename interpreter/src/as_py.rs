@@ -4,7 +4,7 @@ use std::rc::Rc;
 use pyo3::types::{PyDict, PyList};
 use pyo3::{prelude::*, types::PyFunction};
 
-use crate::as_obj::{ASFnParam, ASObj, ASScope, ASType, ASVar};
+use crate::as_obj::{ASFnParam, ASObj, ASScope, ASType, ASVar, ASDict};
 use crate::runner::Runner;
 
 pub fn run_python_script(script: String) -> Option<Rc<RefCell<ASScope>>> {
@@ -51,14 +51,11 @@ fn py_obj_to_as_obj(py: Python<'_>, py_obj: &PyAny) -> ASObj {
         return ASObj::ASListe(Rc::new(RefCell::new(list)));
     }
     if let Ok(d) = py_obj.extract::<Py<PyDict>>() {
-        let mut dict = Vec::new();
+        let mut dict = ASDict::default();
         for (key, val) in d.as_ref(py).iter() {
             let key = py_obj_to_as_obj(py, key);
             let val = py_obj_to_as_obj(py, val);
-            dict.push(ASObj::ASPaire {
-                key: Box::new(key),
-                val: Box::new(val),
-            });
+            dict.insert(key, val);
         }
         return ASObj::ASDict(Rc::new(RefCell::new(dict)));
     }
@@ -132,25 +129,13 @@ fn as_obj_to_py_obj(py: Python<'_>, as_obj: &ASObj) -> PyObject {
         }
         ASObj::ASDict(val) => {
             let dict = PyDict::new(py);
-            for val in val.borrow().iter() {
-                let ASObj::ASPaire { key, val } = val else {
-                    unreachable!()
-                };
+            for item in val.borrow().items() {
                 dict.set_item(
-                    as_obj_to_py_obj(py, key.as_ref()),
-                    as_obj_to_py_obj(py, val.as_ref()),
+                    as_obj_to_py_obj(py, item.key()),
+                    as_obj_to_py_obj(py, item.val()),
                 )
                 .unwrap();
             }
-            dict.to_object(py)
-        }
-        ASObj::ASPaire { key, val } => {
-            let dict = PyDict::new(py);
-            dict.set_item(
-                as_obj_to_py_obj(py, key.as_ref()),
-                as_obj_to_py_obj(py, val.as_ref()),
-            )
-            .unwrap();
             dict.to_object(py)
         }
         ASObj::ASNul => py.None(),

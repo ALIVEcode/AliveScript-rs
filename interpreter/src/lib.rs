@@ -3,6 +3,7 @@
 mod as_modules;
 mod visitor;
 mod as_py;
+mod as_obj_utils;
 
 pub(crate) mod as_obj;
 pub(crate) mod ast;

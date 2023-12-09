@@ -1,18 +1,12 @@
 use lalrpop_util::ParseError;
 
-use std::{
-    cell::RefCell,
-    ops::{Deref, IndexMut},
-    path::Path,
-    rc::Rc,
-    str::FromStr,
-};
+use std::{cell::RefCell, ops::IndexMut, path::Path, rc::Rc, str::FromStr};
 
 use crate::{
     as_modules::ASModuleBuiltin,
     as_obj::{
         ASClasse, ASClasseField, ASClasseInst, ASEnv, ASErreur, ASErreurType, ASFnParam, ASFonc,
-        ASMethode, ASObj, ASScope, ASType, ASVar,
+        ASMethode, ASObj, ASScope, ASType, ASVar, ASDict
     },
     as_py::run_python_script,
     ast::{
@@ -326,25 +320,26 @@ impl Visitor for Runner<'_> {
         }
     }
 
-    fn visit_expr_paire(&mut self, expr: &Expr) {
-        if let Expr::Paire { clef, val } = expr {
-            // let clef_val = self.eval_expr(clef).expect("Paire clef");
-            // let val_val = self.eval_expr(val).expect("Paire val");
-            let clef_val = eval!(expr, self, clef, "Paire clef");
-            let val_val = eval!(expr, self, val, "Paire val");
-            self.push_value(ASObj::ASPaire {
-                key: Box::new(clef_val),
-                val: Box::new(val_val),
-            });
-        }
-    }
+    // fn visit_expr_paire(&mut self, expr: &Expr) {
+    //     if let Expr::Paire { clef, val } = expr {
+    //         // let clef_val = self.eval_expr(clef).expect("Paire clef");
+    //         // let val_val = self.eval_expr(val).expect("Paire val");
+    //         let clef_val = eval!(expr, self, clef, "Paire clef");
+    //         let val_val = eval!(expr, self, val, "Paire val");
+    //         self.push_value(ASObj::ASPaire {
+    //             key: Box::new(clef_val),
+    //             val: Box::new(val_val),
+    //         });
+    //     }
+    // }
 
     fn visit_expr_dict(&mut self, expr: &Expr) {
         if let Expr::Dict(exprs) = expr {
-            let mut dict = Vec::with_capacity(exprs.len());
+            let mut dict = ASDict::default();
             for expr in exprs {
-                let val = eval!(expr, self, expr, "Element de dict");
-                dict.push(val);
+                let clef = eval!(expr, self, expr.clef, "Clef de dict");
+                let val = eval!(expr, self, expr.val, "Val de dict");
+                dict.insert(clef, val);
             }
             self.push_value(ASObj::ASDict(Rc::new(RefCell::new(dict))));
         }
@@ -479,13 +474,10 @@ impl Visitor for Runner<'_> {
                 }
                 (ASObj::ASDict(dict), clef) => {
                     let d = dict.borrow();
-                    let el = d.iter().find(
-                        |el| matches!(el, ASObj::ASPaire { key, val } if *key.deref() == clef),
-                    );
+                    let el = d.get(&clef);
                     match el {
-                        Some(ASObj::ASPaire { key, val }) => val.deref().clone(),
+                        Some(paire) => paire.val().clone(),
                         None => throw_err!(self, ASErreurType::new_erreur_clef(clef.clone())),
-                        Some(_) => unreachable!(),
                     }
                 }
                 _ => todo!(),
@@ -715,7 +707,7 @@ impl Visitor for Runner<'_> {
         }
     }
 
-    fn visit_expr_classe_init(&mut self, expr: &Expr) {
+    /* fn visit_expr_classe_init(&mut self, expr: &Expr) {
         let Expr::ClasseInst { classe, fields } = expr else {
             unreachable!();
         };
@@ -758,7 +750,7 @@ impl Visitor for Runner<'_> {
 
             throw_err!(?, self, env.assign_type_strict(&key, *val));
         }
-    }
+    } */
 
     fn visit_expr_callrust(&mut self, expr: &Expr) {
         let Expr::CallRust(CallRust(proc)) = expr else {
@@ -1174,20 +1166,7 @@ impl Visitor for Runner<'_> {
                         }
                         (ASDict(d), obj) => {
                             let mut d = d.borrow_mut();
-                            let el = d.iter_mut().find(
-                                |el| matches!(el, ASPaire { key, val } if key.as_ref() == &obj),
-                            );
-                            if let Some(el) = el {
-                                *el = ASObj::ASPaire {
-                                    key: Box::new(obj),
-                                    val: Box::new(value),
-                                };
-                            } else {
-                                d.push(ASObj::ASPaire {
-                                    key: Box::new(obj),
-                                    val: Box::new(value),
-                                });
-                            }
+                            d.insert(obj, value);
                         }
                         _ => todo!(),
                     }

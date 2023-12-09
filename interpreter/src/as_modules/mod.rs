@@ -4,6 +4,7 @@ mod as_math;
 mod as_temps;
 mod as_tests;
 mod as_texte;
+mod as_inspecte;
 mod fonction_macro;
 
 use once_cell::sync::Lazy;
@@ -14,6 +15,7 @@ use std::rc::Rc;
 use crate::as_obj::{ASEnv, ASErreurType, ASObj, ASScope, ASType, ASVar};
 
 use self::as_builtin::BUILTIN_MOD;
+use self::as_inspecte::INSPECTE_MOD;
 use self::as_liste::LISTE_MOD;
 use self::as_math::MATH_MOD;
 use self::as_temps::TEMPS_MOD;
@@ -29,6 +31,7 @@ pub enum ASModuleBuiltin {
     Temps,
     Voiture,
     Test,
+    Inspecte,
 }
 
 const AS_MODULES: Lazy<HashMap<ASModuleBuiltin, Rc<RefCell<ASScope>>>> = Lazy::new(|| {
@@ -39,6 +42,7 @@ const AS_MODULES: Lazy<HashMap<ASModuleBuiltin, Rc<RefCell<ASScope>>>> = Lazy::n
     modules.insert(ASModuleBuiltin::Texte, Rc::clone(&*TEXTE_MOD));
     modules.insert(ASModuleBuiltin::Temps, Rc::clone(&*TEMPS_MOD));
     modules.insert(ASModuleBuiltin::Test, Rc::clone(&*TEST_MOD));
+    modules.insert(ASModuleBuiltin::Inspecte, Rc::clone(&*INSPECTE_MOD));
     modules
 });
 
@@ -58,6 +62,7 @@ impl ASModuleBuiltin {
             ASModuleBuiltin::Temps => "Temps",
             ASModuleBuiltin::Voiture => "Voiture",
             ASModuleBuiltin::Test => "Test",
+            ASModuleBuiltin::Inspecte => "Inspecte",
         }
         .into()
     }

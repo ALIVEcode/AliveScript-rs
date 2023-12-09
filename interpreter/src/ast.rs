@@ -181,12 +181,12 @@ pub enum Expr {
 
     List(Vec<Box<Expr>>),
 
-    Paire {
-        clef: Box<Expr>,
-        val: Box<Expr>,
-    },
+    // Paire {
+    //     clef: Box<Expr>,
+    //     val: Box<Expr>,
+    // },
 
-    Dict(Vec<Box<Expr>>), // Expr est garanti d'être Expr::Paire
+    Dict(Vec<Paire>),
 
     Ident(String),
 
@@ -217,10 +217,10 @@ pub enum Expr {
         args: Vec<Box<Expr>>,
     },
 
-    ClasseInst {
+    /* ClasseInst {
         classe: Box<Expr>,
         fields: Vec<Box<Expr>>,
-    },
+    }, */
 
     BinOp {
         lhs: Box<Expr>,
@@ -246,6 +246,12 @@ pub enum Expr {
     },
 
     CallRust(CallRust),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Paire {
+    pub clef: Box<Expr>,
+    pub val: Box<Expr>,
 }
 
 pub struct CallRust(pub Rc<dyn Fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>>);
@@ -342,14 +348,14 @@ impl Visitable for Expr {
             Lit(..) => visitor.visit_expr_lit(self),
             List(..) => visitor.visit_expr_list(self),
             Dict(..) => visitor.visit_expr_dict(self),
-            Paire { .. } => visitor.visit_expr_paire(self),
+            // Paire { .. } => visitor.visit_expr_paire(self),
             Ident(..) => visitor.visit_expr_ident(self),
             AccessProp { .. } => visitor.visit_expr_accessprop(self),
             FnCall { .. } => visitor.visit_expr_fncall(self),
             Range { .. } => visitor.visit_expr_suite(self),
             Slice { .. } => visitor.visit_expr_slice(self),
             CallRust(..) => visitor.visit_expr_callrust(self),
-            ClasseInst { .. } => visitor.visit_expr_classe_init(self),
+            // ClasseInst { .. } => visitor.visit_expr_classe_init(self),
             DefFn { .. } => visitor.visit_expr_deffn(self),
             Faire(..) => visitor.visit_expr_faire(self),
         }

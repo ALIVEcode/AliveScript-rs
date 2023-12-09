@@ -9,7 +9,7 @@ pub trait Visitor {
     // Expressions
     fn visit_expr_lit(&mut self, expr: &Expr);
     fn visit_expr_list(&mut self, expr: &Expr);
-    fn visit_expr_paire(&mut self, expr: &Expr);
+    // fn visit_expr_paire(&mut self, expr: &Expr);
     fn visit_expr_dict(&mut self, expr: &Expr);
 
     fn visit_expr_ident(&mut self, expr: &Expr);
@@ -17,7 +17,7 @@ pub trait Visitor {
     fn visit_expr_slice(&mut self, expr: &Expr);
 
     fn visit_expr_fncall(&mut self, expr: &Expr);
-    fn visit_expr_classe_init(&mut self, expr: &Expr);
+    // fn visit_expr_classe_init(&mut self, expr: &Expr);
     fn visit_expr_callrust(&mut self, expr: &Expr);
 
     fn visit_expr_unaryop(&mut self, expr: &Expr);

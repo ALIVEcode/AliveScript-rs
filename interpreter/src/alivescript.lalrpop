@@ -2,6 +2,7 @@ use crate::ast::{
     Stmt,
     DefFn,
     Expr,
+    Paire,
     Type,
     BinOpcode,
     DeclVar,
@@ -343,20 +344,19 @@ pub Term: Box<Expr> = {
   //<docs:(<"DOCS"> "eos"*)?> "fonction" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
   //    <body:Script> "fin" "fonction" "eos" => Box::new(Expr::DefFn(DefFn::new(docs, Some(name), params, return_type, body))),
 
-  //StructInst,
+  Ident,
 
   AccessProp,
-
-  "ident" => Box::new(Expr::Ident(<>)),
 
   Slice,
 
   TermExpr,
 
-  "(" "eos"* <Paire> "eos"* ")",
-
   Collection,
 };
+
+#[inline]
+Ident: Box<Expr> = "ident" => Box::new(Expr::Ident(<>));
 
 #[inline]
 AccessProp: Box<Expr> = 
@@ -369,25 +369,31 @@ TermExpr: Box<Expr> = "(" "eos"* <Expr> "eos"* ")";
 Collection: Box<Expr> = {
   CommaCollection<"[", "]", Expr> => Box::new(Expr::List(<>)),
 
-  CommaCollection<"{", "}", Paire> => Box::new(Expr::Dict(<>)),
+  CommaCollection<"{", "}", DictContent> => Box::new(Expr::Dict(<>)),
 }
 
 #[inline]
-Paire: Box<Expr> = {
+DictContent: Paire = {
+    Paire,
+    <ident:"ident"> => Paire {
+            clef: Box::new(Expr::Lit(ASObj::ASTexte(ident.clone()))),
+            val: Box::new(Expr::Ident(ident)),
+        },
+};
+
+#[inline]
+Paire: Paire = {
     <clef:"ident"> ":" <val:Term> =>
-        Box::new(Expr::Paire{ 
+        Paire{ 
             clef: Box::new(Expr::Lit(ASObj::ASTexte(clef))),
             val,
-        }),
+        },
 
-    <clef:Lit> ":" <val:Term> =>
-        Box::new(Expr::Paire{ clef: Box::new(clef), val }),
+    <clef:Lit> ":" <val:Term> => Paire{ clef: Box::new(clef), val },
 
-    <clef:Collection> ":" <val:Term> =>
-        Box::new(Expr::Paire{ <> }),
+    <clef:Collection> ":" <val:Term> => Paire{ <> },
 
-    <clef:TermExpr> ":" <val:Term> =>
-        Box::new(Expr::Paire{ <> }),
+    <clef:TermExpr> ":" <val:Term> => Paire{ <> },
 }
 
 #[inline]
@@ -472,14 +478,6 @@ Lit: Expr = {
 FnParam: FnParam = {
     <name:"ident"> <static_type:StaticType> <default_value:("assign" <Expr>)?> 
         => FnParam { <> },
-};
-
-//StructInst: Box<Expr> = <struct:Term> <fields:CommaCollection<"{", "}", StructField>>;
-
-#[inline]
-ClasseField: Box<Expr> = {
-    Paire,
-    "ident" => Box::new(Expr::Ident(<>)),
 };
 
 StaticType: Option<Box<Type>> = (":" <Type>)?;
