@@ -360,12 +360,34 @@ impl Visitor for Runner<'_> {
         }
     }
 
+    fn visit_expr_faire(&mut self, expr: &Expr) {
+        let Expr::Faire(body) = expr else {
+            unreachable!()
+        };
+        self.env.push_new_scope(ASScope::new());
+        self.visit_body(body);
+        self.env.pop_scope();
+        if !self.should_early_exit() {
+            if self.expr_results.last().is_none() {
+                self.push_value(ASObj::ASNul);
+            }
+        } else if !self.early_exit_matches(EarlyExit::Retourner) {
+            panic!("Sortie d'une fonction autrement qu'avec `retourner`")
+        }
+        if self.error_thrown() {
+            return;
+        }
+        self.clear_early_exit();
+    }
+
     fn visit_expr_accessprop(&mut self, expr: &Expr) {
         if let Expr::AccessProp { obj, prop } = expr {
             let obj_val = eval!(expr, self, obj, "AccessProp obj");
 
             let result = match &obj_val {
-                ASObj::ASModule { env } => env.borrow().get(prop).expect("AccessProp prop").1.clone(),
+                ASObj::ASModule { env } => {
+                    env.borrow().get(prop).expect("AccessProp prop").1.clone()
+                }
                 ASObj::ASClasse(classe) => {
                     let field = classe
                         .fields()

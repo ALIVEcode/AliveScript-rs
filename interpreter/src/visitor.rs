@@ -27,7 +27,8 @@ pub trait Visitor {
 
     fn visit_expr_suite(&mut self, expr: &Expr);
 
-    fn visit_expr_deffn(&mut self, stmt: &Expr);
+    fn visit_expr_deffn(&mut self, expr: &Expr);
+    fn visit_expr_faire(&mut self, expr: &Expr);
 
     // Statements
     fn visit_stmt_expr(&mut self, stmt: &Stmt);

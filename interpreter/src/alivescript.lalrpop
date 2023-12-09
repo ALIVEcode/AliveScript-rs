@@ -336,6 +336,8 @@ pub Expr: Box<Expr> = {
 pub Term: Box<Expr> = {
   Lit => Box::new(<>),
 
+  "faire" "eos" <body:Script> "fin" => Box::new(Expr::Faire(<>)),
+
   <func:Term> <args:CommaCollection<"(", ")", Expr>> => Box::new(Expr::FnCall{<>}),
 
   //<docs:(<"DOCS"> "eos"*)?> "fonction" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"

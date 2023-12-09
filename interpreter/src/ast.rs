@@ -193,6 +193,8 @@ pub enum Expr {
     /// Définition d'une fonction
     DefFn(DefFn),
 
+    Faire(Vec<Box<Stmt>>),
+
     AccessProp {
         obj: Box<Expr>,
         prop: String,
@@ -349,6 +351,7 @@ impl Visitable for Expr {
             CallRust(..) => visitor.visit_expr_callrust(self),
             ClasseInst { .. } => visitor.visit_expr_classe_init(self),
             DefFn { .. } => visitor.visit_expr_deffn(self),
+            Faire(..) => visitor.visit_expr_faire(self),
         }
     }
 }
