@@ -5,8 +5,8 @@ use std::{cell::RefCell, ops::IndexMut, path::Path, rc::Rc, str::FromStr};
 use crate::{
     as_modules::ASModuleBuiltin,
     as_obj::{
-        ASClasse, ASClasseField, ASClasseInst, ASEnv, ASErreur, ASErreurType, ASFnParam, ASFonc,
-        ASMethode, ASObj, ASScope, ASType, ASVar, ASDict
+        ASClasse, ASClasseField, ASClasseInst, ASDict, ASEnv, ASErreur, ASErreurType, ASFnParam,
+        ASFonc, ASMethode, ASObj, ASScope, ASType, ASVar,
     },
     as_py::run_python_script,
     ast::{
@@ -105,6 +105,7 @@ macro_rules! throw_err {
             $self.throw_err(result.err().unwrap());
             return;
         }
+        result.ok().unwrap()
     }};
 }
 
@@ -131,7 +132,7 @@ impl<'a> Runner<'a> {
             current_file: None,
             used_files: vec![],
         };
-        ASModuleBuiltin::Builtin.load(&None, &Some(vec!["*".into()]), &mut new.env);
+        ASModuleBuiltin::Builtin.load_non_custom(&None, &Some(vec!["*".into()]), &mut new.env);
         new
     }
 
@@ -146,7 +147,7 @@ impl<'a> Runner<'a> {
             current_file: Some(file.clone()),
             used_files: vec![file],
         };
-        ASModuleBuiltin::Builtin.load(&None, &Some(vec!["*".into()]), &mut new.env);
+        ASModuleBuiltin::Builtin.load_non_custom(&None, &Some(vec!["*".into()]), &mut new.env);
         new
     }
 
@@ -248,7 +249,11 @@ impl<'a> Runner<'a> {
         Some(params_fonc)
     }
 
-    fn run_script(&mut self, script: String, path: Option<String>) -> Option<Rc<RefCell<ASScope>>> {
+    pub(crate) fn run_script(
+        &mut self,
+        script: String,
+        path: Option<String>,
+    ) -> Option<Rc<RefCell<ASScope>>> {
         let expr_results = self.expr_results.clone();
         let type_results = self.type_results.clone();
         let old_file = self.current_file.take();
@@ -380,8 +385,16 @@ impl Visitor for Runner<'_> {
             let obj_val = eval!(expr, self, obj, "AccessProp obj");
 
             let result = match &obj_val {
-                ASObj::ASModule { env } => {
-                    env.borrow().get(prop).expect("AccessProp prop").1.clone()
+                ASObj::ASModule { name, alias, env } => {
+                    let env_borrow = env.borrow();
+                    let obj = env_borrow.get(prop);
+                    match obj {
+                        Some(obj) => obj.1.clone(),
+                        None => throw_err!(
+                            self,
+                            ASErreurType::new_erreur_access_propriete(obj_val.clone(), prop.clone())
+                        ),
+                    }
                 }
                 ASObj::ASClasse(classe) => {
                     let field = classe
@@ -1088,7 +1101,26 @@ impl Visitor for Runner<'_> {
                     &mut self.env,
                 )
             } else {
-                throw_err!(?, self, ASModuleBuiltin::try_from(module.as_str()));
+                let module_path = module.clone() + ".as";
+                let script = self.request_data(Data::GetFichier(module_path.clone()));
+                self.used_files.push(module.clone());
+
+                let Some(Response::Text(script)) = script else {
+                    // Si le fichier n'existe pas, on essaye de charger un module builtin
+                    let module = throw_err!(?, self, ASModuleBuiltin::try_from(module.as_str()));
+                    throw_err!(?, self, module.load(alias, vars, self));
+                    return;
+                };
+
+                let mod_scope = Rc::clone(&self.run_script(script, Some(module.clone())).unwrap());
+
+                ASModuleBuiltin::load_from_scope(
+                    mod_scope,
+                    module.clone(),
+                    alias,
+                    vars,
+                    &mut self.env,
+                )
             }
         }
     }

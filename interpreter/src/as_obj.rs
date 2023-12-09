@@ -42,7 +42,7 @@ pub enum ASObj {
 
     ASClasse(Rc<ASClasse>),
 
-    ASModule { env: Rc<RefCell<ASScope>> },
+    ASModule { name: String, alias: Option<String>, env: Rc<RefCell<ASScope>> },
 
     ASClasseInst(Rc<ASClasseInst>),
 }
@@ -369,7 +369,7 @@ impl ASObj {
 
             (ASTuple(_), _) => todo!("Tuple pas encore (et peut-être jamais) dans le langage"),
             (ASClasse(classe), _) => todo!("Check présense du field?"),
-            (ASModule { env }, _) => todo!(),
+            (ASModule { name, alias, env }, _) => todo!(),
             _ => Err(ASErreurType::new_erreur_operation(
                 "dans".into(),
                 self.get_type(),
@@ -458,7 +458,9 @@ impl Clone for ASObj {
             ASDict(d) => ASDict(Rc::clone(&d)),
             ASFonc(fonc) => ASFonc(fonc.clone()),
             ASClasse(classe) => ASClasse(Rc::clone(classe)),
-            ASModule { env } => ASModule {
+            ASModule { name, alias, env } => ASModule {
+                name: name.clone(),
+                alias: alias.clone(),
                 env: Rc::clone(env),
             },
             ASClasseInst(inst) => ASClasseInst(Rc::clone(inst)),
@@ -638,6 +640,11 @@ impl Display for ASObj {
             ASListe(_) | ASDict(_) | ASClasseInst(_) => self.repr(),
             ASClasse(classe) => format!("classe {}", classe.name()),
             ASFonc(fonc) => fonc.to_string(),
+            ASModule { name, alias, .. } => format!("module {}{}", name, if let Some(alias) = alias {
+                format!(" alias {}", alias)
+            } else {
+                "".into()
+            }),
             _ => String::from("ASObj sans to_string"),
         };
         write!(f, "{}", to_string)
