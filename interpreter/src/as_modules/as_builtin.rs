@@ -95,13 +95,13 @@ as_mod! {
                 return result;
             }
             Ok(Some(match obj {
-                ASObj::ASTexte(t) => ASObj::new_as_liste(Rc::new(RefCell::new(
+                ASObj::ASTexte(t) => ASObj::liste(
                     t.chars().map(|c| ASObj::ASTexte(c.to_string())).collect(),
-                ))),
+                ),
                 ASObj::ASListe(l) => ASObj::liste(l.borrow().iter().cloned().collect()),
                 ASObj::ASDict(d) => ASObj::liste(
-                    d.borrow().iter().map(|pair| ASObj::liste(
-                                vec![pair.clef().clone(), pair.val().clone()]
+                    d.borrow().items().map(|pair| ASObj::liste(
+                                vec![pair.key().clone(), pair.val().clone()]
                             )).collect(),
                 ),
                 _ => unreachable!()
