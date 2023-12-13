@@ -300,7 +300,7 @@ impl<'a> Runner<'a> {
         self.env.pop_scope()
     }
 
-    pub fn to_bool(&mut self, obj: ASObj) -> Result<bool, ASErreurType> {
+    pub fn to_bool(&mut self, obj: &ASObj) -> Result<bool, ASErreurType> {
         if let Some(result) = call_methode!(obj.__bool__(), self) {
             result.map(|obj| obj.unwrap().to_bool())
         } else {
@@ -855,7 +855,7 @@ impl Visitor for Runner<'_> {
             let value = eval!(expr, self, expr, "Lhs de binop");
 
             let result = match op {
-                Pas => ASObj::ASBooleen(!throw_err!(?, self, self.to_bool(value))),
+                Pas => ASObj::ASBooleen(!throw_err!(?, self, self.to_bool(&value))),
                 Negate => todo!(),
             };
 
@@ -912,14 +912,14 @@ impl Visitor for Runner<'_> {
             use BinLogiccode::*;
             let result = match op {
                 Et => {
-                    if !throw_err!(?, self, self.to_bool(lhs_value)) {
+                    if !throw_err!(?, self, self.to_bool(&lhs_value)) {
                         lhs_value
                     } else {
                         eval!(expr, self, rhs, "Rhs de bin logique")
                     }
                 }
                 Ou => {
-                    if throw_err!(?, self, self.to_bool(lhs_value)) {
+                    if throw_err!(?, self, self.to_bool(&lhs_value)) {
                         lhs_value
                     } else {
                         eval!(expr, self, rhs, "Rhs de bin logique")
@@ -1315,7 +1315,7 @@ impl Visitor for Runner<'_> {
         } = stmt
         {
             let cond_result = eval!(expr, self, cond, "Si cond");
-            if throw_err!(?, self, self.to_bool(cond_result)) {
+            if throw_err!(?, self, self.to_bool(&cond_result)) {
                 self.visit_body(then_br);
             } else if let Some(else_br) = else_br {
                 self.visit_body(else_br);
@@ -1326,7 +1326,7 @@ impl Visitor for Runner<'_> {
     fn visit_stmt_condstmt(&mut self, stmt: &Stmt) {
         if let Stmt::CondStmt { cond, then_stmt } = stmt {
             let cond_result = eval!(expr, self, cond, "CondStmt cond");
-            if throw_err!(?, self, self.to_bool(cond_result)) {
+            if throw_err!(?, self, self.to_bool(&cond_result)) {
                 then_stmt.accept(self);
             }
         }
@@ -1437,7 +1437,7 @@ impl Visitor for Runner<'_> {
     fn visit_stmt_tantque(&mut self, stmt: &Stmt) {
         if let Stmt::TantQue { cond, body } = stmt {
             let cond_obj = eval!(expr, self, cond, "Si cond");
-            while throw_err!(?, self, self.to_bool(cond_obj)) {
+            while throw_err!(?, self, self.to_bool(&cond_obj)) {
                 self.env.push_new_scope(ASScope::new());
                 self.visit_body(body);
                 self.env.pop_scope();

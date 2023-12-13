@@ -123,7 +123,7 @@ as_mod! {
     },
     as_fonction! {
         getAttr[runner](obj: ASType::any(), attr: ASType::Texte, default_val: ASType::any() => ASObj::ASNoValue) -> ASType::any(); {
-            if let Some(result) = call_methode!(obj.__getAttr__(attr), runner) {
+            if let Some(result) = call_methode!(obj.__getAttr__(attr.clone()), runner) {
                 return result;
             }
 
