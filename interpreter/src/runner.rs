@@ -13,6 +13,7 @@ use crate::{
         AssignVar, BinCompcode, BinLogiccode, BinOpcode, CallRust, DeclVar, Expr, FnParam, LireVar,
         Stmt, Type, TypeBinOpcode, UnaryOpcode,
     },
+    call_methode,
     data::{Data, Response},
     get_err_line,
     io::InterpretorIO,
@@ -249,6 +250,18 @@ impl<'a> Runner<'a> {
         Some(params_fonc)
     }
 
+    pub(crate) fn call_obj(&mut self, func: ASObj, args: Vec<ASObj>) -> Option<ASObj> {
+        let to_call = Expr::FnCall {
+            func: Expr::literal(func),
+            args: args.into_iter().map(|arg| Expr::literal(arg)).collect(),
+        };
+        to_call.accept(self);
+        if self.error_thrown() {
+            return None;
+        }
+        self.pop_value()
+    }
+
     pub(crate) fn run_script(
         &mut self,
         script: String,
@@ -285,6 +298,14 @@ impl<'a> Runner<'a> {
         self.type_results = type_results;
         self.stmt_result = None;
         self.env.pop_scope()
+    }
+
+    pub fn to_bool(&mut self, obj: ASObj) -> Result<bool, ASErreurType> {
+        if let Some(result) = call_methode!(obj.__bool__(), self) {
+            result.map(|obj| obj.unwrap().to_bool())
+        } else {
+            Ok(obj.to_bool())
+        }
     }
 }
 
@@ -384,6 +405,13 @@ impl Visitor for Runner<'_> {
         if let Expr::AccessProp { obj, prop } = expr {
             let obj_val = eval!(expr, self, obj, "AccessProp obj");
 
+            if let Some(result) =
+                call_methode!(obj_val.__getAttr__(ASObj::ASTexte(prop.clone())), self)
+            {
+                let result = throw_err!(?, self, result);
+                self.push_value(result.unwrap());
+                return;
+            }
             let result = match &obj_val {
                 ASObj::ASModule { name, alias, env } => {
                     let env_borrow = env.borrow();
@@ -392,38 +420,25 @@ impl Visitor for Runner<'_> {
                         Some(obj) => obj.1.clone(),
                         None => throw_err!(
                             self,
-                            ASErreurType::new_erreur_access_propriete(obj_val.clone(), prop.clone())
+                            ASErreurType::new_erreur_access_propriete(
+                                obj_val.clone(),
+                                prop.clone()
+                            )
                         ),
                     }
                 }
                 ASObj::ASClasse(classe) => {
-                    let field = classe
-                        .fields()
-                        .into_iter()
-                        .find(|field| &field.name == prop);
-                    if let Some(ASClasseField {
-                        name,
-                        vis,
-                        static_type,
-                        default_value,
-                        is_const,
-                    }) = field
-                    {
-                        let Some(value) =
-                            eval!(opt_expr, self, default_value, "Default value field")
-                        else {
-                            throw_err!(
-                                self,
-                                ASErreurType::new_erreur_access_propriete(obj_val, prop.clone())
-                            );
-                        };
-                        value
-                    } else {
+                    let env_borrow = classe.static_env().borrow();
+                    let Some(value) = env_borrow.get_value(prop) else {
                         throw_err!(
                             self,
-                            ASErreurType::new_erreur_propriete_pas_init(obj_val, prop.clone())
+                            ASErreurType::new_erreur_access_propriete(
+                                obj_val.clone(),
+                                prop.clone()
+                            )
                         );
-                    }
+                    };
+                    value.clone()
                 }
                 ASObj::ASClasseInst(inst) => {
                     let env_borrow = inst.env().borrow();
@@ -664,23 +679,15 @@ impl Visitor for Runner<'_> {
                     );
                 }
 
-                let init_env = ASScope::from(vec![(
-                    ASVar::new(
-                        "inst".into(),
-                        Some(ASType::Objet(classe.name().clone())),
-                        true,
-                    ),
-                    ASObj::ASClasseInst(Rc::clone(&inst)),
-                )]);
+                let mut init_args = vec![Expr::literal(ASObj::ASClasseInst(Rc::clone(&inst)))];
+                init_args.extend(args.clone());
 
                 if let Some(init) = classe.init() {
                     let to_call = Expr::FnCall {
                         func: Expr::literal(ASObj::ASFonc(Rc::clone(init))),
-                        args: args.clone(),
+                        args: init_args,
                     };
-                    self.env.push_scope(Rc::new(RefCell::new(init_env)));
                     self.visit_expr_fncall(&to_call);
-                    self.env.pop_scope();
                     if self.error_thrown() {
                         return;
                     }
@@ -696,23 +703,24 @@ impl Visitor for Runner<'_> {
                         );
                     }
                 }
-
                 self.push_value(ASObj::ASClasseInst(Rc::clone(&inst)));
             }
-            ASObj::ASMethode(methode) => {
-                let inst: ASObj = methode.inst().into();
 
-                let methode_env = ASScope::from(vec![(
-                    ASVar::new("inst".into(), Some(inst.get_type()), true),
-                    inst,
-                )]);
+            ASObj::ASMethode(methode) => {
+                let inst = Rc::clone(methode.inst());
+
+                let mut methode_args = vec![Expr::literal(ASObj::ASClasseInst(Rc::clone(&inst)))];
+                methode_args.extend(args.clone());
+
                 let to_call = Expr::FnCall {
                     func: Expr::literal(ASObj::ASFonc(methode.func().clone())),
-                    args: args.clone(),
+                    args: methode_args,
                 };
-                self.env.push_scope(Rc::new(RefCell::new(methode_env)));
+
                 self.visit_expr_fncall(&to_call);
-                self.env.pop_scope();
+                if self.error_thrown() {
+                    return;
+                }
             }
             _ => {
                 panic!("Impossible d'appeler '{:?}'", expr);
@@ -931,15 +939,20 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_stmt_afficher(&mut self, stmt: &Stmt) {
-        if let Stmt::Afficher(exprs) = stmt {
-            let mut values = Vec::with_capacity(exprs.len());
-            for expr in exprs {
-                let value = eval!(expr, self, expr, "Afficher prend un argument");
+        let Stmt::Afficher(exprs) = stmt else { return };
+
+        let mut values = Vec::with_capacity(exprs.len());
+        for expr in exprs {
+            let value = eval!(expr, self, expr, "Afficher prend un argument");
+            if let Some(result) = call_methode!(value.__texte__(), self) {
+                let result = throw_err!(?, self, result);
+                values.push(result.unwrap().to_string());
+            } else {
                 values.push(value.to_string());
             }
-            let string = values.join(" ");
-            self.send_data(Data::Afficher(string));
         }
+        let string = values.join(" ");
+        self.send_data(Data::Afficher(string));
     }
 
     fn visit_stmt_lire(&mut self, stmt: &Stmt) {
@@ -1209,6 +1222,9 @@ impl Visitor for Runner<'_> {
                         ASObj::ASClasseInst(inst) => {
                             throw_err!(?, self, inst.env().borrow_mut().assign(prop, value));
                         }
+                        ASObj::ASClasse(classe) => {
+                            throw_err!(?, self, classe.static_env().borrow_mut().assign(prop, value));
+                        }
                         _ => todo!(),
                     }
                 }
@@ -1371,14 +1387,21 @@ impl Visitor for Runner<'_> {
             body,
         } = stmt
         {
-            let iter_obj = eval!(expr, self, iterable, "Pour iterable");
+            let mut iter_obj = eval!(expr, self, iterable, "Pour iterable");
+
+            if let Some(obj) = call_methode!(iter_obj.__iter__() or throw, self) {
+                iter_obj = throw_err!(?, self, obj).unwrap();
+            }
 
             let iter: Rc<RefCell<Vec<ASObj>>> = match iter_obj {
                 ASObj::ASTexte(s) => Rc::new(RefCell::new(
                     s.chars().map(|c| ASObj::ASTexte(String::from(c))).collect(),
                 )),
                 ASObj::ASListe(ref ls) => Rc::clone(ls),
-                _ => panic!("Pas itérable"),
+                _ => throw_err!(
+                    self,
+                    ASErreurType::new_erreur_type(ASType::iterable(), iter_obj.get_type())
+                ),
             };
 
             let DeclVar::Var {
@@ -1387,7 +1410,7 @@ impl Visitor for Runner<'_> {
                 is_const,
             } = var
             else {
-                panic!()
+                todo!()
             };
             let static_type = eval!(opt_type, self, static_type, "Pour var type");
 
@@ -1495,17 +1518,89 @@ impl Visitor for Runner<'_> {
             methods,
         } = stmt
         {
+            let mut static_env = ASScope::new();
+            let mut static_fields = vec![];
             let mut as_fields = Vec::with_capacity(fields.len());
             for field in fields.into_iter() {
                 let field_type = eval!(opt_type, self, field.static_type.clone(), "Field Type");
-                as_fields.push(ASClasseField {
+                let as_field = ASClasseField {
                     name: field.name.clone(),
                     vis: field.vis.into(),
                     static_type: field_type.into(),
                     is_const: field.is_const,
                     default_value: field.default_value.clone(),
-                })
+                };
+                if *field.is_static() {
+                    let Some(value_expr) = field.default_value() else {
+                        throw_err!(
+                            self,
+                            ASErreurType::new_erreur_valeur(
+                                Some(
+                                    "Les champs statiques doivent avoir une valeur par défaut."
+                                        .into()
+                                ),
+                                ASObj::ASNoValue
+                            )
+                        );
+                    };
+                    static_fields.push((field.name.clone(), value_expr));
+                    static_env.declare(
+                        ASVar::new(
+                            field.name.clone(),
+                            Some(as_field.static_type.clone()),
+                            field.is_const,
+                        ),
+                        ASObj::ASNoValue,
+                    );
+                } else {
+                    as_fields.push(as_field);
+                }
             }
+            let mut as_methods = Vec::with_capacity(methods.len());
+            for method in methods.into_iter() {
+                let method_params = self.parse_fn_params(method.params());
+                let Some(method_params) = method_params else {
+                    return;
+                };
+                let return_type = eval!(opt_type, self, method.return_type(), "Method return type");
+
+                let method_params = {
+                    if *method.is_static() {
+                        method_params
+                    } else {
+                        let mut method_params_inst = vec![ASFnParam::new(
+                            String::from("inst"),
+                            Some(ASType::Objet(name.clone())),
+                            None,
+                        )];
+                        method_params_inst.extend(method_params);
+                        method_params_inst
+                    }
+                };
+
+                let as_method = Rc::new(ASFonc::new(
+                    method.name().clone(),
+                    method.docs().clone(),
+                    method_params,
+                    method.body().clone(),
+                    return_type.into(),
+                    self.env.clone(),
+                ));
+
+                if *method.is_static() {
+                    static_env.declare(
+                        ASVar::new(
+                            method.name().as_ref().unwrap().clone(),
+                            Some(ASType::Fonction),
+                            true,
+                        ),
+                        ASObj::ASFonc(Rc::clone(&as_method)),
+                    );
+                } else {
+                    as_methods.push(as_method);
+                }
+            }
+            let static_env = Rc::new(RefCell::new(static_env));
             let as_classe = ASObj::ASClasse(Rc::new(ASClasse::new(
                 name.clone(),
                 docs.clone(),
@@ -1519,10 +1614,17 @@ impl Visitor for Runner<'_> {
                         let return_type =
                             eval!(opt_type, self, init.return_type(), "Init return type");
 
+                        let mut init_params_inst = vec![ASFnParam::new(
+                            String::from("inst"),
+                            Some(ASType::Objet(name.clone())),
+                            None,
+                        )];
+                        init_params_inst.extend(init_params.unwrap());
+
                         Some(Rc::new(ASFonc::new(
                             Some(format!("{}@init", name)),
                             init.docs().clone(),
-                            init_params.unwrap(),
+                            init_params_inst,
                             init.body().clone(),
                             return_type.into(),
                             self.env.clone(),
@@ -1531,32 +1633,19 @@ impl Visitor for Runner<'_> {
                         None
                     }
                 },
-                {
-                    let mut methods_final = Vec::with_capacity(methods.len());
-                    for method in methods.into_iter() {
-                        let method_params = self.parse_fn_params(method.params());
-                        if method_params.is_none() {
-                            return;
-                        }
-                        let return_type =
-                            eval!(opt_type, self, method.return_type(), "Method return type");
-
-                        methods_final.push(Rc::new(ASFonc::new(
-                            method.name().clone(),
-                            method.docs().clone(),
-                            method_params.unwrap(),
-                            method.body().clone(),
-                            return_type.into(),
-                            self.env.clone(),
-                        )))
-                    }
-                    methods_final
-                },
+                as_methods,
+                Rc::clone(&static_env),
             )));
-            let var = ASVar::new(name.clone(), Some(ASType::Classe), true);
-            let result = self.env.declare_strict(var, as_classe);
-            if result.is_err() {
-                throw_err!(self, result.err().unwrap());
+
+            throw_err!(?, self, self.env.declare_strict(
+                ASVar::new(name.clone(), Some(ASType::Classe), true),
+                as_classe,
+            ));
+
+            for (name, value_expr) in static_fields {
+                let field_value = eval!(expr, self, value_expr, "Classe static value");
+                let mut env_borrow = static_env.borrow_mut();
+                throw_err!(?, self, env_borrow.assign(&name, field_value));
             }
         }
     }

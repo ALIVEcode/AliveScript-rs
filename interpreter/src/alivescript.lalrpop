@@ -1,6 +1,7 @@
 use crate::ast::{
     Stmt,
     DefFn,
+    DefMethod,
     Expr,
     Paire,
     Type,
@@ -27,16 +28,16 @@ pub Script: Vec<Box<Stmt>> = <("eos"* <Stmt>)*> "eos"*;
 pub Stmt: Box<Stmt> = {
     <SubStmt> "eos",
 
-    "utiliser" <module:"ident"> "eos" => 
+    "utiliser" <module:ident> "eos" => 
         Box::new(Stmt::Utiliser { module, alias: None, vars: None, is_path: false } ),
-    "utiliser" <module:"ident"> <alias:ModuleIdent?> <vars:CommaCollection<"{", "}", "ident">> "eos" => 
+    "utiliser" <module:ident> <alias:ModuleIdent?> <vars:CommaCollection<"{", "}", ident>> "eos" => 
         Box::new(Stmt::Utiliser { module, alias, vars: Some(vars), is_path: false } ),
-    "utiliser" <module:"ident"> <alias:ModuleIdent?> "{" "*" "}" "eos" => 
+    "utiliser" <module:ident> <alias:ModuleIdent?> "{" "*" "}" "eos" => 
         Box::new(Stmt::Utiliser { module, alias, vars: Some(vec![String::from("*")]), is_path: false }),
 
-    "utiliser" <alias:"ident"?> <module:"text"> "eos" => 
+    "utiliser" <alias:ident?> <module:"text"> "eos" => 
         Box::new(Stmt::Utiliser { module, alias, vars: None, is_path: true } ),
-    "utiliser" <alias:ModuleIdent?> <vars:CommaCollection<"{", "}", "ident">> <module:"text"> "eos" => 
+    "utiliser" <alias:ModuleIdent?> <vars:CommaCollection<"{", "}", ident>> <module:"text"> "eos" => 
         Box::new(Stmt::Utiliser { module, alias, vars: Some(vars), is_path: true } ),
     "utiliser" <alias:ModuleIdent?> "{" "*" "}" <module:"text"> "eos" => 
         Box::new(Stmt::Utiliser { module, alias, vars: Some(vec![String::from("*")]), is_path: true }),
@@ -57,16 +58,16 @@ pub Stmt: Box<Stmt> = {
     "tant que" <cond:Expr> "faire"? "eos" <body:Script> "fin" "tant que" "eos" => 
         Box::new(Stmt::TantQue { <> }),
 
-    "pour" <var:DeclVar> "dans" <iterable:Expr> "faire"? "eos" <body:Script> "fin" "pour" "eos" =>
+    "pour" "chaque"? <var:DeclVar> "dans" <iterable:Expr> "faire"? "eos" <body:Script> "fin" "pour" "eos" =>
         Box::new(Stmt::Pour { <> }),
 
-    "pour" <var:DeclIdent> "dans" <iterable:Expr> "faire"? "eos" <body:Script> "fin" "pour" "eos" =>
+    "pour" "chaque"? <var:DeclIdent> "dans" <iterable:Expr> "faire"? "eos" <body:Script> "fin" "pour" "eos" =>
         Box::new(Stmt::Pour { <> }),
 
-    <docs:(<"DOCS"> "eos"*)?> "fonction" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
+    <docs:(<"DOCS"> "eos"*)?> "fonction" <name:ident> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
         <body:Script> "fin" "fonction" "eos" => Box::new(Stmt::DefFn(DefFn::new(docs, Some(name), params, return_type, body))),
 
-    <docs:(<"DOCS"> "eos"*)?> "classe" <name:"ident"> "eos" 
+    <docs:(<"DOCS"> "eos"*)?> "classe" <name:ident> "eos" 
         <fields:(<ClasseFieldDecl> "eos"*)*> 
         <init:(<ClasseInit> "eos"*)?> 
         <methods:(<ClasseMethode> "eos"*)*> 
@@ -79,22 +80,24 @@ pub Stmt: Box<Stmt> = {
 
 #[inline]
 ClasseFieldDecl: ClasseField = {
-    "var"? <var_name:"ident"> <static_type:StaticType> <default_value:("assign" <Expr>)?> "eos" =>
+    <statique:"statique"?> "var"? <var_name:ident> <static_type:StaticType> <default_value:("assign" <Expr>)?> "eos" =>
         ClasseField { 
             name: var_name.into(),
             vis: ClasseFieldVis::Publique,
             static_type,
             default_value,
             is_const: false,
+            is_static: statique.is_some(),
         },
 
-    "const" <var_name:"ident"> <static_type:StaticType> <default_value:("assign" <Expr>)?> "eos" =>
+    <statique:"statique"?> "const" <var_name:ident> <static_type:StaticType> <default_value:("assign" <Expr>)?> "eos" =>
         ClasseField { 
             name: var_name.into(),
             vis: ClasseFieldVis::Publique,
             static_type,
             default_value,
             is_const: true,
+            is_static: statique.is_some(),
         },
 };
 
@@ -106,9 +109,12 @@ ClasseInit: DefFn = {
 };
 
 #[inline]
-ClasseMethode: DefFn = {
-    <docs:(<"DOCS"> "eos"*)?> "methode" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
-        <body:Script> "fin" "methode" "eos" => DefFn::new(docs, Some(name), params, return_type, body),
+ClasseMethode: DefMethod = {
+    <docs:(<"DOCS"> "eos"*)?> "methode" <name:ident> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
+        <body:Script> "fin" "methode" "eos" => DefMethod::new(docs, Some(name), params, return_type, body, false),
+
+    <docs:(<"DOCS"> "eos"*)?> "methode" "statique" <name:ident> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
+        <body:Script> "fin" "methode" "eos" => DefMethod::new(docs, Some(name), params, return_type, body, true),
 };
 
 SubStmt: Box<Stmt> = {
@@ -138,7 +144,7 @@ SubStmt: Box<Stmt> = {
 };
 
 pub StmtExpr: Box<Expr> = {
-  <func:"ident"> <arg:Expr> => 
+  <func:ident> <arg:Expr> => 
       Box::new(Expr::FnCall{
           func: Box::new(Expr::Ident(func)),
           args: vec![arg],
@@ -341,10 +347,10 @@ pub Term: Box<Expr> = {
 
   <func:Term> <args:CommaCollection<"(", ")", Expr>> => Box::new(Expr::FnCall{<>}),
 
-  //<docs:(<"DOCS"> "eos"*)?> "fonction" <name:"ident"> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
+  //<docs:(<"DOCS"> "eos"*)?> "fonction" <name:ident> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
   //    <body:Script> "fin" "fonction" "eos" => Box::new(Expr::DefFn(DefFn::new(docs, Some(name), params, return_type, body))),
 
-  Ident,
+  ident => Box::new(Expr::Ident(<>)),
 
   AccessProp,
 
@@ -356,11 +362,17 @@ pub Term: Box<Expr> = {
 };
 
 #[inline]
-Ident: Box<Expr> = "ident" => Box::new(Expr::Ident(<>));
+ident: String = {
+    "ident",
+    "bond" => String::from("bond"),
+    "chaque" => String::from("chaque"),
+    //"alias" => String::from("alias"),
+    //"statique" => String::from("statique"),
+};
 
 #[inline]
 AccessProp: Box<Expr> = 
-    <obj:Term> "." <prop:"ident"> => Box::new(Expr::AccessProp{<>});
+    <obj:Term> "." <prop:ident> => Box::new(Expr::AccessProp{<>});
 
 #[inline]
 TermExpr: Box<Expr> = "(" "eos"* <Expr> "eos"* ")";
@@ -375,7 +387,7 @@ Collection: Box<Expr> = {
 #[inline]
 DictContent: Paire = {
     Paire,
-    <ident:"ident"> => Paire {
+    <ident:ident> => Paire {
             clef: Box::new(Expr::Lit(ASObj::ASTexte(ident.clone()))),
             val: Box::new(Expr::Ident(ident)),
         },
@@ -383,7 +395,7 @@ DictContent: Paire = {
 
 #[inline]
 Paire: Paire = {
-    <clef:"ident"> ":" <val:Term> =>
+    <clef:ident> ":" <val:Term> =>
         Paire{ 
             clef: Box::new(Expr::Lit(ASObj::ASTexte(clef))),
             val,
@@ -409,14 +421,14 @@ Slice: Box<Expr> = {
 }
 
 DeclVar: DeclVar = {
-    "var" <var_name:"ident"> <static_type:StaticType> =>
+    "var" <var_name:ident> <static_type:StaticType> =>
         DeclVar::Var { 
             name: var_name.into(),
             static_type,
             is_const: false,
         },
 
-    "const" <var_name:"ident"> <static_type:StaticType> =>
+    "const" <var_name:ident> <static_type:StaticType> =>
         DeclVar::Var { 
             name: var_name.into(),
             static_type,
@@ -426,7 +438,7 @@ DeclVar: DeclVar = {
 
 #[inline]
 DeclIdent: DeclVar = {
-    <var_name:"ident"> <static_type:StaticType> =>
+    <var_name:ident> <static_type:StaticType> =>
         DeclVar::Var { 
           name: var_name.into(),
           static_type,
@@ -437,7 +449,7 @@ DeclIdent: DeclVar = {
 
 #[inline]
 AssignVar: AssignVar = {
-    <name:"ident"> <static_type:StaticType> =>
+    <name:ident> <static_type:StaticType> =>
         AssignVar::Decl(DeclVar::Var { 
             name,
             static_type,
@@ -476,7 +488,7 @@ Lit: Expr = {
 };
 
 FnParam: FnParam = {
-    <name:"ident"> <static_type:StaticType> <default_value:("assign" <Expr>)?> 
+    <name:ident> <static_type:StaticType> <default_value:("assign" <Expr>)?> 
         => FnParam { <> },
 };
 
@@ -498,7 +510,7 @@ Type: Box<Type> = {
 };
 
 TypeTerm: Box<Type> = {
-    "ident" => Box::new(Type::Lit(<>)),
+    ident => Box::new(Type::Lit(<>)),
     "fonction" => Box::new(Type::Lit("fonction".into())),
     "nul" => Box::new(Type::Lit("nul".into())),
 };
@@ -514,7 +526,8 @@ BinOpcodeAssign: BinOpcode = {
 }
 
 ModuleIdent: String = {
-    <"ident"> ".",
+    <ident> ".",
+    "alias" <ident>,
 }
 
 // Macros
@@ -546,6 +559,7 @@ extern {
 
     enum Token {
         "utiliser" => Token::KwUtiliser,
+        "alias" => Token::KwAlias,
 
         "var" => Token::KwVar,
         "const" => Token::KwConst,
@@ -561,6 +575,7 @@ extern {
         "repeter" => Token::KwRepeter,
         "tant que" => Token::KwTantQue,
         "pour" => Token::KwPour,
+        "chaque" => Token::KwChaque,
         "faire" => Token::KwFaire,
         "dans" => Token::KwDans,
 
@@ -574,6 +589,7 @@ extern {
         "classe" => Token::KwClasse,
         "init" => Token::KwInit,
         "methode" => Token::KwMethode,
+        "statique" => Token::KwStatique,
 
         "ident" => Token::Ident(<String>),
         "int" => Token::Int(<i64>),

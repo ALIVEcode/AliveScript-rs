@@ -66,6 +66,62 @@ macro_rules! as_var {
         $crate::as_obj::ASVar::new_with_value(std::stringify!($var), None, true, $val)
     };
 }
+#[macro_export]
+macro_rules! union_of {
+    ($($type:expr),*) => {{
+        #[allow(unused_imports)]
+        use $crate::as_obj::ASType::*;
+        $crate::as_obj::ASType::union(std::vec![$($type),*])
+    }};
+}
+
+#[macro_export]
+macro_rules! call_methode {
+    ($obj:ident.$methode:ident($($args:expr),*), $runner:expr) => {
+        if let $crate::as_obj::ASObj::ASClasseInst(ref inst) = $obj {
+            let inst_env = inst.env().borrow();
+            if let Some(meth) = inst_env.get_value(&stringify!($methode).to_owned()) {
+                match meth {
+                    $crate::as_obj::ASObj::ASMethode(..) => {
+                        Some(Ok($runner.call_obj(meth.clone(), std::vec![$($args),*])))
+                    }
+                    _ => {
+                        Some(Err($crate::as_obj::ASErreurType::new_erreur_type(
+                                meth.get_type(),
+                                $crate::as_obj::ASType::Fonction,
+                            )))
+                    }
+                }
+            } else {
+                None 
+            }
+        } else {
+            None
+        }
+    };
+    ($obj:ident.$methode:ident($($args:expr),*) or throw, $runner:expr) => {
+        if let $crate::as_obj::ASObj::ASClasseInst(ref inst) = $obj {
+            let inst_env = inst.env().borrow();
+            if let Some(meth) = inst_env.get_value(&stringify!($methode).to_owned()) {
+                match meth {
+                    $crate::as_obj::ASObj::ASMethode(..) => {
+                        Some(Ok($runner.call_obj(meth.clone(), std::vec![$($args),*])))
+                    }
+                    _ => {
+                        Some(Err($crate::as_obj::ASErreurType::new_erreur_type(
+                                meth.get_type(),
+                                $crate::as_obj::ASType::Fonction,
+                            )))
+                    }
+                }
+            } else {
+                Some(Err($crate::as_obj::ASErreurType::new_erreur(None, format!("méthode {} non implémentée", stringify!($methode)))))
+            }
+        } else {
+            None
+        }
+    };
+}
 
 #[macro_export]
 macro_rules! as_cast {

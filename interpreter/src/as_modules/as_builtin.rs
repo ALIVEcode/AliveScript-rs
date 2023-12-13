@@ -1,15 +1,19 @@
-use std::rc::Rc;
-
 use unindent::Unindent;
 
 use crate::{
     as_cast, as_fonction, as_mod,
-    as_obj::{ASErreurType, ASFnParam, ASObj, ASType, ASVar},
-    as_var,
+    as_obj::{ASErreurType, ASObj, ASType},
+    as_var, call_methode, union_of,
 };
 
 as_mod! {
     BUILTIN_MOD,
+    as_fonction! {
+        erreur(msg: ASType::Texte) -> ASType::Nul; {
+            as_cast!(ASObj::ASTexte(ref msg) = msg);
+            Err(ASErreurType::new_erreur(None, msg.clone()))
+        }
+    },
     as_fonction! {
         typeDe(obj: ASType::any()) -> ASType::Texte; {
             Ok(Some(ASObj::ASTexte(obj.get_type().to_string())))
@@ -27,7 +31,10 @@ as_mod! {
         }
     },
     as_fonction! {
-        tailleDe(obj: ASType::iterable()) -> ASType::Entier; {
+        tailleDe[runner](obj: union_of!(ASType::iterable(), ClasseInst))-> ASType::Entier; {
+            if let Some(result) = call_methode!(obj.__taille__() or throw, runner) {
+                return result;
+            }
             Ok(Some(ASObj::ASEntier(match obj {
                 ASObj::ASTexte(t) => t.len(),
                 ASObj::ASListe(l) => l.borrow().len(),
@@ -37,73 +44,70 @@ as_mod! {
         }
     },
     as_fonction! {
-        booleen(obj: ASType::any() => ASObj::ASBooleen(true)) -> ASType::Booleen; {
+        booleen[runner](obj: ASType::any() => ASObj::ASBooleen(true)) -> ASType::Booleen; {
+            if let Some(result) = call_methode!(obj.__booleen__(), runner) {
+                return result;
+            }
             Ok(Some(ASObj::ASBooleen(obj.to_bool())))
         }
     },
     as_fonction! {
-        texte(obj: ASType::any() => ASObj::ASTexte("".to_owned())) -> ASType::Texte; {
+        texte[runner](obj: ASType::any() => ASObj::ASTexte("".to_owned())) -> ASType::Texte; {
+            if let Some(result) = call_methode!(obj.__texte__(), runner) {
+                return result;
+            }
             Ok(Some(ASObj::ASTexte(obj.to_string())))
         }
     },
-    ASVar::new_with_value(
-        "entier",
-        Some(ASType::Fonction),
-        true,
-        ASObj::native_fn(
-            "entier",
-            None,
-            vec![
-                ASFnParam::native(
-                    "obj",
-                    ASType::union_of(ASType::Decimal, ASType::Texte),
-                    Some(ASObj::ASEntier(0)),
+    as_fonction! {
+        entier[runner](obj: union_of!(ASType::nombre(), Texte, ClasseInst) => ASObj::ASEntier(0),
+                       base: ASType::Entier => ASObj::ASEntier(10)) -> ASType::Entier; {
+            if let Some(result) = call_methode!(obj.__entier__() or throw, runner) {
+                return result;
+            }
+            as_cast!(ASObj::ASEntier(base) = base);
+            Ok(Some(match obj {
+                ASObj::ASEntier(_) => obj.clone(),
+                ASObj::ASDecimal(d) => ASObj::ASEntier(d as i64),
+                ASObj::ASTexte(s) => {
+                    ASObj::ASEntier(i64::from_str_radix(&s, base as u32).unwrap())
+                }
+                _ => unreachable!(),
+            }))
+        }
+    },
+    as_fonction! {
+        decimal[runner](obj: union_of!(ASType::nombre(), Texte, ClasseInst) => ASObj::ASDecimal(0f64)) -> ASType::Decimal; {
+            if let Some(result) = call_methode!(obj.__decimal__() or throw, runner) {
+                return result;
+            }
+            Ok(Some(match obj {
+                ASObj::ASEntier(i) => ASObj::ASDecimal(i as f64),
+                ASObj::ASDecimal(_) => obj.clone(),
+                ASObj::ASTexte(s) => ASObj::ASDecimal(s.parse().unwrap()),
+                _ => unreachable!(),
+            }))
+        }
+    },
+    as_fonction! {
+        liste[runner](obj: union_of!(ASType::iterable(), ClasseInst) => ASObj::ASDecimal(0f64)) -> ASType::Liste; {
+            if let Some(result) = call_methode!(obj.__liste__() or throw, runner) {
+                return result;
+            }
+            Ok(Some(match obj {
+                ASObj::ASTexte(t) => ASObj::new_as_liste(Rc::new(RefCell::new(
+                    t.chars().map(|c| ASObj::ASTexte(c.to_string())).collect(),
+                ))),
+                ASObj::ASListe(l) => ASObj::liste(l.borrow().iter().cloned().collect()),
+                ASObj::ASDict(d) => ASObj::liste(
+                    d.borrow().iter().map(|pair| ASObj::liste(
+                                vec![pair.clef().clone(), pair.val().clone()]
+                            )).collect(),
                 ),
-                ASFnParam::native("base", ASType::Entier, Some(ASObj::ASEntier(10))),
-            ],
-            Rc::new(|runner| {
-                let env = runner.get_env_mut();
-                let obj = env.get_value(&"obj".into()).unwrap();
-                let ASObj::ASEntier(base) = env.get_value(&"base".into()).unwrap() else {
-                    unreachable!()
-                };
-                Ok(Some(match obj {
-                    ASObj::ASEntier(_) => obj.clone(),
-                    ASObj::ASDecimal(d) => ASObj::ASEntier(d as i64),
-                    ASObj::ASTexte(s) => {
-                        ASObj::ASEntier(i64::from_str_radix(&s, base as u32).unwrap())
-                    }
-                    _ => unreachable!(),
-                }))
-            }),
-            ASType::Entier,
-        ),
-    ),
-    ASVar::new_with_value(
-        "decimal",
-        Some(ASType::Fonction),
-        true,
-        ASObj::native_fn(
-            "decimal",
-            Some("Tente de convertir du texte en valeur décimal. En cas d'échec: la fonction produit une erreur."),
-            vec![ASFnParam::native(
-                "obj",
-                ASType::union_of(ASType::Decimal, ASType::Texte),
-                Some(ASObj::ASDecimal(0f64)),
-            )],
-            Rc::new(|runner| {
-                let env = runner.get_env_mut();
-                let obj = env.get_value(&"obj".into()).unwrap();
-                Ok(Some(match obj {
-                    ASObj::ASEntier(i) => ASObj::ASDecimal(i as f64),
-                    ASObj::ASDecimal(_) => obj.clone(),
-                    ASObj::ASTexte(s) => ASObj::ASDecimal(s.parse().unwrap()),
-                    _ => unreachable!(),
-                }))
-            }),
-            ASType::Decimal,
-        ),
-    ),
+                _ => unreachable!()
+            }))
+        }
+    },
     as_fonction! {
         info(f: ASType::Fonction) -> ASType::Texte; {
             let ASObj::ASFonc(f) = f else {unreachable!()};
@@ -118,27 +122,55 @@ as_mod! {
         }
     },
     as_fonction! {
-        get_attr(obj: ASType::any(), attr: ASType::Texte) -> ASType::any(); {
-            as_cast!(ASObj::ASTexte(attr) = attr);
+        getAttr[runner](obj: ASType::any(), attr: ASType::Texte, default_val: ASType::any() => ASObj::ASNoValue) -> ASType::any(); {
+            if let Some(result) = call_methode!(obj.__getAttr__(attr), runner) {
+                return result;
+            }
 
-            match obj {
+            as_cast!(ASObj::ASTexte(ref attr_val) = attr);
+
+            let result = match obj {
                 ASObj::ASClasseInst(ref inst) => inst
                     .env()
                     .borrow()
-                    .get_value(&attr)
+                    .get_value(attr_val)
                     .map(|v| Some(v.clone()))
-                    .ok_or_else(|| ASErreurType::new_erreur_access_propriete(obj.clone(), attr.clone())),
-                _ => Err(ASErreurType::new_erreur_access_propriete(obj.clone(), attr.clone()))
+                    .ok_or_else(|| {
+                        ASErreurType::new_erreur_access_propriete(obj.clone(), attr_val.clone())
+                    }),
+                ASObj::ASDict(ref d) => d
+                    .borrow()
+                    .get(&attr)
+                    .map(|v| Some(v.val().clone()))
+                    .ok_or_else(|| ASErreurType::new_erreur_access_propriete(obj.clone(), attr_val.clone())),
+                _ => Err(ASErreurType::new_erreur_access_propriete(obj.clone(), attr_val.clone()))
+            };
+            if result.is_err() && default_val != ASObj::ASNoValue {
+                Ok(Some(default_val))
+            } else {
+                result
             }
         }
     },
     as_fonction! {
-        contient_attr(obj: ASType::any(), attr: ASType::Texte) -> ASType::Booleen; {
-            as_cast!(ASObj::ASTexte(attr) = attr);
+        contientAttr(obj: ASType::any(), attr: ASType::Texte) -> ASType::Booleen; {
+            as_cast!(ASObj::ASTexte(ref attr_val) = attr);
 
             match obj {
-                ASObj::ASClasseInst(inst) => Ok(Some(ASObj::ASBooleen(inst.env().borrow().get_value(&attr).is_some()))),
-                _ => Err(ASErreurType::new_erreur_access_propriete(obj.clone(), attr.clone()))
+                ASObj::ASClasseInst(inst) => Ok(Some(
+                        ASObj::ASBooleen(inst
+                                         .env()
+                                         .borrow()
+                                         .get_value(attr_val)
+                                         .is_some()))),
+
+                ASObj::ASDict(d) => Ok(Some(
+                        ASObj::ASBooleen(d
+                                         .borrow()
+                                         .get(&attr)
+                                         .is_some()))),
+
+                _ => Ok(Some(ASObj::ASBooleen(false)))
             }
         }
     },

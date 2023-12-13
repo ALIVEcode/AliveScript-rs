@@ -19,7 +19,7 @@ use crate::{
     runner::Runner,
 };
 
-#[derive(Debug)]
+#[derive(Debug, new)]
 pub enum ASObj {
     // A placeholder value for representing the absence of values
     ASNoValue,
@@ -42,7 +42,11 @@ pub enum ASObj {
 
     ASClasse(Rc<ASClasse>),
 
-    ASModule { name: String, alias: Option<String>, env: Rc<RefCell<ASScope>> },
+    ASModule {
+        name: String,
+        alias: Option<String>,
+        env: Rc<RefCell<ASScope>>,
+    },
 
     ASClasseInst(Rc<ASClasseInst>),
 }
@@ -161,13 +165,27 @@ impl RecursiveRepr for ASPaire {
     }
 }
 
-#[derive(Debug, Clone, new, Getters, PartialEq)]
+#[derive(Debug, new, Getters, PartialEq)]
 pub struct ASClasse {
     name: String,
     docs: Option<String>,
     fields: Vec<ASClasseField>,
     init: Option<Rc<ASFonc>>,
     methods: Vec<Rc<ASFonc>>,
+    static_env: Rc<RefCell<ASScope>>,
+}
+
+impl Clone for ASClasse {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            docs: self.docs.clone(),
+            fields: self.fields.clone(),
+            init: self.init.as_ref().map(Rc::clone),
+            methods: self.methods.clone(),
+            static_env: Rc::clone(&self.static_env),
+        }
+    }
 }
 
 #[derive(Debug, Clone, new, Getters)]
@@ -208,6 +226,12 @@ pub struct ASClasseInst {
     env: Rc<RefCell<ASScope>>,
 }
 
+impl ASClasseInst {
+    pub fn get_type(&self) -> ASType {
+        ASType::Objet(self.classe_parent.name().clone())
+    }
+}
+
 impl RecursiveRepr for ASClasseInst {
     fn recursive_repr(
         &self,
@@ -236,13 +260,16 @@ impl RecursiveRepr for ASClasseInst {
             .classe_parent
             .fields()
             .iter()
-            .map(|field| {
+            .filter_map(|field| {
+                if field.name().starts_with("_") {
+                    return None;
+                }
                 let field_val = env.get_value(&field.name).unwrap();
-                format!(
+                Some(format!(
                     "{}={}",
                     field.name,
                     field_val.recursive_repr(Some(Rc::clone(&seen_map)))
-                )
+                ))
             })
             .collect::<Vec<String>>();
 
@@ -285,6 +312,10 @@ pub struct ASMethode {
 }
 
 impl ASObj {
+    pub fn liste(l: Vec<ASObj>) -> ASObj {
+        ASObj::ASListe(Rc::new(RefCell::new(l)))
+    }
+
     pub fn native_fn(
         name: &str,
         docs: Option<&str>,
@@ -313,6 +344,7 @@ impl ASObj {
             ASBooleen(..) => ASType::Booleen,
             ASListe(..) => ASType::Liste,
             ASFonc { .. } => ASType::Fonction,
+            ASMethode(..) => ASType::Fonction,
             ASDict(..) => ASType::Dict,
             ASClasse(..) => ASType::Classe,
             ASClasseInst(inst) => ASType::Objet(inst.classe_parent().name().clone()),
@@ -640,11 +672,16 @@ impl Display for ASObj {
             ASListe(_) | ASDict(_) | ASClasseInst(_) => self.repr(),
             ASClasse(classe) => format!("classe {}", classe.name()),
             ASFonc(fonc) => fonc.to_string(),
-            ASModule { name, alias, .. } => format!("module {}{}", name, if let Some(alias) = alias {
-                format!(" alias {}", alias)
-            } else {
-                "".into()
-            }),
+            ASModule { name, alias, .. } => format!(
+                "module {}{}",
+                name,
+                if let Some(alias) = alias {
+                    format!(" alias {}", alias)
+                } else {
+                    "".into()
+                }
+            ),
+            ASNoValue => String::from("<pas-de-valeur>"),
             _ => String::from("ASObj sans to_string"),
         };
         write!(f, "{}", to_string)
@@ -690,7 +727,7 @@ impl Display for ASFnParam {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Getters, new)]
 pub struct ASClasseField {
     pub name: String,
     pub vis: ASClasseFieldVis,
@@ -777,6 +814,7 @@ pub enum ASType {
 
     Module,
     Objet(String),
+    ClasseInst,
 
     Union(Vec<ASType>),
     Tuple(Vec<ASType>),
@@ -798,6 +836,7 @@ impl ASType {
             Texte => Ok(ASTexte("".into())),
             Liste => Ok(ASListe(Rc::new(RefCell::new(vec![])))),
             Dict => Ok(ASDict(Rc::new(RefCell::new(ASDictObj::default())))),
+            ClasseInst => todo!(),
             Fonction => todo!(),
             Classe => todo!(),
             Module => todo!(),
@@ -812,7 +851,7 @@ impl ASType {
     }
 
     pub fn iterable() -> ASType {
-        ASType::Union(vec![Self::Liste, Self::Texte])
+        ASType::Union(vec![Self::Liste, Self::Texte, Self::Dict])
     }
 
     pub fn union(types: Vec<ASType>) -> ASType {
@@ -868,6 +907,9 @@ impl ASType {
             (Optional(t), other) | (other, Optional(t)) => {
                 other == &Nul || ASType::type_match(t.as_ref(), other)
             }
+
+            (Objet(_), ClasseInst) => true,
+            (ClasseInst, Objet(_)) => true,
 
             (Union(types), other) | (other, Union(types)) => {
                 types.iter().any(|t| ASType::type_match(t, &other))
@@ -967,6 +1009,7 @@ impl FromStr for ASType {
             "fonction" => Ok(Self::Fonction),
             "classe" => Ok(Self::Classe),
             "module" => Ok(Self::Module),
+            "objet" | "instance" => Ok(Self::ClasseInst),
             other => Ok(Self::Objet(other.into())),
         }
     }
@@ -996,6 +1039,8 @@ impl Display for ASType {
 
             Fonction => "fonction".into(),
             Classe => "structure".into(),
+
+            ClasseInst => "objet".into(),
 
             Union(types) => types
                 .iter()
@@ -1266,6 +1311,10 @@ pub enum ASErreurType {
     ErreurModuleInvalide {
         module: String,
     },
+    Erreur {
+        nom: Option<String>,
+        msg: String,
+    },
 }
 
 impl ASErreurType {
@@ -1287,6 +1336,7 @@ impl ASErreurType {
             ASErreurType::ErreurNbArgs { .. } => "ErreurNbArgs",
             ASErreurType::ErreurFichierIntrouvable { .. } => "ErreurFichierIntrouvable",
             ASErreurType::ErreurModuleInvalide { .. } => "ErreurModuleInvalide",
+            ASErreurType::Erreur { .. } => "Erreur",
         }
     }
 }
@@ -1373,6 +1423,8 @@ impl Display for ASErreurType {
 
             ErreurFichierIntrouvable { fichier } => format!("Fichier introuvable: {}", fichier),
             ErreurModuleInvalide { module } => format!("Module introuvable: {}", module),
+
+            Erreur { nom, msg } => msg.clone(),
         };
 
         write!(f, "{}: {}", self.error_name(), to_string)

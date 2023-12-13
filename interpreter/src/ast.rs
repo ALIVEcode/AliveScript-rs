@@ -95,7 +95,7 @@ pub enum Stmt {
         docs: Option<String>,
         fields: Vec<ClasseField>,
         init: Option<DefFn>,
-        methods: Vec<DefFn>,
+        methods: Vec<DefMethod>,
     },
 
     Retourner(Option<Box<Expr>>),
@@ -128,13 +128,24 @@ pub struct FnParam {
     pub default_value: Option<Box<Expr>>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Getters)]
 pub struct ClasseField {
     pub name: String,
     pub vis: ClasseFieldVis,
     pub static_type: Option<Box<Type>>,
     pub default_value: Option<Box<Expr>>,
     pub is_const: bool,
+    pub is_static: bool,
+}
+
+#[derive(Clone, Debug, new, Getters, PartialEq)]
+pub struct DefMethod {
+    docs: Option<String>,
+    name: Option<String>,
+    params: Vec<FnParam>,
+    return_type: Option<Box<Type>>,
+    body: Vec<Box<Stmt>>,
+    is_static: bool,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

@@ -7,6 +7,9 @@ pub enum Token {
     #[token("utiliser")]
     KwUtiliser,
 
+    #[token("alias")]
+    KwAlias,
+
     #[token("lire")]
     KwLire,
 
@@ -55,6 +58,9 @@ pub enum Token {
     #[token("pour")]
     KwPour,
 
+    #[token("chaque")]
+    KwChaque,
+
     #[token("faire")]
     KwFaire,
 
@@ -91,6 +97,9 @@ pub enum Token {
     #[token("methode")]
     #[token("méthode")]
     KwMethode,
+
+    #[token("statique")]
+    KwStatique,
 
     // Variables
     #[regex(r"[a-zA-Zα-ζΑ-Ζ_ïöëäíóéáìòèàîôêâçÏÖËÄÍÓÉÁÌÒÈÀÎÔÊÂÇ][a-zA-Z0-9_α-ζΑ-ΖïöëäíóéáìòèàîôêâçÏÖËÄÍÓÉÁÌÒÈÀÎÔÊÂÇ]*", |lex| lex.slice().parse())]
@@ -262,6 +271,8 @@ impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let to_string = match self {
             Token::KwUtiliser => "utiliser".to_owned(),
+            Token::KwAlias => "alias".to_owned(),
+
             Token::KwLire => "lire".to_owned(),
             Token::KwAfficher => "afficher".to_owned(),
             Token::KwVar => "var".to_owned(),
@@ -274,6 +285,7 @@ impl fmt::Display for Token {
             Token::KwAlors => "alors".to_owned(),
             Token::KwTantQue => "tant que".to_owned(),
             Token::KwPour => "pour".to_owned(),
+            Token::KwChaque => "chaque".to_owned(),
             Token::KwFaire => "faire".to_owned(),
             Token::KwRepeter => "repeter".to_owned(),
             Token::KwSortir => "sortir".to_owned(),
@@ -289,6 +301,7 @@ impl fmt::Display for Token {
             Token::KwRetourner => "retourner".to_owned(),
             Token::KwClasse => "classe".to_owned(),
             Token::KwMethode => "methode".to_owned(),
+            Token::KwStatique => "statique".to_owned(),
             Token::KwInit => "init".to_owned(),
 
             Token::Nul => format!("NUL"),
