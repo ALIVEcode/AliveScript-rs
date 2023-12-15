@@ -16,5 +16,13 @@ classe Option
     methode statique vide() -> Option
         retourner Option._vide
     fin methode
+
+    methode __texte__()
+        si inst == Option._vide
+            afficher "Vide"
+        sinon
+            afficher "Val(" + inst._val + ")"
+        fin si
+    fin methode
 fin classe
 

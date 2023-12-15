@@ -36,7 +36,7 @@ classe suite
     fin methode
 
     methode __estFini__()
-        retourner inst._curseur > inst.finSuite
+        retourner inst._curseur >= inst.finSuite
     fin methode
 fin classe
 
@@ -67,7 +67,7 @@ classe iter
 
     methode __estFini__()
         retourner inst.iterateur.__estFini__() si inst.idx == nul
-        retourner inst.idx > tailleDe(inst.iterateur)
+        retourner inst.idx >= tailleDe(inst.iterateur)
     fin methode
 
     methode __texte__()
@@ -114,13 +114,13 @@ fin fonction
 
 fonction filtrer(f: fonction, l: iterable)
     var liste_finale = []
-    pour chaque e dans l
+    pour e dans l
         liste_finale += e si f(e)
     fin pour
     retourner liste_finale
 fin fonction
 
-fonction reduire(f: fonction, l: iterable, inital=nul)
+fonction reduire(f: fonction, l: iterable, initial=nul)
     l = iter(l)
     acc = initial ?? prochain(l)
     pour e dans l

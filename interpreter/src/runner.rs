@@ -687,6 +687,14 @@ impl Visitor for Runner<'_> {
             ASObj::ASClasse(classe) => {
                 let env = Rc::new(RefCell::new(ASScope::new()));
 
+                {
+                    let mut env_borrow = env.borrow_mut();
+                    env_borrow.declare(
+                        as_var!(const __classe__: ASType::Classe),
+                        ASObj::ASClasse(Rc::clone(&classe)),
+                    );
+                }
+
                 for field in classe.fields() {
                     let field_value = eval!(
                         opt_expr,
