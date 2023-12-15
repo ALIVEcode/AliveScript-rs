@@ -42,11 +42,6 @@ pub Stmt: Box<Stmt> = {
     "utiliser" <alias:ModuleIdent?> "{" "*" "}" <module:"text"> "eos" => 
         Box::new(Stmt::Utiliser { module, alias, vars: Some(vec![String::from("*")]), is_path: true }),
 
-    <var:DeclVar> "assign" <val:Expr> "eos" => Box::new(Stmt::Decl { <> }),
-
-    <var:AssignVar> "assign" <val:Expr> "eos" => Box::new(Stmt::Assign { <> }),
-    <var:AssignVar> <op:BinOpcodeAssign> <val:Expr> "eos" => Box::new(Stmt::OpAssign { <> }),
-
     "si" <cond:Expr> "alors"? "eos" <then_br:Script> 
          <elif_brs:("sinon" "si" <Expr> "alors"? "eos" <Script>)*>
          <else_br:("sinon" "eos" <Script>)?> "fin" "si" "eos" => 
@@ -125,6 +120,12 @@ ClasseMethode: DefMethod = {
 
 SubStmt: Box<Stmt> = {
     Expr => Box::new(Stmt::Expr(<>)),
+
+    <var:DeclVar> "assign" <val:Expr> => Box::new(Stmt::Decl { <> }),
+
+    <var:AssignVar> "assign" <val:Expr> => Box::new(Stmt::Assign { <> }),
+    <var:AssignVar> <op:BinOpcodeAssign> <val:Expr> => Box::new(Stmt::OpAssign { <> }),
+
 
     "afficher" <arg:Comma<Expr>> => Box::new(Stmt::Afficher(arg)),
 
@@ -330,6 +331,14 @@ pub Expr: Box<Expr> = {
     })
   },
 
+  <lhs:Expr> "??" <rhs:Expr> => {
+    Box::new(Expr::BinLogic {
+      lhs,
+      op: BinLogiccode::NonNul,
+      rhs
+    })
+  },
+
   <lhs:Expr> "xor" <rhs:Expr> => {
     Box::new(Expr::BinOp {
       lhs,
@@ -339,6 +348,12 @@ pub Expr: Box<Expr> = {
   },
 
   #[precedence(level="9")]
+  #[assoc(side="left")]
+  <cond:Expr> "?" <then_expr:Expr> ":" <else_expr:Expr> => {
+    Box::new(Expr::Ternary { <> })
+  },
+
+  #[precedence(level="10")]
   "fonction" <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> ":" <body:Expr> => 
     Box::new(Expr::DefFn(DefFn::new(None, None, params, return_type, vec![Box::new(Stmt::Retourner(Some(body)))]))),
 };
@@ -514,6 +529,7 @@ TypeTerm: Box<Type> = {
     ident => Box::new(Type::Lit(<>)),
     "fonction" => Box::new(Type::Lit("fonction".into())),
     "nul" => Box::new(Type::Lit("nul".into())),
+    "classe" => Box::new(Type::Lit("classe".into())),
 };
 
 BinOpcodeAssign: BinOpcode = {
@@ -632,6 +648,7 @@ extern {
         "." => Token::Dot,
 
         "?" => Token::QuestionMark,
+        "??" => Token::DoubleQuestionMark,
 
         "+" => Token::OpAdd,
         "-" => Token::OpMinus,

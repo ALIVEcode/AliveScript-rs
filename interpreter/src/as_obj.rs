@@ -324,6 +324,10 @@ impl ASObj {
         ASObj::ASTexte(s.to_string())
     }
 
+    pub fn dict(d: ASDict) -> ASObj {
+        ASObj::ASDict(Rc::new(RefCell::new(d)))
+    }
+
     pub fn native_fn(
         name: &str,
         docs: Option<&str>,
@@ -859,7 +863,7 @@ impl ASType {
     }
 
     pub fn iterable() -> ASType {
-        ASType::Union(vec![Self::Liste, Self::Texte, Self::Dict])
+        ASType::Union(vec![Self::Liste, Self::Texte, Self::Dict, Self::Classe, Self::ClasseInst])
     }
 
     pub fn union(types: Vec<ASType>) -> ASType {
@@ -1017,7 +1021,12 @@ impl FromStr for ASType {
             "fonction" => Ok(Self::Fonction),
             "classe" => Ok(Self::Classe),
             "module" => Ok(Self::Module),
-            "objet" | "instance" => Ok(Self::ClasseInst),
+            "instance" => Ok(Self::ClasseInst),
+            "objet" => Ok(Self::union(vec![
+                Self::ClasseInst,
+                Self::Dict,
+                Self::Classe,
+            ])),
             other => Ok(Self::Objet(other.into())),
         }
     }

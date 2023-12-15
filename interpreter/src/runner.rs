@@ -9,6 +9,7 @@ use crate::{
         ASFonc, ASMethode, ASObj, ASScope, ASType, ASVar,
     },
     as_py::run_python_script,
+    as_var,
     ast::{
         AssignVar, BinCompcode, BinLogiccode, BinOpcode, CallRust, DeclVar, Expr, FnParam, LireVar,
         Stmt, Type, TypeBinOpcode, UnaryOpcode,
@@ -310,31 +311,43 @@ impl<'a> Runner<'a> {
         }
     }
 
+    /// Retourne le prochain élément d'un itérateur
+    /// Ok((Option<ASObj>, bool)) -> (Valeur, estFini)
+    /// Si la valeur est Ok((Some(obj), true)), alors il faut faire une dernière itération puis break
+    /// Si la valeur est Ok((Some(obj), false)), alors il faut continuer la boucle
+    /// Si la valeur est Ok((None, _)), alors il faut break
+    /// Si la valeur est Err(err), alors il faut throw l'erreur
     pub fn prochain(&mut self, obj: &ASObj) -> ASResult<Option<ASObj>> {
-        if let Some(result) = call_methode!(obj.__prochain__() or throw, self) {
-            match result {
-                Ok(Some(ASObj::ASDict(d))) => {
-                    let d = d.borrow();
-                    let Some(est_fini) = d.get_val(&ASObj::texte("estFini")) else {
-                        return Err(ASErreurType::new_erreur_clef(ASObj::texte("estFini")));
-                    };
-                    if self.to_bool(est_fini)? {
-                        return Ok(None);
-                    }
-                    let Some(valeur) = d.get_val(&ASObj::texte("valeur")) else {
-                        return Err(ASErreurType::new_erreur_clef(ASObj::texte("valeur")));
-                    };
-                    Ok(Some(valeur.clone()))
-                }
-                Ok(Some(_)) => Err(ASErreurType::new_erreur_type(ASType::Dict, obj.get_type())),
-                Ok(None) => Err(ASErreurType::new_erreur_type(ASType::Dict, ASType::Rien)),
-                Err(err) => Err(err),
-            }
-        } else {
-            Err(ASErreurType::new_erreur_type(
+        let Some(est_fini) = call_methode!(obj.__estFini__() -> ASType::Booleen; or throw, self)
+        else {
+            return Err(ASErreurType::new_erreur_type(
                 ASType::ClasseInst,
                 obj.get_type(),
-            ))
+            ));
+        };
+        if est_fini?.unwrap().to_bool() {
+            return Ok(None);
+        }
+        let Some(result) = call_methode!(obj.__prochain__() or throw, self) else {
+            return Err(ASErreurType::new_erreur_type(
+                ASType::ClasseInst,
+                obj.get_type(),
+            ));
+        };
+        match result? {
+            // Ok(Some(ASObj::ASDict(d))) => {
+            //     let d = d.borrow();
+            //     let Some(est_fini) = d.get_val(&ASObj::texte("estFini")) else {
+            //         return Err(ASErreurType::new_erreur_clef(ASObj::texte("estFini")));
+            //     };
+            //     let Some(valeur) = d.get_val(&ASObj::texte("valeur")) else {
+            //         return Err(ASErreurType::new_erreur_clef(ASObj::texte("valeur")));
+            //     };
+            //     Ok((valeur.clone(), est_fini.to_bool()))
+            // }
+            Some(val) => Ok(Some(val)),
+            // Ok(Some(_)) => Err(ASErreurType::new_erreur_type(ASType::Dict, obj.get_type())),
+            None => Err(ASErreurType::new_erreur_type(ASType::Dict, ASType::Rien)),
         }
     }
 }
@@ -375,19 +388,6 @@ impl Visitor for Runner<'_> {
                 .push(ASObj::ASListe(Rc::new(RefCell::new(liste))));
         }
     }
-
-    // fn visit_expr_paire(&mut self, expr: &Expr) {
-    //     if let Expr::Paire { clef, val } = expr {
-    //         // let clef_val = self.eval_expr(clef).expect("Paire clef");
-    //         // let val_val = self.eval_expr(val).expect("Paire val");
-    //         let clef_val = eval!(expr, self, clef, "Paire clef");
-    //         let val_val = eval!(expr, self, val, "Paire val");
-    //         self.push_value(ASObj::ASPaire {
-    //             key: Box::new(clef_val),
-    //             val: Box::new(val_val),
-    //         });
-    //     }
-    // }
 
     fn visit_expr_dict(&mut self, expr: &Expr) {
         if let Expr::Dict(exprs) = expr {
@@ -473,6 +473,19 @@ impl Visitor for Runner<'_> {
                 ASObj::ASClasseInst(inst) => {
                     let env_borrow = inst.env().borrow();
                     let Some(value) = env_borrow.get_value(prop) else {
+                        throw_err!(
+                            self,
+                            ASErreurType::new_erreur_access_propriete(
+                                obj_val.clone(),
+                                prop.clone()
+                            )
+                        );
+                    };
+                    value.clone()
+                }
+                ASObj::ASDict(d) => {
+                    let d = d.borrow();
+                    let Some(value) = d.get_val(&ASObj::ASTexte(prop.clone())) else {
                         throw_err!(
                             self,
                             ASErreurType::new_erreur_access_propriete(
@@ -758,51 +771,6 @@ impl Visitor for Runner<'_> {
         }
     }
 
-    /* fn visit_expr_classe_init(&mut self, expr: &Expr) {
-        let Expr::ClasseInst { classe, fields } = expr else {
-            unreachable!();
-        };
-
-        let classe_parent = eval!(expr, self, classe, "Classe");
-        let ASObj::ASClasse(classe) = &classe_parent else {
-            throw_err!(
-                self,
-                ASErreurType::new_erreur_type(ASType::Classe, classe_parent.get_type())
-            )
-        };
-        let mut env = ASScope::new();
-
-        for field in classe.fields() {
-            let field_value = eval!(
-                opt_expr,
-                self,
-                field.default_value.clone(),
-                "Classe default value"
-            );
-            let field_var = ASVar::new(
-                field.name.clone(),
-                Some(field.static_type.clone()),
-                field.is_const,
-            );
-            if let Some(value) = field_value {
-                env.declare(field_var, value);
-            } else {
-                env.declare(field_var, ASObj::ASNul);
-            }
-        }
-
-        for field_expr in fields.into_iter() {
-            let ASObj::ASPaire { key, val } = eval!(expr, self, field_expr, "Classe field") else {
-                unreachable!()
-            };
-            let ASObj::ASTexte(key) = *key else {
-                unreachable!()
-            };
-
-            throw_err!(?, self, env.assign_type_strict(&key, *val));
-        }
-    } */
-
     fn visit_expr_callrust(&mut self, expr: &Expr) {
         let Expr::CallRust(CallRust(proc)) = expr else {
             return;
@@ -893,6 +861,26 @@ impl Visitor for Runner<'_> {
         }
     }
 
+    fn visit_expr_ternary(&mut self, expr: &Expr) {
+        let Expr::Ternary {
+            cond,
+            then_expr,
+            else_expr,
+        } = expr
+        else {
+            return;
+        };
+
+        let cond = eval!(expr, self, cond, "Ternary cond");
+        if throw_err!(?, self, self.to_bool(&cond)) {
+            let then_expr = eval!(expr, self, then_expr, "Ternary then");
+            self.push_value(then_expr);
+        } else {
+            let else_expr = eval!(expr, self, else_expr, "Ternary else");
+            self.push_value(else_expr);
+        }
+    }
+
     fn visit_expr_binop(&mut self, expr: &Expr) {
         if let Expr::BinOp { lhs, op, rhs } = expr {
             let lhs_value = eval!(expr, self, lhs, "Lhs de binop");
@@ -920,7 +908,8 @@ impl Visitor for Runner<'_> {
                     }) == (op == &BinCompcode::Eq)
                 }
                 Lth => {
-                    if let Some(result) = call_methode!(lhs_value.__pp__(rhs_value.clone()) -> ASType::Booleen; or throw, self)
+                    if let Some(result) =
+                        call_methode!(lhs_value.__pp__(rhs_value.clone()) -> ASType::Booleen, self)
                     {
                         throw_err!(?, self, result).unwrap().to_bool()
                     } else if let Some(result) = call_methode!(rhs_value.__dr_pp__(lhs_value.clone()) -> ASType::Booleen; or throw, self)
@@ -931,7 +920,8 @@ impl Visitor for Runner<'_> {
                     }
                 }
                 Gth => {
-                    if let Some(result) = call_methode!(lhs_value.__pg__(rhs_value.clone()) -> ASType::Booleen; or throw, self)
+                    if let Some(result) =
+                        call_methode!(lhs_value.__pg__(rhs_value.clone()) -> ASType::Booleen, self)
                     {
                         throw_err!(?, self, result).unwrap().to_bool()
                     } else if let Some(result) = call_methode!(rhs_value.__dr_pg__(lhs_value.clone()) -> ASType::Booleen; or throw, self)
@@ -942,7 +932,8 @@ impl Visitor for Runner<'_> {
                     }
                 }
                 Leq => {
-                    if let Some(result) = call_methode!(lhs_value.__ppe__(rhs_value.clone()) -> ASType::Booleen; or throw, self)
+                    if let Some(result) =
+                        call_methode!(lhs_value.__ppe__(rhs_value.clone()) -> ASType::Booleen, self)
                     {
                         throw_err!(?, self, result).unwrap().to_bool()
                     } else if let Some(result) = call_methode!(rhs_value.__dr_ppe__(lhs_value.clone()) -> ASType::Booleen; or throw, self)
@@ -953,7 +944,8 @@ impl Visitor for Runner<'_> {
                     }
                 }
                 Geq => {
-                    if let Some(result) = call_methode!(lhs_value.__pge__(rhs_value.clone()) -> ASType::Booleen; or throw, self)
+                    if let Some(result) =
+                        call_methode!(lhs_value.__pge__(rhs_value.clone()) -> ASType::Booleen, self)
                     {
                         throw_err!(?, self, result).unwrap().to_bool()
                     } else if let Some(result) = call_methode!(rhs_value.__dr_pge__(lhs_value.clone()) -> ASType::Booleen; or throw, self)
@@ -965,7 +957,7 @@ impl Visitor for Runner<'_> {
                 }
                 Dans | PasDans => {
                     // rhs_value est un objet ou une classe definissant __contient__
-                    (if let Some(r) = call_methode!(rhs_value.__contient__(lhs_value.clone()) -> ASType::Booleen; or throw, self)
+                    (if let Some(r) = call_methode!(rhs_value.__contient__(lhs_value.clone()) -> ASType::Booleen, self)
                     {
                         throw_err!(?, self, r).unwrap().to_bool()
                     } else if let Some(r) = call_methode!(lhs_value.__contenu__(rhs_value.clone()) -> ASType::Booleen; or throw, self)
@@ -998,6 +990,13 @@ impl Visitor for Runner<'_> {
                         lhs_value
                     } else {
                         eval!(expr, self, rhs, "Rhs de bin logique")
+                    }
+                }
+                NonNul => {
+                    if lhs_value == ASObj::ASNul {
+                        eval!(expr, self, rhs, "Rhs de bin logique")
+                    } else {
+                        lhs_value
                     }
                 }
             };
@@ -1631,7 +1630,11 @@ impl Visitor for Runner<'_> {
             methods,
         } = stmt
         {
-            let mut static_env = ASScope::new();
+            let mut static_env = ASScope::from(
+                // valeurs par défaut des champs statiques que
+                // toutes les classes ont
+                vec![as_var!(const __nom__: ASType::Texte => ASObj::ASTexte(name.clone()))],
+            );
             let mut static_fields = vec![];
             let mut as_fields = Vec::with_capacity(fields.len());
             for field in fields.into_iter() {

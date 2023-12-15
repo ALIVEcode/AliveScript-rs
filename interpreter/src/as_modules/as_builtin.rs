@@ -2,7 +2,7 @@ use unindent::Unindent;
 
 use crate::{
     as_cast, as_fonction, as_mod,
-    as_obj::{ASErreurType, ASObj, ASType},
+    as_obj::{ASDict, ASErreurType, ASObj, ASType},
     as_var, call_methode, union_of,
 };
 
@@ -31,7 +31,7 @@ as_mod! {
         }
     },
     as_fonction! {
-        tailleDe[runner](obj: union_of!(ASType::iterable(), ClasseInst))-> ASType::Entier; {
+        tailleDe[runner](obj: ASType::iterable()) -> ASType::Entier; {
             if let Some(result) = call_methode!(obj.__taille__() or throw, runner) {
                 return result;
             }
@@ -90,11 +90,15 @@ as_mod! {
         }
     },
     as_fonction! {
-        liste[runner](obj: union_of!(ASType::iterable(), ClasseInst, Classe) => ASObj::ASDecimal(0f64)) -> ASType::Liste; {
-            if let Some(result) = call_methode!(obj.__liste__() or throw, runner) {
+        liste[runner](obj: ASType::iterable() => ASObj::liste(vec![])) -> ASType::Liste; {
+            if let Some(result) = call_methode!(obj.__liste__(), runner) {
                 return result;
             }
-            Ok(Some(match obj {
+            let mut obj_iter = obj;
+            if let Some(result) = call_methode!(obj_iter.__iter__() -> ASType::iterable(); or throw, runner) {
+                obj_iter = result?.unwrap();
+            }
+            Ok(Some(match obj_iter {
                 ASObj::ASTexte(t) => ASObj::liste(
                     t.chars().map(|c| ASObj::ASTexte(c.to_string())).collect(),
                 ),
@@ -104,13 +108,33 @@ as_mod! {
                                 vec![pair.key().clone(), pair.val().clone()]
                             )).collect(),
                 ),
+                ASObj::ASClasseInst(..) => {
+                    let mut liste = vec![];
+                    while let Some(prochain) = runner.prochain(&obj_iter)? {
+                        liste.push(prochain);
+                    }
+                    ASObj::liste(liste)
+                },
                 _ => unreachable!()
             }))
         }
     },
     as_fonction! {
-        info(f: ASType::Fonction) -> ASType::Texte; {
+        dict[runner](obj: ASType::iterable() => ASObj::dict(ASDict::default())) -> ASType::Dict; {
+            if let Some(result) = call_methode!(obj.__dict__() or throw, runner) {
+                return result;
+            }
+            Ok(Some(match obj {
+                ASObj::ASListe(l) => todo!(),
+                ASObj::ASDict(d) => ASObj::ASDict(d.clone()),
+                _ => unreachable!()
+            }))
+        }
+    },
+    as_fonction! {
+        info(f: ASType::Fonction, opt: ASType::Dict => ASObj::dict(ASDict::default())) -> ASType::Texte; {
             let ASObj::ASFonc(f) = f else {unreachable!()};
+            as_cast!(ASObj::ASDict(opt) = opt);
             Ok(Some(ASObj::ASTexte(format!(
                 "{}\n  {}",
                 f.to_string(),
@@ -189,6 +213,6 @@ as_mod! {
         const CHIFFRES: ASType::Texte => ASObj::ASTexte("0123456789".into())
     },
     as_var! {
-        const SYMBOLES: ASType::Texte => ASObj::ASTexte("+-*/%&|!^~<>=()[]{}.,:;".into())
+        const SYMBOLES: ASType::Texte => ASObj::ASTexte("+-*/%&|!^~@<>=()[]{}.,:;".into())
     }
 }

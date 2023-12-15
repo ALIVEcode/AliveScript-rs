@@ -219,6 +219,9 @@ pub enum Token {
     #[token("?")]
     QuestionMark,
 
+    #[token("??")]
+    DoubleQuestionMark,
+
     #[token("..")]
     #[token("jusqu'a")]
     #[token("jusqu'à")]
@@ -341,6 +344,7 @@ impl fmt::Display for Token {
             Token::RightArrow => "FLECHE_DROITE(->, →)".to_owned(),
             Token::Dot => "POINT(.)".to_owned(),
             Token::QuestionMark => "POINT_INTER(?)".to_owned(),
+            Token::DoubleQuestionMark => "DOUBLE_POINT_INTER(??)".to_owned(),
 
             Token::RangeExcl => "SUITE_EXCL(.., jusqu'a, jusqu'à)".to_owned(),
             Token::RangeIncl => "SUITE_INCL(..=)".to_owned(),

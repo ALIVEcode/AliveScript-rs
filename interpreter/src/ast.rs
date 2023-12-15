@@ -256,6 +256,12 @@ pub enum Expr {
         op: UnaryOpcode,
     },
 
+    Ternary {
+        cond: Box<Expr>,
+        then_expr: Box<Expr>,
+        else_expr: Box<Expr>,
+    },
+
     CallRust(CallRust),
 }
 
@@ -325,6 +331,7 @@ pub enum BinCompcode {
 pub enum BinLogiccode {
     Et,
     Ou,
+    NonNul,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -356,17 +363,16 @@ impl Visitable for Expr {
             BinComp { .. } => visitor.visit_expr_bincomp(self),
             BinLogic { .. } => visitor.visit_expr_binlogic(self),
             UnaryOp { .. } => visitor.visit_expr_unaryop(self),
+            Ternary { .. } => visitor.visit_expr_ternary(self),
             Lit(..) => visitor.visit_expr_lit(self),
             List(..) => visitor.visit_expr_list(self),
             Dict(..) => visitor.visit_expr_dict(self),
-            // Paire { .. } => visitor.visit_expr_paire(self),
             Ident(..) => visitor.visit_expr_ident(self),
             AccessProp { .. } => visitor.visit_expr_accessprop(self),
             FnCall { .. } => visitor.visit_expr_fncall(self),
             Range { .. } => visitor.visit_expr_suite(self),
             Slice { .. } => visitor.visit_expr_slice(self),
             CallRust(..) => visitor.visit_expr_callrust(self),
-            // ClasseInst { .. } => visitor.visit_expr_classe_init(self),
             DefFn { .. } => visitor.visit_expr_deffn(self),
             Faire(..) => visitor.visit_expr_faire(self),
         }

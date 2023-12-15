@@ -35,7 +35,7 @@ macro_rules! as_fonction {
         $crate::as_obj::ASVar::new_with_value(
             std::stringify!($name),
             Some($crate::as_obj::ASType::Fonction),
-            true,
+            false,
             $crate::as_obj::ASObj::native_fn(
                 std::stringify!($name),
                 $crate::opt_value!($($desc)?),
@@ -63,6 +63,19 @@ macro_rules! as_fonction {
 
 #[macro_export]
 macro_rules! as_var {
+    ($var:ident : $param_type:expr) => {
+        $crate::as_obj::ASVar::new(std::stringify!($var).to_owned(), Some($param_type), false)
+    };
+    ($var:ident) => {
+        $crate::as_obj::ASVar::new(std::stringify!($var).to_owned(), None, false)
+    };
+    (const $var:ident : $param_type:expr) => {
+        $crate::as_obj::ASVar::new(std::stringify!($var).to_owned(), Some($param_type), true)
+    };
+    (const $var:ident) => {
+        $crate::as_obj::ASVar::new(std::stringify!($var).to_owned(), None, true)
+    };
+
     ($var:ident : $param_type:expr => $val:expr) => {
         $crate::as_obj::ASVar::new_with_value(std::stringify!($var), Some($param_type), false, $val)
     };

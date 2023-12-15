@@ -25,6 +25,8 @@ pub trait Visitor {
     fn visit_expr_bincomp(&mut self, expr: &Expr);
     fn visit_expr_binlogic(&mut self, expr: &Expr);
 
+    fn visit_expr_ternary(&mut self, expr: &Expr);
+
     fn visit_expr_suite(&mut self, expr: &Expr);
 
     fn visit_expr_deffn(&mut self, expr: &Expr);
