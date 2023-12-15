@@ -60,7 +60,7 @@ as_mod! {
         }
     },
     as_fonction! {
-        entier[runner](obj: union_of!(ASType::nombre(), Texte, ClasseInst) => ASObj::ASEntier(0),
+        entier[runner](obj: union_of!(ASType::nombre(), Texte, ClasseInst, Classe) => ASObj::ASEntier(0),
                        base: ASType::Entier => ASObj::ASEntier(10)) -> ASType::Entier; {
             if let Some(result) = call_methode!(obj.__entier__() or throw, runner) {
                 return result;
@@ -77,7 +77,7 @@ as_mod! {
         }
     },
     as_fonction! {
-        decimal[runner](obj: union_of!(ASType::nombre(), Texte, ClasseInst) => ASObj::ASDecimal(0f64)) -> ASType::Decimal; {
+        decimal[runner](obj: union_of!(ASType::nombre(), Texte, ClasseInst, Classe) => ASObj::ASDecimal(0f64)) -> ASType::Decimal; {
             if let Some(result) = call_methode!(obj.__decimal__() or throw, runner) {
                 return result;
             }
@@ -90,7 +90,7 @@ as_mod! {
         }
     },
     as_fonction! {
-        liste[runner](obj: union_of!(ASType::iterable(), ClasseInst) => ASObj::ASDecimal(0f64)) -> ASType::Liste; {
+        liste[runner](obj: union_of!(ASType::iterable(), ClasseInst, Classe) => ASObj::ASDecimal(0f64)) -> ASType::Liste; {
             if let Some(result) = call_methode!(obj.__liste__() or throw, runner) {
                 return result;
             }
@@ -132,6 +132,14 @@ as_mod! {
             let result = match obj {
                 ASObj::ASClasseInst(ref inst) => inst
                     .env()
+                    .borrow()
+                    .get_value(attr_val)
+                    .map(|v| Some(v.clone()))
+                    .ok_or_else(|| {
+                        ASErreurType::new_erreur_access_propriete(obj.clone(), attr_val.clone())
+                    }),
+                ASObj::ASClasse(ref classe) => classe
+                    .static_env()
                     .borrow()
                     .get_value(attr_val)
                     .map(|v| Some(v.clone()))

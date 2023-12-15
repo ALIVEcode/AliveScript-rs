@@ -5,10 +5,7 @@
 :)
 
 fonction estIter(obj) -> booleen
-    retourner (
-        contientAttr(obj, "__prochain__") et
-        typeDe(obj.__prochain__) == "fonction"
-    )
+    retourner (contientAttr(obj, "__prochain__") et typeDe(obj.__prochain__) == "fonction")
 fin fonction
 
 classe suite
@@ -24,22 +21,16 @@ classe suite
         inst._curseur = debutSuite
     fin init
 
+    methode __iter__()
+        retourner inst
+    fin methode
+
     methode __prochain__()
         si inst._curseur < inst.finSuite alors
             inst._curseur += inst.bond
-            retourner inst._curseur - inst.bond
+            retourner {valeur: inst._curseur - inst.bond, estFini: faux}
         sinon
-            retourner nul
+            retourner {estFini: vrai}
         fin si
     fin methode
-
-    methode __estFini__()
-        retourner inst._curseur >= inst.finSuite
-    fin methode
 fin classe
-
-s = suite(1, 3)
-tant que pas s.__estFini__()
-    afficher s.__prochain__()
-fin tant que
-

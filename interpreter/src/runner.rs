@@ -35,6 +35,8 @@ enum ModuleType {
     Python,
 }
 
+type ASResult<T> = Result<T, ASErreurType>;
+
 macro_rules! eval {
     (expr, $runner:ident, $expr:expr, $expect:literal) => {{
         ($expr).accept($runner);
@@ -180,7 +182,7 @@ impl<'a> Runner<'a> {
         self.stmt_result.take()
     }
 
-    fn do_op(lhs: ASObj, op: &BinOpcode, rhs: ASObj) -> ASObj {
+    pub fn do_op(lhs: ASObj, op: &BinOpcode, rhs: ASObj) -> ASObj {
         use BinOpcode::*;
 
         match op {
@@ -300,11 +302,39 @@ impl<'a> Runner<'a> {
         self.env.pop_scope()
     }
 
-    pub fn to_bool(&mut self, obj: &ASObj) -> Result<bool, ASErreurType> {
+    pub fn to_bool(&mut self, obj: &ASObj) -> ASResult<bool> {
         if let Some(result) = call_methode!(obj.__bool__(), self) {
             result.map(|obj| obj.unwrap().to_bool())
         } else {
             Ok(obj.to_bool())
+        }
+    }
+
+    pub fn prochain(&mut self, obj: &ASObj) -> ASResult<Option<ASObj>> {
+        if let Some(result) = call_methode!(obj.__prochain__() or throw, self) {
+            match result {
+                Ok(Some(ASObj::ASDict(d))) => {
+                    let d = d.borrow();
+                    let Some(est_fini) = d.get_val(&ASObj::texte("estFini")) else {
+                        return Err(ASErreurType::new_erreur_clef(ASObj::texte("estFini")));
+                    };
+                    if self.to_bool(est_fini)? {
+                        return Ok(None);
+                    }
+                    let Some(valeur) = d.get_val(&ASObj::texte("valeur")) else {
+                        return Err(ASErreurType::new_erreur_clef(ASObj::texte("valeur")));
+                    };
+                    Ok(Some(valeur.clone()))
+                }
+                Ok(Some(_)) => Err(ASErreurType::new_erreur_type(ASType::Dict, obj.get_type())),
+                Ok(None) => Err(ASErreurType::new_erreur_type(ASType::Dict, ASType::Rien)),
+                Err(err) => Err(err),
+            }
+        } else {
+            Err(ASErreurType::new_erreur_type(
+                ASType::ClasseInst,
+                obj.get_type(),
+            ))
         }
     }
 }
@@ -880,25 +910,70 @@ impl Visitor for Runner<'_> {
 
             use BinCompcode::*;
             let result = ASObj::ASBooleen(match op {
-                Eq => lhs_value == rhs_value,
-                NotEq => lhs_value != rhs_value,
-                Lth => lhs_value < rhs_value,
-                Gth => lhs_value > rhs_value,
-                Leq => lhs_value <= rhs_value,
-                Geq => lhs_value >= rhs_value,
-                Dans => {
-                    let r = rhs_value.contains(&lhs_value);
-                    match r {
-                        Err(err) => throw_err!(self, err),
-                        Ok(r) => r,
+                Eq | NotEq => {
+                    (if let Some(result) =
+                        call_methode!(lhs_value.__eq__(rhs_value.clone()) -> ASType::Booleen, self)
+                    {
+                        throw_err!(?, self, result).unwrap().to_bool()
+                    } else {
+                        lhs_value == rhs_value
+                    }) == (op == &BinCompcode::Eq)
+                }
+                Lth => {
+                    if let Some(result) = call_methode!(lhs_value.__pp__(rhs_value.clone()) -> ASType::Booleen; or throw, self)
+                    {
+                        throw_err!(?, self, result).unwrap().to_bool()
+                    } else if let Some(result) = call_methode!(rhs_value.__dr_pp__(lhs_value.clone()) -> ASType::Booleen; or throw, self)
+                    {
+                        throw_err!(?, self, result).unwrap().to_bool()
+                    } else {
+                        lhs_value < rhs_value
                     }
                 }
-                PasDans => {
-                    let r = rhs_value.contains(&lhs_value);
-                    match r {
-                        Err(err) => throw_err!(self, err),
-                        Ok(r) => !r,
+                Gth => {
+                    if let Some(result) = call_methode!(lhs_value.__pg__(rhs_value.clone()) -> ASType::Booleen; or throw, self)
+                    {
+                        throw_err!(?, self, result).unwrap().to_bool()
+                    } else if let Some(result) = call_methode!(rhs_value.__dr_pg__(lhs_value.clone()) -> ASType::Booleen; or throw, self)
+                    {
+                        throw_err!(?, self, result).unwrap().to_bool()
+                    } else {
+                        lhs_value > rhs_value
                     }
+                }
+                Leq => {
+                    if let Some(result) = call_methode!(lhs_value.__ppe__(rhs_value.clone()) -> ASType::Booleen; or throw, self)
+                    {
+                        throw_err!(?, self, result).unwrap().to_bool()
+                    } else if let Some(result) = call_methode!(rhs_value.__dr_ppe__(lhs_value.clone()) -> ASType::Booleen; or throw, self)
+                    {
+                        throw_err!(?, self, result).unwrap().to_bool()
+                    } else {
+                        lhs_value <= rhs_value
+                    }
+                }
+                Geq => {
+                    if let Some(result) = call_methode!(lhs_value.__pge__(rhs_value.clone()) -> ASType::Booleen; or throw, self)
+                    {
+                        throw_err!(?, self, result).unwrap().to_bool()
+                    } else if let Some(result) = call_methode!(rhs_value.__dr_pge__(lhs_value.clone()) -> ASType::Booleen; or throw, self)
+                    {
+                        throw_err!(?, self, result).unwrap().to_bool()
+                    } else {
+                        lhs_value >= rhs_value
+                    }
+                }
+                Dans | PasDans => {
+                    // rhs_value est un objet ou une classe definissant __contient__
+                    (if let Some(r) = call_methode!(rhs_value.__contient__(lhs_value.clone()) -> ASType::Booleen; or throw, self)
+                    {
+                        throw_err!(?, self, r).unwrap().to_bool()
+                    } else if let Some(r) = call_methode!(lhs_value.__contenu__(rhs_value.clone()) -> ASType::Booleen; or throw, self)
+                    {
+                        throw_err!(?, self, r).unwrap().to_bool()
+                    } else {
+                        throw_err!(?, self, rhs_value.contains(&lhs_value))
+                    }) == (op == &BinCompcode::Dans)
                 }
             });
             self.push_value(result);
@@ -1219,11 +1294,21 @@ impl Visitor for Runner<'_> {
                 AssignVar::AccessProp { obj, prop } => {
                     let var_val = eval!(expr, self, obj, "Assign AccessProp Obj");
                     match var_val {
-                        ASObj::ASClasseInst(inst) => {
-                            throw_err!(?, self, inst.env().borrow_mut().assign(prop, value));
+                        ASObj::ASClasseInst(ref inst) => {
+                            if let None = call_methode!(
+                                var_val.__setAttr__(ASObj::ASTexte(prop.clone()), value.clone()),
+                                self
+                            ) {
+                                throw_err!(?, self, inst.env().borrow_mut().assign(prop, value));
+                            }
                         }
-                        ASObj::ASClasse(classe) => {
-                            throw_err!(?, self, classe.static_env().borrow_mut().assign(prop, value));
+                        ASObj::ASClasse(ref classe) => {
+                            if let None = call_methode!(
+                                var_val.__setAttr__(ASObj::ASTexte(prop.clone()), value.clone()),
+                                self
+                            ) {
+                                throw_err!(?, self, classe.static_env().borrow_mut().assign(prop, value));
+                            }
                         }
                         _ => todo!(),
                     }
@@ -1286,17 +1371,20 @@ impl Visitor for Runner<'_> {
 
                 match &var_val {
                     ASObj::ASClasseInst(inst) => {
-                        let mut env_borrow = inst.env().borrow_mut();
-                        let Some(old_value) = env_borrow.get_value(prop) else {
-                            throw_err!(
-                                self,
-                                ASErreurType::new_erreur_access_propriete(
-                                    var_val.clone(),
-                                    prop.clone()
-                                )
-                            );
+                        let new_value = {
+                            let env_borrow = inst.env().borrow();
+                            let Some(old_value) = env_borrow.get_value(prop) else {
+                                throw_err!(
+                                    self,
+                                    ASErreurType::new_erreur_access_propriete(
+                                        var_val.clone(),
+                                        prop.clone()
+                                    )
+                                );
+                            };
+                            Runner::<'_>::do_op(old_value.clone(), op, value)
                         };
-                        let new_value = Runner::<'_>::do_op(old_value.clone(), op, value);
+                        let mut env_borrow = inst.env().borrow_mut();
                         throw_err!(?, self, env_borrow.assign(prop, new_value));
                     }
                     _ => todo!(),
@@ -1381,40 +1469,64 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_stmt_pour(&mut self, stmt: &Stmt) {
-        if let Stmt::Pour {
+        let Stmt::Pour {
             var,
             iterable,
             body,
         } = stmt
-        {
-            let mut iter_obj = eval!(expr, self, iterable, "Pour iterable");
+        else {
+            return;
+        };
 
-            if let Some(obj) = call_methode!(iter_obj.__iter__() or throw, self) {
-                iter_obj = throw_err!(?, self, obj).unwrap();
+        let DeclVar::Var {
+            name,
+            static_type,
+            is_const,
+        } = var
+        else {
+            todo!()
+        };
+
+        let static_type = eval!(opt_type, self, static_type, "Pour var type");
+
+        let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
+
+        let iter_obj = eval!(expr, self, iterable, "Pour iterable");
+
+        if let Some(obj) = call_methode!(iter_obj.__iter__() or throw, self) {
+            let iter_obj = throw_err!(?, self, obj).unwrap();
+            while let Some(val) = throw_err!(?, self, self.prochain(&iter_obj)) {
+                self.env
+                    .push_new_scope(ASScope::from(vec![(var.clone(), val.clone())]));
+                self.visit_body(body);
+                self.env.pop_scope();
+                match self.early_exit {
+                    Some(EarlyExit::Retourner | EarlyExit::Erreur) => break,
+                    Some(EarlyExit::Continuer) => self.clear_early_exit(),
+                    Some(EarlyExit::Sortir) => {
+                        self.clear_early_exit();
+                        break;
+                    }
+                    None => {}
+                }
             }
-
+        } else {
             let iter: Rc<RefCell<Vec<ASObj>>> = match iter_obj {
                 ASObj::ASTexte(s) => Rc::new(RefCell::new(
                     s.chars().map(|c| ASObj::ASTexte(String::from(c))).collect(),
                 )),
                 ASObj::ASListe(ref ls) => Rc::clone(ls),
+                ASObj::ASDict(ref d) => Rc::new(RefCell::new(
+                    d.borrow()
+                        .items()
+                        .map(|pair| ASObj::liste(vec![pair.key().clone(), pair.val().clone()]))
+                        .collect(),
+                )),
                 _ => throw_err!(
                     self,
                     ASErreurType::new_erreur_type(ASType::iterable(), iter_obj.get_type())
                 ),
             };
-
-            let DeclVar::Var {
-                name,
-                static_type,
-                is_const,
-            } = var
-            else {
-                todo!()
-            };
-            let static_type = eval!(opt_type, self, static_type, "Pour var type");
-
-            let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
 
             for val in iter.borrow().iter() {
                 self.env

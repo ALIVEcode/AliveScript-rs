@@ -58,10 +58,10 @@ pub Stmt: Box<Stmt> = {
     "tant que" <cond:Expr> "faire"? "eos" <body:Script> "fin" "tant que" "eos" => 
         Box::new(Stmt::TantQue { <> }),
 
-    "pour" "chaque"? <var:DeclVar> "dans" <iterable:Expr> "faire"? "eos" <body:Script> "fin" "pour" "eos" =>
+    "pour" "chaque"? <var:DeclVar> DansOrAssign <iterable:Expr> "faire"? "eos" <body:Script> "fin" "pour" "eos" =>
         Box::new(Stmt::Pour { <> }),
 
-    "pour" "chaque"? <var:DeclIdent> "dans" <iterable:Expr> "faire"? "eos" <body:Script> "fin" "pour" "eos" =>
+    "pour" "chaque"? <var:DeclIdent> DansOrAssign <iterable:Expr> "faire"? "eos" <body:Script> "fin" "pour" "eos" =>
         Box::new(Stmt::Pour { <> }),
 
     <docs:(<"DOCS"> "eos"*)?> "fonction" <name:ident> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
@@ -77,6 +77,12 @@ pub Stmt: Box<Stmt> = {
     <then_stmt:SubStmt> "si" <cond:Expr> "eos" => 
       Box::new(Stmt::CondStmt { <> }),
 };
+
+#[inline]
+DansOrAssign = {
+    "dans",
+    "assign",
+}
 
 #[inline]
 ClasseFieldDecl: ClasseField = {
@@ -335,9 +341,6 @@ pub Expr: Box<Expr> = {
   #[precedence(level="9")]
   "fonction" <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> ":" <body:Expr> => 
     Box::new(Expr::DefFn(DefFn::new(None, None, params, return_type, vec![Box::new(Stmt::Retourner(Some(body)))]))),
-
-  //"fonction" <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> "eos" <body:Script> "eos" "fin" "fonction" => 
-  //  Box::new(Expr::DefFn(DefFn::new(None, None, params, return_type, body))),
 };
 
 pub Term: Box<Expr> = {
@@ -361,7 +364,7 @@ pub Term: Box<Expr> = {
   Collection,
 };
 
-#[inline]
+//#[inline]
 ident: String = {
     "ident",
     "bond" => String::from("bond"),
@@ -393,19 +396,18 @@ DictContent: Paire = {
         },
 };
 
-#[inline]
 Paire: Paire = {
-    <clef:ident> ":" <val:Term> =>
+    <clef:ident> ":" <val:Expr> =>
         Paire{ 
             clef: Box::new(Expr::Lit(ASObj::ASTexte(clef))),
             val,
         },
 
-    <clef:Lit> ":" <val:Term> => Paire{ clef: Box::new(clef), val },
+    <clef:Lit> ":" <val:Expr> => Paire{ clef: Box::new(clef), val },
 
-    <clef:Collection> ":" <val:Term> => Paire{ <> },
+    <clef:Collection> ":" <val:Expr> => Paire{ <> },
 
-    <clef:TermExpr> ":" <val:Term> => Paire{ <> },
+    <clef:TermExpr> ":" <val:Expr> => Paire{ <> },
 }
 
 #[inline]
@@ -445,7 +447,6 @@ DeclIdent: DeclVar = {
           is_const: false,
         },
 };
-
 
 #[inline]
 AssignVar: AssignVar = {

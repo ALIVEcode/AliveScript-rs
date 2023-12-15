@@ -69,6 +69,7 @@ pub enum Token {
     KwRepeter,
 
     #[token("dans")]
+    #[token("∈")]
     KwDans,
 
     #[token("bond")]

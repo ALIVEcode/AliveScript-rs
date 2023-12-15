@@ -67,6 +67,10 @@ impl ASDict {
         self.0.iter().find(|pair| pair.key() == key)
     }
 
+    pub fn get_val(&self, key: &ASObj) -> Option<&ASObj> {
+        self.get(key).map(|pair| pair.val())
+    }
+
     pub fn get_mut(&mut self, key: &ASObj) -> Option<&mut ASPaire> {
         self.0.iter_mut().find(|pair| pair.key() == key)
     }
@@ -314,6 +318,10 @@ pub struct ASMethode {
 impl ASObj {
     pub fn liste(l: Vec<ASObj>) -> ASObj {
         ASObj::ASListe(Rc::new(RefCell::new(l)))
+    }
+
+    pub fn texte(s: impl ToString) -> ASObj {
+        ASObj::ASTexte(s.to_string())
     }
 
     pub fn native_fn(
