@@ -19,6 +19,8 @@ use crate::{
     runner::Runner,
 };
 
+pub type ASResult<T> = Result<T, ASErreurType>;
+
 #[derive(Debug, new)]
 pub enum ASObj {
     // A placeholder value for representing the absence of values
@@ -863,7 +865,13 @@ impl ASType {
     }
 
     pub fn iterable() -> ASType {
-        ASType::Union(vec![Self::Liste, Self::Texte, Self::Dict, Self::Classe, Self::ClasseInst])
+        ASType::Union(vec![
+            Self::Liste,
+            Self::Texte,
+            Self::Dict,
+            Self::Classe,
+            Self::ClasseInst,
+        ])
     }
 
     pub fn union(types: Vec<ASType>) -> ASType {
@@ -1230,7 +1238,7 @@ impl ASEnv {
         &mut self,
         var: ASVar,
         val: ASObj,
-    ) -> Result<Option<(ASVar, ASObj)>, ASErreurType> {
+    ) -> ASResult<Option<(ASVar, ASObj)>> {
         let var_name = var.get_name();
         if self
             .0
@@ -1255,7 +1263,7 @@ impl ASEnv {
         &mut self,
         var_name: &String,
         val: ASObj,
-    ) -> Result<Option<(ASVar, ASObj)>, ASErreurType> {
+    ) -> ASResult<Option<(ASVar, ASObj)>> {
         let mut scope = self.get_env_of_var(var_name);
         scope.assign(var_name, val)
     }
@@ -1264,6 +1272,9 @@ impl ASEnv {
 #[derive(Debug, PartialEq, Clone, new)]
 pub enum ASErreurType {
     VariableInconnue {
+        var_name: String,
+    },
+    ErreurVariableRedeclaree {
         var_name: String,
     },
     AffectationConstante {
@@ -1299,6 +1310,10 @@ pub enum ASErreurType {
     },
     ErreurClef {
         mauvaise_clef: ASObj,
+    },
+    ErreurIndex {
+        mauvais_index: i64,
+        len: usize,
     },
     ErreurAccessPropriete {
         obj: ASObj,
@@ -1338,6 +1353,7 @@ impl ASErreurType {
     pub const fn error_name(&self) -> &'static str {
         match self {
             ASErreurType::VariableInconnue { .. } => "VariableInconnue",
+            ASErreurType::ErreurVariableRedeclaree { .. } => "ErreurVariableRedeclaree",
             ASErreurType::AffectationConstante { .. } => "AffectationConstante",
             ASErreurType::ErreurType { .. } => "ErreurType",
             ASErreurType::ErreurTypeRetour { .. } => "ErreurTypeRetour",
@@ -1345,6 +1361,7 @@ impl ASErreurType {
             ASErreurType::ErreurTypeAppel { .. } => "ErreurTypeAppel",
             ASErreurType::ErreurOperation { .. } => "ErreurOperation",
             ASErreurType::ErreurClef { .. } => "ErreurClef",
+            ASErreurType::ErreurIndex { .. } => "ErreurIndex",
             ASErreurType::ErreurAccessPropriete { .. } => "ErreurAccessPropriete",
             ASErreurType::ErreurProprietePasInit { .. } => "ErreurProprietePasInit",
             ASErreurType::ErreurSuiteInvalide { .. } => "SuiteInvalide",
@@ -1364,6 +1381,10 @@ impl Display for ASErreurType {
 
         let to_string = match self {
             VariableInconnue { var_name } => format!("Variable inconnue '{}'", var_name),
+            ErreurVariableRedeclaree { var_name } => {
+                format!("Variable '{}' déjà déclarée", var_name)
+            }
+
             AffectationConstante { var_name } => format!("Impossible de changer la valeur d'une constante: '{}'", var_name),
 
             ErreurConversionType { type_cible, texte } => format!("Impossible de convertir \"{}\" en {}", texte, type_cible),
@@ -1422,6 +1443,8 @@ impl Display for ASErreurType {
             ),
 
             ErreurClef { mauvaise_clef } => format!("La clef {} n'est pas dans le dictionnaire", mauvaise_clef.repr()),
+
+            ErreurIndex { mauvais_index, len } => format!("Index {} invalide, car la longueur est {}", mauvais_index, len),
 
             ErreurAccessPropriete { obj, prop } => format!("La propriété {} n'existe pas dans {}", prop, obj),
 

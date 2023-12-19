@@ -6,7 +6,7 @@ use crate::{
     as_modules::ASModuleBuiltin,
     as_obj::{
         ASClasse, ASClasseField, ASClasseInst, ASDict, ASEnv, ASErreur, ASErreurType, ASFnParam,
-        ASFonc, ASMethode, ASObj, ASScope, ASType, ASVar,
+        ASFonc, ASMethode, ASObj, ASResult, ASScope, ASType, ASVar,
     },
     as_py::run_python_script,
     as_var,
@@ -35,8 +35,6 @@ enum ModuleType {
     AliveScript,
     Python,
 }
-
-type ASResult<T> = Result<T, ASErreurType>;
 
 macro_rules! eval {
     (expr, $runner:ident, $expr:expr, $expect:literal) => {{
@@ -110,6 +108,16 @@ macro_rules! throw_err {
             return;
         }
         result.ok().unwrap()
+    }};
+}
+
+macro_rules! throw_guard {
+    ($self:expr, $expr:expr) => {{
+        let result = $expr;
+        if $self.error_thrown() {
+            return;
+        }
+        result
     }};
 }
 
@@ -352,6 +360,162 @@ impl<'a> Runner<'a> {
     }
 }
 
+impl<'a> Runner<'a> {
+    fn decl_var(&mut self, value: ASObj, var: &DeclVar, is_assign: bool) {
+        if self.error_thrown() {
+            return;
+        }
+        match var {
+            DeclVar::Var {
+                name,
+                static_type,
+                is_const,
+            } => {
+                if is_assign {
+                    if let Some((var, _old_val)) = self.env.get_var(name) {
+                        throw_err!(?, self, self.env.assign(name, value));
+                        return;
+                    }
+                }
+                let static_type = eval!(opt_type, self, static_type, "Decl var type");
+                if static_type.is_some()
+                    && !ASType::type_match(static_type.as_ref().unwrap(), &value.get_type())
+                {
+                    throw_err!(
+                        self,
+                        ASErreurType::ErreurType {
+                            type_attendu: static_type.unwrap(),
+                            type_obtenu: value.get_type(),
+                        }
+                    );
+                }
+                let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
+                if self.env.declare(var, value).is_some() {
+                    throw_err!(
+                        self,
+                        ASErreurType::new_erreur_variable_redeclaree(name.clone())
+                    );
+                };
+            }
+            DeclVar::ListUnpack(vars) => {
+                for (idx, var) in vars.iter().enumerate() {
+                    match value {
+                        ASObj::ASListe(ref lst) => {
+                            let lst = lst.borrow();
+                            if let Some(val) = lst.get(idx) {
+                                self.decl_var(val.clone(), var, is_assign);
+                            } else {
+                                throw_err!(
+                                    self,
+                                    ASErreurType::new_erreur_index(idx as i64, lst.len())
+                                );
+                            }
+                        }
+                        _ => throw_err!(
+                            self,
+                            ASErreurType::new_erreur_type(ASType::Liste, value.get_type())
+                        ),
+                    }
+                }
+            }
+        }
+    }
+
+    fn assign_var(&mut self, value: ASObj, var: &AssignVar) {
+        if self.error_thrown() {
+            return;
+        }
+        match var {
+            AssignVar::Var { name, static_type } => {
+                if let Some((var, _old_val)) = self.env.get_var(name) {
+                    throw_err!(?, self, self.env.assign(name, value));
+                } else {
+                    let static_type = eval!(opt_type, self, static_type, "Assign var type");
+                    if static_type.is_some()
+                        && !ASType::type_match(static_type.as_ref().unwrap(), &value.get_type())
+                    {
+                        throw_err!(
+                            self,
+                            ASErreurType::ErreurType {
+                                type_attendu: static_type.unwrap(),
+                                type_obtenu: value.get_type(),
+                            }
+                        );
+                    }
+                    let var = ASVar::new(name.clone(), static_type.clone(), false);
+                    self.env.declare(var, value);
+                }
+            }
+
+            AssignVar::ListUnpack(vars) => {
+                for (idx, var) in vars.iter().enumerate() {
+                    match value {
+                        ASObj::ASListe(ref lst) => {
+                            let lst = lst.borrow();
+                            if let Some(val) = lst.get(idx) {
+                                self.assign_var(val.clone(), var);
+                            } else {
+                                throw_err!(
+                                    self,
+                                    ASErreurType::new_erreur_index(idx as i64, lst.len())
+                                );
+                            }
+                        }
+                        _ => throw_err!(
+                            self,
+                            ASErreurType::new_erreur_type(ASType::Liste, value.get_type())
+                        ),
+                    }
+                }
+            }
+
+            AssignVar::Slice { obj, slice } => {
+                use ASObj::*;
+
+                let var_val = eval!(expr, self, obj, "Assign Slice Obj");
+                let slice_val = eval!(expr, self, slice, "Assign Slice Slice");
+                match (var_val, slice_val) {
+                    (ASListe(lst), ASEntier(i)) => {
+                        let len = lst.borrow().len();
+                        let i = if i < 0 { len as i64 + i } else { i };
+                        if i < 0 || i >= len as i64 {
+                            throw_err!(self, ASErreurType::new_erreur_index(i, len));
+                        }
+                        *lst.borrow_mut().index_mut(i as usize) = value;
+                    }
+                    (ASDict(d), obj) => {
+                        let mut d = d.borrow_mut();
+                        d.insert(obj, value);
+                    }
+                    _ => todo!(),
+                }
+            }
+            AssignVar::AccessProp { obj, prop } => {
+                let var_val = eval!(expr, self, obj, "Assign AccessProp Obj");
+                match var_val {
+                    ASObj::ASClasseInst(ref inst) => {
+                        if let None = call_methode!(
+                            var_val.__setAttr__(ASObj::ASTexte(prop.clone()), value.clone()),
+                            self
+                        ) {
+                            throw_err!(?, self, inst.env().borrow_mut().assign(prop, value));
+                        }
+                    }
+                    ASObj::ASClasse(ref classe) => {
+                        if let None = call_methode!(
+                            var_val.__setAttr__(ASObj::ASTexte(prop.clone()), value.clone()),
+                            self
+                        ) {
+                            throw_err!(?, self, classe.static_env().borrow_mut().assign(prop, value));
+                        }
+                    }
+                    _ => todo!(),
+                }
+            }
+        }
+    }
+}
+
 impl Visitor for Runner<'_> {
     fn visit_body(&mut self, stmts: &Vec<Box<Stmt>>) {
         for stmt in stmts.iter() {
@@ -511,12 +675,24 @@ impl Visitor for Runner<'_> {
             let slice = eval!(expr, self, slice, "Idx idx");
 
             let result = match (obj_val, slice) {
-                (ASObj::ASListe(lst), ASObj::ASEntier(i)) => lst.borrow()[i as usize].clone(),
+                (ASObj::ASListe(lst), ASObj::ASEntier(i)) => {
+                    let lst = lst.borrow();
+                    let i = if i < 0 { lst.len() as i64 + i } else { i };
+                    if i < 0 || i >= lst.len() as i64 {
+                        throw_err!(self, ASErreurType::new_erreur_index(i, lst.len()));
+                    }
+                    lst[i as usize].clone()
+                }
                 (ASObj::ASListe(lst), ASObj::ASListe(range)) => {
                     let mut lst_final = Vec::with_capacity(range.borrow().len());
                     for obj in range.borrow().iter() {
                         if let ASObj::ASEntier(i) = obj {
-                            lst_final.push(lst.borrow()[*i as usize].clone());
+                            let lst = lst.borrow();
+                            let i = if *i < 0 { lst.len() as i64 + *i } else { *i };
+                            if i < 0 || i >= lst.len() as i64 {
+                                throw_err!(self, ASErreurType::new_erreur_index(i, lst.len()));
+                            }
+                            lst_final.push(lst[i as usize].clone());
                         } else {
                             throw_err!(
                                 self,
@@ -527,13 +703,21 @@ impl Visitor for Runner<'_> {
                     ASObj::ASListe(Rc::new(RefCell::new(lst_final)))
                 }
                 (ASObj::ASTexte(txt), ASObj::ASEntier(i)) => {
+                    let i = if i < 0 { txt.len() as i64 + i } else { i };
+                    if i < 0 || i >= txt.len() as i64 {
+                        throw_err!(self, ASErreurType::new_erreur_index(i, txt.len()));
+                    }
                     ASObj::ASTexte(txt[i as usize..i as usize + 1].into())
                 }
                 (ASObj::ASTexte(txt), ASObj::ASListe(range)) => {
                     let mut txt_final = String::with_capacity(range.borrow().len());
                     for obj in range.borrow().iter() {
                         if let ASObj::ASEntier(i) = obj {
-                            txt_final.push(txt.chars().nth(*i as usize).unwrap());
+                            let i = if *i < 0 { txt.len() as i64 + *i } else { *i };
+                            if i < 0 || i >= txt.len() as i64 {
+                                throw_err!(self, ASErreurType::new_erreur_index(i, txt.len()));
+                            }
+                            txt_final.push(txt.chars().nth(i as usize).unwrap());
                         } else {
                             throw_err!(
                                 self,
@@ -1046,86 +1230,84 @@ impl Visitor for Runner<'_> {
         {
             let prompt_obj = eval!(opt_expr, self, prompt, "Prompt lire");
 
-            match var {
+            let (is_const, is_assign, static_type, name) = match var {
                 LireVar::Decl(DeclVar::Var {
                     name,
                     static_type,
                     is_const,
-                })
-                | LireVar::Assign(AssignVar::Decl(DeclVar::Var {
-                    name,
-                    static_type,
-                    is_const,
-                })) => {
-                    let is_assign = matches!(var, LireVar::Assign(_));
+                }) => (*is_const, false, static_type, name),
 
-                    let mut static_type = eval!(opt_type, self, static_type, "Lire var type");
-
-                    if is_assign {
-                        if let Some((var, _old_val)) = self.env.get_var(name) {
-                            if var.is_const() {
-                                throw_err!(
-                                    self,
-                                    ASErreurType::AffectationConstante {
-                                        var_name: name.clone()
-                                    }
-                                )
-                            }
-                            if static_type.is_none() {
-                                static_type = Some(var.get_type().clone());
-                            }
-                        }
-                    }
-                    let res_prompt = prompt_obj.map(|obj| {
-                        if let ASObj::ASTexte(prompt) = obj {
-                            Ok(prompt)
-                        } else {
-                            Err(ASErreurType::new_erreur_type(ASType::Texte, obj.get_type()))
-                        }
-                    });
-                    if let Some(Err(err)) = res_prompt {
-                        throw_err!(self, err);
-                    }
-                    let Response::Text(reponse) = self
-                        .request_data(Data::Demander {
-                            prompt: res_prompt.map(|p| p.ok().unwrap()),
-                        })
-                        .unwrap();
-
-                    let reponse = reponse.trim().to_string();
-
-                    let static_type: ASType = static_type.into();
-                    let value = match factory {
-                        Some(factory) => Ok(eval!(
-                            call,
-                            self,
-                            factory.clone(),
-                            vec![ASObj::ASTexte(reponse)],
-                            "Factory returns a value"
-                        )),
-                        None => static_type.convert_to_obj(reponse),
-                    };
-
-                    let Ok(value) = value else {
-                        throw_err!(self, value.err().unwrap())
-                    };
-
-                    if !ASType::type_match(&static_type, &value.get_type()) {
-                        throw_err!(
-                            self,
-                            ASErreurType::ErreurType {
-                                type_attendu: static_type,
-                                type_obtenu: value.get_type(),
-                            }
-                        );
-                    }
-
-                    let var = ASVar::new(name.clone(), Some(static_type), *is_const);
-                    self.env.declare(var, value);
+                LireVar::Assign(AssignVar::Var { name, static_type }) => {
+                    (false, true, static_type, name)
                 }
+
                 LireVar::Assign(_) => todo!(),
                 LireVar::Decl(DeclVar::ListUnpack(_)) => todo!(),
+            };
+
+            let mut static_type = eval!(opt_type, self, static_type, "Lire var type");
+
+            if is_assign {
+                if let Some((var, _old_val)) = self.env.get_var(name) {
+                    if var.is_const() {
+                        throw_err!(
+                            self,
+                            ASErreurType::AffectationConstante {
+                                var_name: name.clone()
+                            }
+                        )
+                    }
+                    if static_type.is_none() {
+                        static_type = Some(var.get_type().clone());
+                    }
+                }
             }
+            let res_prompt = prompt_obj.map(|obj| {
+                if let ASObj::ASTexte(prompt) = obj {
+                    Ok(prompt)
+                } else {
+                    Err(ASErreurType::new_erreur_type(ASType::Texte, obj.get_type()))
+                }
+            });
+            if let Some(Err(err)) = res_prompt {
+                throw_err!(self, err);
+            }
+            let Response::Text(reponse) = self
+                .request_data(Data::Demander {
+                    prompt: res_prompt.map(|p| p.ok().unwrap()),
+                })
+                .unwrap();
+
+            let reponse = reponse.trim().to_string();
+
+            let static_type: ASType = static_type.into();
+            let value = match factory {
+                Some(factory) => Ok(eval!(
+                    call,
+                    self,
+                    factory.clone(),
+                    vec![ASObj::ASTexte(reponse)],
+                    "Factory returns a value"
+                )),
+                None => static_type.convert_to_obj(reponse),
+            };
+
+            let Ok(value) = value else {
+                throw_err!(self, value.err().unwrap())
+            };
+
+            if !ASType::type_match(&static_type, &value.get_type()) {
+                throw_err!(
+                    self,
+                    ASErreurType::ErreurType {
+                        type_attendu: static_type,
+                        type_obtenu: value.get_type(),
+                    }
+                );
+            }
+
+            let var = ASVar::new(name.clone(), Some(static_type), is_const);
+            self.env.declare(var, value);
         }
     }
 
@@ -1223,105 +1405,14 @@ impl Visitor for Runner<'_> {
     fn visit_stmt_decl(&mut self, stmt: &Stmt) {
         if let Stmt::Decl { var, val } = stmt {
             let value = eval!(expr, self, val, "Decl valeur");
-            let DeclVar::Var {
-                name,
-                static_type,
-                is_const,
-            } = var
-            else {
-                panic!()
-            };
-            let static_type = eval!(opt_type, self, static_type, "Decl var type");
-            if static_type.is_some()
-                && !ASType::type_match(static_type.as_ref().unwrap(), &value.get_type())
-            {
-                throw_err!(
-                    self,
-                    ASErreurType::ErreurType {
-                        type_attendu: static_type.unwrap(),
-                        type_obtenu: value.get_type(),
-                    }
-                );
-            }
-            let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
-            if self.env.declare(var, value).is_some() {
-                panic!("Variable redéclarée {:?}", name);
-            };
+            self.decl_var(value, var, false);
         }
     }
 
     fn visit_stmt_assign(&mut self, stmt: &Stmt) {
-        if let Stmt::Assign {
-            var: assign_var,
-            val,
-        } = stmt
-        {
+        if let Stmt::Assign { var, val } = stmt {
             let value = eval!(expr, self, val, "Assign valeur");
-            match assign_var {
-                AssignVar::Decl(DeclVar::Var {
-                    name,
-                    static_type,
-                    is_const,
-                }) => {
-                    if let Some((var, _old_val)) = self.env.get_var(name) {
-                        throw_err!(?, self, self.env.assign(name, value));
-                    } else {
-                        let static_type = eval!(opt_type, self, static_type, "Assign var type");
-                        if static_type.is_some()
-                            && !ASType::type_match(static_type.as_ref().unwrap(), &value.get_type())
-                        {
-                            throw_err!(
-                                self,
-                                ASErreurType::ErreurType {
-                                    type_attendu: static_type.unwrap(),
-                                    type_obtenu: value.get_type(),
-                                }
-                            );
-                        }
-                        let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
-                        self.env.declare(var, value);
-                    }
-                }
-                AssignVar::Slice { obj, slice } => {
-                    use ASObj::*;
-
-                    let var_val = eval!(expr, self, obj, "Assign Slice Obj");
-                    let slice_val = eval!(expr, self, slice, "Assign Slice Slice");
-                    match (var_val, slice_val) {
-                        (ASListe(lst), ASEntier(i)) => {
-                            *lst.borrow_mut().index_mut(i as usize) = value;
-                        }
-                        (ASDict(d), obj) => {
-                            let mut d = d.borrow_mut();
-                            d.insert(obj, value);
-                        }
-                        _ => todo!(),
-                    }
-                }
-                AssignVar::AccessProp { obj, prop } => {
-                    let var_val = eval!(expr, self, obj, "Assign AccessProp Obj");
-                    match var_val {
-                        ASObj::ASClasseInst(ref inst) => {
-                            if let None = call_methode!(
-                                var_val.__setAttr__(ASObj::ASTexte(prop.clone()), value.clone()),
-                                self
-                            ) {
-                                throw_err!(?, self, inst.env().borrow_mut().assign(prop, value));
-                            }
-                        }
-                        ASObj::ASClasse(ref classe) => {
-                            if let None = call_methode!(
-                                var_val.__setAttr__(ASObj::ASTexte(prop.clone()), value.clone()),
-                                self
-                            ) {
-                                throw_err!(?, self, classe.static_env().borrow_mut().assign(prop, value));
-                            }
-                        }
-                        _ => todo!(),
-                    }
-                }
-                AssignVar::Decl(_) => todo!(),
-            }
+            self.assign_var(value, var);
         }
     }
 
@@ -1337,11 +1428,7 @@ impl Visitor for Runner<'_> {
 
         let value = eval!(expr, self, val, "Assign valeur");
         match assign_var {
-            AssignVar::Decl(DeclVar::Var {
-                name,
-                static_type,
-                is_const,
-            }) => {
+            AssignVar::Var { name, static_type } => {
                 if let Some((var, old_val)) = self.env.get_var(name) {
                     if var.is_const() {
                         throw_err!(
@@ -1397,7 +1484,7 @@ impl Visitor for Runner<'_> {
                     _ => todo!(),
                 }
             }
-            AssignVar::Decl(_) => todo!(),
+            AssignVar::ListUnpack(_) => todo!(),
         }
     }
 
@@ -1485,26 +1572,13 @@ impl Visitor for Runner<'_> {
             return;
         };
 
-        let DeclVar::Var {
-            name,
-            static_type,
-            is_const,
-        } = var
-        else {
-            todo!()
-        };
-
-        let static_type = eval!(opt_type, self, static_type, "Pour var type");
-
-        let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
-
         let iter_obj = eval!(expr, self, iterable, "Pour iterable");
 
         if let Some(obj) = call_methode!(iter_obj.__iter__() or throw, self) {
             let iter_obj = throw_err!(?, self, obj).unwrap();
             while let Some(val) = throw_err!(?, self, self.prochain(&iter_obj)) {
-                self.env
-                    .push_new_scope(ASScope::from(vec![(var.clone(), val.clone())]));
+                self.env.push_new_scope(ASScope::new());
+                throw_guard!(self, self.decl_var(val, &var, false));
                 self.visit_body(body);
                 self.env.pop_scope();
                 match self.early_exit {
@@ -1536,8 +1610,8 @@ impl Visitor for Runner<'_> {
             };
 
             for val in iter.borrow().iter() {
-                self.env
-                    .push_new_scope(ASScope::from(vec![(var.clone(), val.clone())]));
+                self.env.push_new_scope(ASScope::new());
+                throw_guard!(self, self.decl_var(val.clone(), &var, false));
                 self.visit_body(body);
                 self.env.pop_scope();
                 match self.early_exit {
@@ -1585,8 +1659,7 @@ impl Visitor for Runner<'_> {
         if let Stmt::Retourner(expr) = stmt {
             if let Some(val_expr) = expr {
                 // retourner valeur
-                let result = eval!(expr, self, val_expr, "retourner");
-                self.push_value(result);
+                throw_guard!(self, val_expr.accept(self));
             } else {
                 // retourner
                 self.push_value(ASObj::ASNul);

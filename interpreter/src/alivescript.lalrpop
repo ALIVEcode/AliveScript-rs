@@ -124,23 +124,23 @@ SubStmt: Box<Stmt> = {
     <var:DeclVar> "assign" <val:Expr> => Box::new(Stmt::Decl { <> }),
 
     <var:AssignVar> "assign" <val:Expr> => Box::new(Stmt::Assign { <> }),
-    <var:AssignVar> <op:BinOpcodeAssign> <val:Expr> => Box::new(Stmt::OpAssign { <> }),
+    <var:AssignVarSimple> <op:BinOpcodeAssign> <val:Expr> => Box::new(Stmt::OpAssign { <> }),
 
 
     "afficher" <arg:Comma<Expr>> => Box::new(Stmt::Afficher(arg)),
 
-    "lire" <factory:(<Term> "dans")?> <var:DeclVar> <prompt:("," <Expr>)?> => 
+    "lire" <factory:(<Term> "dans")?> <var:DeclVarSimple> <prompt:("," <Expr>)?> => 
         Box::new(Stmt::Lire {
                     factory,
                     var: LireVar::Decl(var),
-                    prompt,
+                    prompt: prompt,
                 }),
 
-    "lire" <factory:(<Term> "dans")?> <var:AssignVar> <prompt:("," <Expr>)?> => 
+    "lire" <factory:(<Term> "dans")?> <var:AssignVarSimple> <prompt:("," <Expr>)?> => 
         Box::new(Stmt::Lire {
                     factory,
                     var: LireVar::Assign(var),
-                    prompt,
+                    prompt: prompt,
                 }),
 
     "retourner" <Expr?> => Box::new(Stmt::Retourner(<>)),
@@ -437,10 +437,10 @@ Slice: Box<Expr> = {
   },
 }
 
-DeclVar: DeclVar = {
-    "var" <var_name:ident> <static_type:StaticType> =>
+DeclVarSimple: DeclVar = {
+    "var" <name:ident> <static_type:StaticType> =>
         DeclVar::Var { 
-            name: var_name.into(),
+            name,
             static_type,
             is_const: false,
         },
@@ -451,26 +451,58 @@ DeclVar: DeclVar = {
             static_type,
             is_const: true,
         },
+}
+
+DeclVar: DeclVar = {
+    "var" <DeclIdent>,
+
+    "const" <vars:CommaOne<(ident StaticType)>> => {
+        if vars.len() == 1 {
+            DeclVar::Var {
+                name: vars[0].0.clone(),
+                static_type: vars[0].1.clone(),
+                is_const: false,
+            }
+        } else {
+            DeclVar::ListUnpack(vars.into_iter().map(|(name, static_type)| {
+                DeclVar::Var {
+                    name,
+                    static_type,
+                    is_const: false,
+                }
+            }).collect())
+        }
+    },
 };
 
-#[inline]
 DeclIdent: DeclVar = {
-    <var_name:ident> <static_type:StaticType> =>
-        DeclVar::Var { 
-          name: var_name.into(),
-          static_type,
-          is_const: false,
-        },
+    <vars:CommaOne<(ident StaticType)>> => {
+        if vars.len() == 1 {
+            DeclVar::Var {
+                name: vars[0].0.clone(),
+                static_type: vars[0].1.clone(),
+                is_const: false,
+            }
+        } else {
+            DeclVar::ListUnpack(vars.into_iter().map(|(name, static_type)| {
+                DeclVar::Var {
+                    name,
+                    static_type,
+                    is_const: false,
+                }
+            }).collect())
+        }
+    },
 };
 
 #[inline]
-AssignVar: AssignVar = {
+AssignVarSimple: AssignVar = {
     <name:ident> <static_type:StaticType> =>
-        AssignVar::Decl(DeclVar::Var { 
+        AssignVar::Var { 
             name,
             static_type,
-            is_const: false,
-        }),
+        },
+
     <expr:Slice> => {
         match *expr {
             Expr::Slice { obj, slice } => AssignVar::Slice {
@@ -480,6 +512,7 @@ AssignVar: AssignVar = {
             _ => unreachable!(),
         }
     },
+
     <expr:AccessProp> => {
         match *expr {
             Expr::AccessProp { obj, prop } => AssignVar::AccessProp {
@@ -488,7 +521,18 @@ AssignVar: AssignVar = {
             },
             _ => unreachable!(),
         }
-    }
+    },
+};
+
+#[inline]
+AssignVar: AssignVar = {
+    <vars:CommaOne<AssignVarSimple>> => {
+        if vars.len() == 1 {
+            vars.into_iter().next().unwrap()
+        } else {
+            AssignVar::ListUnpack(vars)
+        }
+    },
 };
 
 Lit: Expr = {
@@ -508,6 +552,7 @@ FnParam: FnParam = {
         => FnParam { <> },
 };
 
+#[inline]
 StaticType: Option<Box<Type>> = (":" <Type>)?;
 
 Type: Box<Type> = {
@@ -556,6 +601,13 @@ Comma<T>: Vec<T> = {
             v.push(e);
             v
         }
+    }
+};
+
+CommaOne<T>: Vec<T> = {
+    <f: T> <mut v:("," <T>)*> => {
+        v.insert(0, f);
+        v
     }
 };
 

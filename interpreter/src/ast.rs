@@ -175,9 +175,19 @@ pub enum DeclVar {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum AssignVar {
-    Decl(DeclVar),
-    Slice { obj: Box<Expr>, slice: Box<Expr> },
-    AccessProp { obj: Box<Expr>, prop: String },
+    Var {
+        name: String,
+        static_type: Option<Box<Type>>,
+    },
+    ListUnpack(Vec<AssignVar>),
+    Slice {
+        obj: Box<Expr>,
+        slice: Box<Expr>,
+    },
+    AccessProp {
+        obj: Box<Expr>,
+        prop: String,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -196,7 +206,6 @@ pub enum Expr {
     //     clef: Box<Expr>,
     //     val: Box<Expr>,
     // },
-
     Dict(Vec<Paire>),
 
     Ident(String),
@@ -232,7 +241,6 @@ pub enum Expr {
         classe: Box<Expr>,
         fields: Vec<Box<Expr>>,
     }, */
-
     BinOp {
         lhs: Box<Expr>,
         op: BinOpcode,
