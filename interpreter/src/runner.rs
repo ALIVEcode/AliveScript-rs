@@ -427,21 +427,21 @@ impl<'a> Runner<'a> {
         }
         match var {
             AssignVar::Var { name, static_type } => {
+                let static_type = eval!(opt_type, self, static_type, "Assign var type");
+                if static_type.is_some()
+                    && !ASType::type_match(static_type.as_ref().unwrap(), &value.get_type())
+                {
+                    throw_err!(
+                        self,
+                        ASErreurType::ErreurType {
+                            type_attendu: static_type.unwrap(),
+                            type_obtenu: value.get_type(),
+                        }
+                    );
+                }
                 if let Some((var, _old_val)) = self.env.get_var(name) {
                     throw_err!(?, self, self.env.assign(name, value));
                 } else {
-                    let static_type = eval!(opt_type, self, static_type, "Assign var type");
-                    if static_type.is_some()
-                        && !ASType::type_match(static_type.as_ref().unwrap(), &value.get_type())
-                    {
-                        throw_err!(
-                            self,
-                            ASErreurType::ErreurType {
-                                type_attendu: static_type.unwrap(),
-                                type_obtenu: value.get_type(),
-                            }
-                        );
-                    }
                     let var = ASVar::new(name.clone(), static_type.clone(), false);
                     self.env.declare(var, value);
                 }
@@ -1656,13 +1656,18 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_stmt_retourner(&mut self, stmt: &Stmt) {
-        if let Stmt::Retourner(expr) = stmt {
-            if let Some(val_expr) = expr {
-                // retourner valeur
-                throw_guard!(self, val_expr.accept(self));
-            } else {
-                // retourner
-                self.push_value(ASObj::ASNul);
+        if let Stmt::Retourner(exprs) = stmt {
+            match &exprs[..] {
+                [] => self.push_value(ASObj::ASNul),
+                [expr] => throw_guard!(self, expr.accept(self)),
+                _ => {
+                    let mut results = Vec::with_capacity(exprs.len());
+                    for val_expr in exprs.iter() {
+                        let result = eval!(expr, self, val_expr, "val expr retourner");
+                        results.push(result);
+                    }
+                    self.push_value(ASObj::liste(results));
+                }
             }
             self.set_early_exit(Some(EarlyExit::Retourner));
         }
@@ -1852,6 +1857,17 @@ impl Visitor for Runner<'_> {
             self.type_results
                 .push(ASType::from_str(t.as_str()).unwrap())
         }
+    }
+
+    fn visit_type_array(&mut self, t: &Type) {
+        let Type::Array(arr) = t else { return };
+
+        let mut type_arr = vec![];
+        for t in arr.iter() {
+            let type_val = eval!(type, self, t, "type arr");
+            type_arr.push(type_val);
+        }
+        self.type_results.push(ASType::Array(type_arr));
     }
 
     fn visit_type_binop(&mut self, t: &Type) {

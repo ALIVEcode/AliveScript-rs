@@ -356,7 +356,7 @@ impl ASObj {
             ASTexte(..) => ASType::Texte,
             ASNul => ASType::Nul,
             ASBooleen(..) => ASType::Booleen,
-            ASListe(..) => ASType::Liste,
+            ASListe(ls) => ASType::Array(ls.borrow().iter().map(|e| e.get_type()).collect()),
             ASFonc { .. } => ASType::Fonction,
             ASMethode(..) => ASType::Fonction,
             ASDict(..) => ASType::Dict,
@@ -831,7 +831,7 @@ pub enum ASType {
     ClasseInst,
 
     Union(Vec<ASType>),
-    Tuple(Vec<ASType>),
+    Array(Vec<ASType>),
     Optional(Box<ASType>),
 }
 
@@ -856,7 +856,7 @@ impl ASType {
             Module => todo!(),
             Objet(_) => todo!(),
             Union(_) => todo!(),
-            Tuple(_) => todo!(),
+            Array(_) => todo!(),
         }
     }
 
@@ -928,11 +928,22 @@ impl ASType {
                 other == &Nul || ASType::type_match(t.as_ref(), other)
             }
 
-            (Objet(_), ClasseInst) => true,
-            (ClasseInst, Objet(_)) => true,
+            (Objet(..), ClasseInst) | (ClasseInst, Objet(..)) => true,
 
             (Union(types), other) | (other, Union(types)) => {
                 types.iter().any(|t| ASType::type_match(t, &other))
+            }
+
+            (Liste, Array(..)) | (Array(..), Liste) => true,
+
+            (Array(types1), Array(types2)) => {
+                if types1.len() != types2.len() {
+                    return false;
+                }
+                return types1
+                    .iter()
+                    .zip(types2)
+                    .all(|(t1, t2)| ASType::type_match(t1, t2));
             }
 
             (Decimal, Entier) => true,
@@ -1073,8 +1084,8 @@ impl Display for ASType {
                 .collect::<Vec<String>>()
                 .join(" | "),
 
-            Tuple(types) => format!(
-                "({})",
+            Array(types) => format!(
+                "[{}]",
                 types
                     .iter()
                     .map(Self::to_string)
@@ -1234,11 +1245,7 @@ impl ASEnv {
         self.0.last().unwrap().borrow_mut().insert(var, val)
     }
 
-    pub fn declare_strict(
-        &mut self,
-        var: ASVar,
-        val: ASObj,
-    ) -> ASResult<Option<(ASVar, ASObj)>> {
+    pub fn declare_strict(&mut self, var: ASVar, val: ASObj) -> ASResult<Option<(ASVar, ASObj)>> {
         let var_name = var.get_name();
         if self
             .0
@@ -1259,11 +1266,7 @@ impl ASEnv {
         scope.assign_force(var_name, val)
     }
 
-    pub fn assign(
-        &mut self,
-        var_name: &String,
-        val: ASObj,
-    ) -> ASResult<Option<(ASVar, ASObj)>> {
+    pub fn assign(&mut self, var_name: &String, val: ASObj) -> ASResult<Option<(ASVar, ASObj)>> {
         let mut scope = self.get_env_of_var(var_name);
         scope.assign(var_name, val)
     }

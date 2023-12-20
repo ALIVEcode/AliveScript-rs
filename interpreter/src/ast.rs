@@ -98,7 +98,7 @@ pub enum Stmt {
         methods: Vec<DefMethod>,
     },
 
-    Retourner(Option<Box<Expr>>),
+    Retourner(Vec<Box<Expr>>),
 }
 
 impl Stmt {
@@ -106,9 +106,9 @@ impl Stmt {
     pub fn native_fn(
         body: Rc<dyn Fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>>,
     ) -> Box<Self> {
-        Box::new(Stmt::Retourner(Some(Box::new(Expr::CallRust(CallRust(
+        Box::new(Stmt::Retourner(vec![Box::new(Expr::CallRust(CallRust(
             Rc::clone(&body),
-        ))))))
+        )))]))
     }
 }
 
@@ -348,6 +348,8 @@ pub enum Type {
 
     Opt(Box<Type>),
 
+    Array(Vec<Box<Type>>),
+
     BinOp {
         lhs: Box<Type>,
         op: TypeBinOpcode,
@@ -420,6 +422,7 @@ impl Visitable for Type {
         match self {
             Lit(..) => visitor.visit_type_lit(self),
             BinOp { .. } => visitor.visit_type_binop(self),
+            Array(..) => visitor.visit_type_array(self),
             Opt(..) => visitor.visit_type_opt(self),
         }
     }
