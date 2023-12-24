@@ -115,7 +115,8 @@ pub enum Token {
 
     #[regex(r#""[^"]*"|'[^']*'"#, |lex| {
         let slice = lex.slice();
-        slice[1..slice.len()-1].parse()
+        let s: String = slice[1..slice.len()-1].parse().unwrap();
+        s.replace(r"\n", "\n").replace(r"\t", "\t").replace(r"\r", "\r").to_owned()
     })]
     Text(String),
 
