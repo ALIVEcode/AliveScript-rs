@@ -29,6 +29,11 @@ fn test_classe1() {
 }
 
 #[test]
+fn fn_docs() {
+    run_test("tests/data/t_fonc_doc.as", &vec![]);
+}
+
+#[test]
 fn test_print_recursive() {
     run_test(
         "tests/t_print_recursive.as",

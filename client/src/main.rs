@@ -13,5 +13,5 @@ fn main() {
     let mut stdin = std::io::stdin().lock();
     let mut stdout = std::io::stdout();
     let mut interpretor_io = ClientRPC::new(&mut stdin, &mut stdout);
-    run_script(script, &mut interpretor_io);
+    run_script(&script, &mut interpretor_io);
 }

@@ -79,6 +79,7 @@ impl InterpretorIO for ClientRPC<'_> {
             Data::Erreur { texte, ligne } => todo!(),
             Data::Demander { prompt } => todo!(),
             Data::NotifInfo { msg } => todo!(),
+            Data::GetFichier(..) => todo!(),
             Data::NotifErr { msg } => todo!(),
         };
 
@@ -101,6 +102,7 @@ impl InterpretorIO for ClientRPC<'_> {
             Data::Erreur { texte, ligne } => todo!(),
             Data::Demander { prompt } => ("demander", json!([prompt])),
             Data::NotifInfo { msg } => todo!(),
+            Data::GetFichier(..) => None?,
             Data::NotifErr { msg } => todo!(),
         };
 

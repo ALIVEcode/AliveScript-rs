@@ -6,5 +6,5 @@ utiliser Test {affirmer, affirmerEgal}
 fonction test()
 fin fonction
 
-affirmerEgal(info(test), "test() -> tout?\nCette fonction est un test")
+affirmerEgal(info(test), "test() -> tout?\n  Cette fonction est un test")
 
