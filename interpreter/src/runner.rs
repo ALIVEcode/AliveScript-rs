@@ -1713,6 +1713,7 @@ impl Visitor for Runner<'_> {
     fn visit_stmt_defclasse(&mut self, stmt: &Stmt) {
         if let Stmt::DefClasse {
             name,
+            generic_params,
             docs,
             fields,
             init,
@@ -1890,4 +1891,19 @@ impl Visitor for Runner<'_> {
             self.type_results.push(ASType::optional(type_val));
         }
     }
+
+    fn visit_type_func(&mut self, t: &Type) {
+        let Type::Func {
+            generic_params,
+            params,
+            return_type,
+        } = t
+        else {
+            panic!()
+        };
+    }
+
+    fn visit_type_generic(&mut self, t: &Type) {}
+
+    fn visit_type_alias(&mut self, t: &Type) {}
 }

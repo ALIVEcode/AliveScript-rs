@@ -92,6 +92,7 @@ pub enum Stmt {
 
     DefClasse {
         name: String,
+        generic_params: Option<Vec<String>>,
         docs: Option<String>,
         fields: Vec<ClasseField>,
         init: Option<DefFn>,
@@ -116,6 +117,7 @@ impl Stmt {
 pub struct DefFn {
     docs: Option<String>,
     name: Option<String>,
+    generic_params: Option<Vec<String>>,
     params: Vec<FnParam>,
     return_type: Option<Box<Type>>,
     body: Vec<Box<Stmt>>,
@@ -350,6 +352,22 @@ pub enum Type {
 
     Array(Vec<Box<Type>>),
 
+    Func {
+        generic_params: Option<Vec<String>>,
+        params: Option<Vec<Type>>,
+        return_type: Option<Box<Type>>,
+    },
+
+    Generic {
+        base: Box<Type>,
+        args: Vec<Box<Type>>,
+    },
+
+    Alias {
+        name: String,
+        alias: Box<Type>,
+    },
+
     BinOp {
         lhs: Box<Type>,
         op: TypeBinOpcode,
@@ -423,6 +441,9 @@ impl Visitable for Type {
             Lit(..) => visitor.visit_type_lit(self),
             BinOp { .. } => visitor.visit_type_binop(self),
             Array(..) => visitor.visit_type_array(self),
+            Func { .. } => visitor.visit_type_func(self),
+            Generic { .. } => visitor.visit_type_generic(self),
+            Alias { .. } => visitor.visit_type_alias(self),
             Opt(..) => visitor.visit_type_opt(self),
         }
     }

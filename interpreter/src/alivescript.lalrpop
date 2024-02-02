@@ -59,10 +59,10 @@ pub Stmt: Box<Stmt> = {
     "pour" "chaque"? <var:DeclIdent> DansOrAssign <iterable:Expr> "faire"? "eos" <body:Script> "fin" "pour" "eos" =>
         Box::new(Stmt::Pour { <> }),
 
-    <docs:(<"DOCS"> "eos"*)?> "fonction" <name:ident> <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> "eos"
-        <body:Script> "fin" "fonction" "eos" => Box::new(Stmt::DefFn(DefFn::new(docs, Some(name), params, return_type, body))),
+    <docs:(<"DOCS"> "eos"*)?> "fonction" <name:ident> <generic_params:("<" <CommaOne<ident>> ">")?> <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> "eos"
+        <body:Script> "fin" "fonction" "eos" => Box::new(Stmt::DefFn(DefFn::new(docs, Some(name), generic_params, params, return_type, body))),
 
-    <docs:(<"DOCS"> "eos"*)?> "classe" <name:ident> "eos" 
+    <docs:(<"DOCS"> "eos"*)?> "classe" <name:ident> <generic_params:("<" <CommaOne<ident>> ">")?> "eos" 
         <fields:(<ClasseFieldDecl> "eos"*)*> 
         <init:(<ClasseInit> "eos"*)?> 
         <methods:(<ClasseMethode> "eos"*)*> 
@@ -572,8 +572,18 @@ Type: Box<Type> = {
 };
 
 TypeTerm: Box<Type> = {
-    ident => Box::new(Type::Lit(<>)),
-    "fonction" => Box::new(Type::Lit("fonction".into())),
+    <ident:ident> <generic_args:("<" <CommaOne<ident>> ">")?> => {
+        if let Some(generic_args) = generic_args {
+            Box::new(Type::Generic {
+                base: ident,
+                args: generic_args,
+            })
+        } else {
+            Box::new(Type::Lit(ident))
+        }
+    },
+    "fonction" <generic_params:("<" <CommaOne<ident>> ">")?> <params:("(" <Comma<TypeTerm>> ")")?> <return_type:("->" <Type>)?> => 
+        Box::new(Type::Func(<>)),
     "nul" => Box::new(Type::Lit("nul".into())),
     "classe" => Box::new(Type::Lit("classe".into())),
 };

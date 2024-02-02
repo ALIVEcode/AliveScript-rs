@@ -824,7 +824,12 @@ pub enum ASType {
     Liste,
     Dict,
 
-    Fonction,
+    Fonction {
+        generic_params: Option<Vec<String>>,
+        params: Option<Vec<ASType>>,
+        return_type: Option<Box<ASType>>,
+    },
+
     Classe,
 
     Module,
@@ -852,7 +857,7 @@ impl ASType {
             Liste => Ok(ASListe(Rc::new(RefCell::new(vec![])))),
             Dict => Ok(ASDict(Rc::new(RefCell::new(ASDictObj::default())))),
             ClasseInst => todo!(),
-            Fonction => todo!(),
+            Fonction { .. } = todo!(),
             Classe => todo!(),
             Module => todo!(),
             Objet(_) => todo!(),
@@ -954,6 +959,11 @@ impl ASType {
                     .iter()
                     .zip(types2)
                     .all(|(t1, t2)| ASType::type_match(t1, t2));
+            }
+
+            (Fonction { generic_params: gen1, params: p1, return_type: r1 }, 
+             Fonction { generic_params: gen2, params: p2, return_type: r2 }) => {
+
             }
 
             (Decimal, Entier) => true,
