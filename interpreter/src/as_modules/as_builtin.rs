@@ -15,6 +15,12 @@ as_mod! {
         }
     },
     as_fonction! {
+        afficherErr(msg: ASType::any()) -> ASType::Nul; {
+            eprintln!("{}", msg);
+            Ok(Some(ASObj::ASNul))
+        }
+    },
+    as_fonction! {
         typeDe(obj: ASType::any()) -> ASType::Texte; {
             Ok(Some(ASObj::ASTexte(obj.get_type().to_string())))
         }
@@ -44,6 +50,25 @@ as_mod! {
         }
     },
     as_fonction! {
+        indexDe[runner](lst: ASType::iterable_ordonne(), obj: ASType::any()) -> ASType::Entier; {
+            if let Some(result) = call_methode!(lst.__indexDe__(obj.clone()) or throw, runner) {
+                return result;
+            }
+            Ok(Some(match lst {
+                ASObj::ASTexte(t) => t.chars().position(|e| {
+                    ASObj::ASTexte(e.to_string()) == obj
+                })
+                .map(|i| ASObj::ASEntier(i as i64))
+                .unwrap_or(ASObj::ASNul),
+                ASObj::ASListe(l) => l.borrow().iter()
+                    .position(|e| e == &obj)
+                    .map(|i| ASObj::ASEntier(i as i64))
+                    .unwrap_or(ASObj::ASNul),
+                _ => unreachable!()
+            }))
+        }
+    },
+    as_fonction! {
         booleen[runner](obj: ASType::any() => ASObj::ASBooleen(true)) -> ASType::Booleen; {
             if let Some(result) = call_methode!(obj.__booleen__(), runner) {
                 return result;
@@ -69,8 +94,10 @@ as_mod! {
             Ok(Some(match obj {
                 ASObj::ASEntier(_) => obj.clone(),
                 ASObj::ASDecimal(d) => ASObj::ASEntier(d as i64),
-                ASObj::ASTexte(s) => {
-                    ASObj::ASEntier(i64::from_str_radix(&s, base as u32).unwrap())
+                ASObj::ASTexte(ref s) => {
+                    ASObj::ASEntier(i64::from_str_radix(s, base as u32).map_err(|_| {
+                        ASErreurType::new_erreur_valeur(Some(format!("\"{}\" ne peut pas se faire convertir en entier", &obj)), obj.clone())
+                    })?)
                 }
                 _ => unreachable!(),
             }))

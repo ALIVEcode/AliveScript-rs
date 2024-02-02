@@ -525,12 +525,13 @@ impl PartialEq for ASObj {
             (ASEntier(i1), ASEntier(i2)) => i1 == i2,
             (ASTexte(t1), ASTexte(t2)) => t1 == t2,
             (ASBooleen(b1), ASBooleen(b2)) => b1 == b2,
-            (ASListe(l1), ASListe(l2)) => l1 == l2,
+            (ASListe(l1), ASListe(l2)) => l1.borrow().as_ref() as &Vec<ASObj> == l2.borrow().as_ref() as &Vec<ASObj>,
             (ASDict(d1), ASDict(d2)) => d1 == d2,
             (ASFonc(f1), ASFonc(f2)) => f1 == f2,
             (ASClasse(classe1), ASClasse(classe2)) => classe1 == classe2,
             (ASClasseInst(inst1), ASClasseInst(inst2)) => inst1 == inst2,
             (ASNul, ASNul) => true,
+            (ASNoValue, ASNoValue) => true,
             _ => false,
         }
     }
@@ -869,6 +870,15 @@ impl ASType {
             Self::Liste,
             Self::Texte,
             Self::Dict,
+            Self::Classe,
+            Self::ClasseInst,
+        ])
+    }
+
+    pub fn iterable_ordonne() -> ASType {
+        ASType::Union(vec![
+            Self::Liste,
+            Self::Texte,
             Self::Classe,
             Self::ClasseInst,
         ])
@@ -1288,6 +1298,7 @@ pub enum ASErreurType {
         type_obtenu: ASType,
     },
     ErreurTypeRetour {
+        nom_fonc: String,
         type_attendu: ASType,
         type_obtenu: ASType,
     },
@@ -1414,11 +1425,12 @@ impl Display for ASErreurType {
             ),
 
             ErreurTypeRetour {
+                nom_fonc,
                 type_obtenu,
                 type_attendu,
             } => format!(
-                "Mauvais type de retour. Attendu: '{}', Obtenu: '{}'",
-                type_attendu, type_obtenu
+                "Mauvais type de retour pour {}. Attendu: '{}', Obtenu: '{}'",
+                nom_fonc, type_attendu, type_obtenu
             ),
 
             ErreurTypeAppel {

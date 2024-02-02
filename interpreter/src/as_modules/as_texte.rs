@@ -18,22 +18,22 @@ as_mod! {
         }
     },
     as_fonction! {
-        indexDe(txt: ASType::Texte, subtxt: ASType::Texte) -> ASType::optional(ASType::Entier); {
+        couper(txt: ASType::Texte, pattern: ASType::Texte, limite: ASType::optional(ASType::Entier) => ASObj::ASNul) -> ASType::Liste; {
             as_cast!(ASObj::ASTexte(txt) = txt);
-            as_cast!(ASObj::ASTexte(subtxt) = subtxt);
+            as_cast!(ASObj::ASTexte(pattern) = pattern);
 
-            let maybe_i = txt.find(&subtxt);
-            Ok(Some(match maybe_i {
-                Some(i) => ASObj::ASEntier(i as i64),
-                None => ASObj::ASNul,
-            }))
+            Ok(Some(ASObj::liste(match limite {
+                ASObj::ASNul => txt.split(&pattern).map(ASObj::texte).collect::<Vec<_>>(),
+                ASObj::ASEntier(n) => txt.splitn(n as usize + 1, &pattern).map(ASObj::texte).collect::<Vec<_>>(),
+                _ => unreachable!(),
+            })))
         }
     },
     as_fonction! {
         remplacer(txt: ASType::Texte,
                   pattern: ASType::Texte,
                   remplacement: ASType::Texte,
-                  n: ASType::optional(ASType::Entier)) -> ASType::Texte;
+                  n: ASType::optional(ASType::Entier) => ASObj::ASNul) -> ASType::Texte;
         {
             as_cast!(ASObj::ASTexte(txt) = txt);
             as_cast!(ASObj::ASTexte(pattern) = pattern);

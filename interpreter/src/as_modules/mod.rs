@@ -5,6 +5,7 @@ mod as_math;
 mod as_temps;
 mod as_tests;
 mod as_texte;
+mod as_voiture;
 mod fonction_macro;
 
 use once_cell::sync::Lazy;
@@ -22,6 +23,7 @@ use self::as_math::MATH_MOD;
 use self::as_temps::TEMPS_MOD;
 use self::as_tests::TEST_MOD;
 use self::as_texte::TEXTE_MOD;
+use self::as_voiture::VOITURE_MOD;
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub enum ASModuleBuiltin {
@@ -45,6 +47,7 @@ const AS_MODULES: Lazy<HashMap<ASModuleBuiltin, Rc<RefCell<ASScope>>>> = Lazy::n
     modules.insert(ASModuleBuiltin::Temps, Rc::clone(&*TEMPS_MOD));
     modules.insert(ASModuleBuiltin::Test, Rc::clone(&*TEST_MOD));
     modules.insert(ASModuleBuiltin::Inspecte, Rc::clone(&*INSPECTE_MOD));
+    modules.insert(ASModuleBuiltin::Voiture, Rc::clone(&*VOITURE_MOD));
     modules
 });
 

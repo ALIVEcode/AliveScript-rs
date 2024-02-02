@@ -5,7 +5,8 @@
 :)
 
 fonction estIter(obj) -> booleen
-    retourner (contientAttr(obj, "__prochain__") et typeDe(obj.__prochain__) == "fonction")
+    t = typeDe(obj) 
+    retourner t dans ["liste", "dict", "texte"] ou (contientAttr(obj, "__prochain__") et typeDe(obj.__prochain__) == "fonction")
 fin fonction
 
 fonction prochain(it: iterable)
@@ -104,7 +105,7 @@ classe mapIter
 fin classe
 
 
-fonction map(f: fonction, l: iterable)
+fonction map(f: fonction, l: iterable) -> liste
     var liste_finale = []
     pour chaque e dans l
         liste_finale += f(e)
@@ -112,7 +113,7 @@ fonction map(f: fonction, l: iterable)
     retourner liste_finale
 fin fonction
 
-fonction filtrer(f: fonction, l: iterable)
+fonction filtrer(f: fonction, l: iterable) -> liste
     var liste_finale = []
     pour e dans l
         liste_finale += e si f(e)

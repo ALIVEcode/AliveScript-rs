@@ -266,7 +266,7 @@ pub enum Token {
     ASDocs(String),
 
     #[regex(r"[ \t\f]+", logos::skip)]
-    #[regex(r"#[^\n]*\n", logos::skip)]
+    #[regex(r"#[^\n]*", logos::skip)]
     #[regex(r"\(:([^:]|:[^\)])*:\)", logos::skip)]
     #[error]
     Error,

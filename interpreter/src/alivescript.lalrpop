@@ -59,7 +59,7 @@ pub Stmt: Box<Stmt> = {
     "pour" "chaque"? <var:DeclIdent> DansOrAssign <iterable:Expr> "faire"? "eos" <body:Script> "fin" "pour" "eos" =>
         Box::new(Stmt::Pour { <> }),
 
-    <docs:(<"DOCS"> "eos"*)?> "fonction" <name:ident> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
+    <docs:(<"DOCS"> "eos"*)?> "fonction" <name:ident> <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> "eos"
         <body:Script> "fin" "fonction" "eos" => Box::new(Stmt::DefFn(DefFn::new(docs, Some(name), params, return_type, body))),
 
     <docs:(<"DOCS"> "eos"*)?> "classe" <name:ident> "eos" 
@@ -104,17 +104,17 @@ ClasseFieldDecl: ClasseField = {
 
 #[inline]
 ClasseInit: DefFn = {
-    "init" "(" <params:Comma<FnParam>> ")" "eos"
+    "init" <params:CommaCollection<"(", ")", FnParam>> "eos"
         <body:Script> "fin" "init" "eos" => 
             DefFn::new(None, Some(String::new()), params, Some(Box::new(Type::Lit("rien".to_owned()))), body),
 };
 
 #[inline]
 ClasseMethode: DefMethod = {
-    <docs:(<"DOCS"> "eos"*)?> "methode" <name:ident> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
+    <docs:(<"DOCS"> "eos"*)?> "methode" <name:ident> <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> "eos"
         <body:Script> "fin" "methode" "eos" => DefMethod::new(docs, Some(name), params, return_type, body, false),
 
-    <docs:(<"DOCS"> "eos"*)?> "methode" "statique" <name:ident> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
+    <docs:(<"DOCS"> "eos"*)?> "methode" "statique" <name:ident> <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> "eos"
         <body:Script> "fin" "methode" "eos" => DefMethod::new(docs, Some(name), params, return_type, body, true),
 };
 

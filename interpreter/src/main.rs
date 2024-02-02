@@ -16,7 +16,7 @@ impl InterpretorIO for IO {
     fn send(&mut self, data: Data) {
         match data {
             Data::Afficher(s) => println!("{}", s),
-            Data::Erreur { texte, ligne } => println!("{}", texte),
+            Data::Erreur { texte, ligne } => eprintln!("{}", texte),
             _ => todo!(),
         }
     }

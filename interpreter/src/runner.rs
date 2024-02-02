@@ -862,6 +862,7 @@ impl Visitor for Runner<'_> {
                     throw_err!(
                         self,
                         ASErreurType::ErreurTypeRetour {
+                            nom_fonc: f.name().as_ref().cloned().unwrap_or("anonyme".into()),
                             type_attendu: f.return_type().clone(),
                             type_obtenu: type_returned,
                         }
@@ -1353,9 +1354,9 @@ impl Visitor for Runner<'_> {
                         .to_owned();
                 }
                 // Si le module est déjà utilisé, on ne le réutilise pas
-                if self.used_files.contains(&module) {
-                    return;
-                }
+                // if self.used_files.contains(&module) {
+                //     return;
+                // }
                 let script = self.request_data(Data::GetFichier(module.clone()));
                 let Some(Response::Text(script)) = script else {
                     throw_err!(
@@ -1629,8 +1630,10 @@ impl Visitor for Runner<'_> {
 
     fn visit_stmt_tantque(&mut self, stmt: &Stmt) {
         if let Stmt::TantQue { cond, body } = stmt {
-            let cond_obj = eval!(expr, self, cond, "Si cond");
-            while throw_err!(?, self, self.to_bool(&cond_obj)) {
+            while {
+                let cond_obj = eval!(expr, self, cond, "Tant que cond");
+                throw_err!(?, self, self.to_bool(&cond_obj))
+            } {
                 self.env.push_new_scope(ASScope::new());
                 self.visit_body(body);
                 self.env.pop_scope();

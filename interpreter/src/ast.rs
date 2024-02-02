@@ -405,12 +405,12 @@ impl Visitable for Stmt {
             CondStmt { .. } => visitor.visit_stmt_condstmt(self),
             TantQue { .. } => visitor.visit_stmt_tantque(self),
             Pour { .. } => visitor.visit_stmt_pour(self),
+            Repeter { .. } => visitor.visit_stmt_repeter(self),
             DefFn { .. } => visitor.visit_stmt_deffn(self),
             DefClasse { .. } => visitor.visit_stmt_defclasse(self),
             Retourner(..) => visitor.visit_stmt_retourner(self),
             Sortir => visitor.visit_stmt_sortir(self),
             Continuer => visitor.visit_stmt_continuer(self),
-            node => todo!("{:?}", node),
         }
     }
 }
