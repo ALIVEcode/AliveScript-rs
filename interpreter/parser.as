@@ -23,4 +23,5 @@ fonction additionVecteur(v1: liste, v2: liste) -> liste?
 fin fonction
 
 afficher 3..1
+afficher 1..3
 

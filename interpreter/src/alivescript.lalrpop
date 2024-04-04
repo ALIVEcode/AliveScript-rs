@@ -572,7 +572,7 @@ Type: Box<Type> = {
 };
 
 TypeTerm: Box<Type> = {
-    ident => Box::new(Type::Lit(<>)),
+    <name:ident> <generic:CommaCollection<"<", ">", Type>?> => Box::new(Type::Lit(name)),
     "fonction" => Box::new(Type::Lit("fonction".into())),
     "nul" => Box::new(Type::Lit("nul".into())),
     "classe" => Box::new(Type::Lit("classe".into())),

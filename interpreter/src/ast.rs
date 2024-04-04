@@ -366,64 +366,64 @@ pub enum TypeBinOpcode {
 // Visitors
 impl Visitable for Expr {
     fn accept<V: Visitor>(&self, visitor: &mut V) {
-        use Expr::*;
+        use Expr as E;
 
         match self {
-            BinOp { .. } => visitor.visit_expr_binop(self),
-            BinComp { .. } => visitor.visit_expr_bincomp(self),
-            BinLogic { .. } => visitor.visit_expr_binlogic(self),
-            UnaryOp { .. } => visitor.visit_expr_unaryop(self),
-            Ternary { .. } => visitor.visit_expr_ternary(self),
-            Lit(..) => visitor.visit_expr_lit(self),
-            List(..) => visitor.visit_expr_list(self),
-            Dict(..) => visitor.visit_expr_dict(self),
-            Ident(..) => visitor.visit_expr_ident(self),
-            AccessProp { .. } => visitor.visit_expr_accessprop(self),
-            FnCall { .. } => visitor.visit_expr_fncall(self),
-            Range { .. } => visitor.visit_expr_suite(self),
-            Slice { .. } => visitor.visit_expr_slice(self),
-            CallRust(..) => visitor.visit_expr_callrust(self),
-            DefFn { .. } => visitor.visit_expr_deffn(self),
-            Faire(..) => visitor.visit_expr_faire(self),
+            E::BinOp { .. } => visitor.visit_expr_binop(self),
+            E::BinComp { .. } => visitor.visit_expr_bincomp(self),
+            E::BinLogic { .. } => visitor.visit_expr_binlogic(self),
+            E::UnaryOp { .. } => visitor.visit_expr_unaryop(self),
+            E::Ternary { .. } => visitor.visit_expr_ternary(self),
+            E::Lit(..) => visitor.visit_expr_lit(self),
+            E::List(..) => visitor.visit_expr_list(self),
+            E::Dict(..) => visitor.visit_expr_dict(self),
+            E::Ident(..) => visitor.visit_expr_ident(self),
+            E::AccessProp { .. } => visitor.visit_expr_accessprop(self),
+            E::FnCall { .. } => visitor.visit_expr_fncall(self),
+            E::Range { .. } => visitor.visit_expr_suite(self),
+            E::Slice { .. } => visitor.visit_expr_slice(self),
+            E::CallRust(..) => visitor.visit_expr_callrust(self),
+            E::DefFn { .. } => visitor.visit_expr_deffn(self),
+            E::Faire(..) => visitor.visit_expr_faire(self),
         }
     }
 }
 
 impl Visitable for Stmt {
     fn accept<V: Visitor>(&self, visitor: &mut V) {
-        use Stmt::*;
+        use Stmt as S;
 
         match self {
-            Afficher(..) => visitor.visit_stmt_afficher(self),
-            Lire { .. } => visitor.visit_stmt_lire(self),
-            Utiliser { .. } => visitor.visit_stmt_utiliser(self),
-            Expr(..) => visitor.visit_stmt_expr(self),
-            Decl { .. } => visitor.visit_stmt_decl(self),
-            Assign { .. } => visitor.visit_stmt_assign(self),
-            OpAssign { .. } => visitor.visit_stmt_opassign(self),
-            Si { .. } => visitor.visit_stmt_si(self),
-            CondStmt { .. } => visitor.visit_stmt_condstmt(self),
-            TantQue { .. } => visitor.visit_stmt_tantque(self),
-            Pour { .. } => visitor.visit_stmt_pour(self),
-            Repeter { .. } => visitor.visit_stmt_repeter(self),
-            DefFn { .. } => visitor.visit_stmt_deffn(self),
-            DefClasse { .. } => visitor.visit_stmt_defclasse(self),
-            Retourner(..) => visitor.visit_stmt_retourner(self),
-            Sortir => visitor.visit_stmt_sortir(self),
-            Continuer => visitor.visit_stmt_continuer(self),
+            S::Afficher(..) => visitor.visit_stmt_afficher(self),
+            S::Lire { .. } => visitor.visit_stmt_lire(self),
+            S::Utiliser { .. } => visitor.visit_stmt_utiliser(self),
+            S::Expr(..) => visitor.visit_stmt_expr(self),
+            S::Decl { .. } => visitor.visit_stmt_decl(self),
+            S::Assign { .. } => visitor.visit_stmt_assign(self),
+            S::OpAssign { .. } => visitor.visit_stmt_opassign(self),
+            S::Si { .. } => visitor.visit_stmt_si(self),
+            S::CondStmt { .. } => visitor.visit_stmt_condstmt(self),
+            S::TantQue { .. } => visitor.visit_stmt_tantque(self),
+            S::Pour { .. } => visitor.visit_stmt_pour(self),
+            S::Repeter { .. } => visitor.visit_stmt_repeter(self),
+            S::DefFn { .. } => visitor.visit_stmt_deffn(self),
+            S::DefClasse { .. } => visitor.visit_stmt_defclasse(self),
+            S::Retourner(..) => visitor.visit_stmt_retourner(self),
+            S::Sortir => visitor.visit_stmt_sortir(self),
+            S::Continuer => visitor.visit_stmt_continuer(self),
         }
     }
 }
 
 impl Visitable for Type {
     fn accept<V: Visitor>(&self, visitor: &mut V) {
-        use Type::*;
+        use Type as T;
 
         match self {
-            Lit(..) => visitor.visit_type_lit(self),
-            BinOp { .. } => visitor.visit_type_binop(self),
-            Array(..) => visitor.visit_type_array(self),
-            Opt(..) => visitor.visit_type_opt(self),
+            T::Lit(..) => visitor.visit_type_lit(self),
+            T::BinOp { .. } => visitor.visit_type_binop(self),
+            T::Array(..) => visitor.visit_type_array(self),
+            T::Opt(..) => visitor.visit_type_opt(self),
         }
     }
 }
