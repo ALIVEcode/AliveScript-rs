@@ -1,0 +1,451 @@
+mod classe;
+mod dict;
+mod env;
+mod err;
+mod fonc;
+mod r#type;
+
+pub use classe::*;
+pub use dict::*;
+pub use env::*;
+pub use err::*;
+pub use fonc::*;
+pub use r#type::*;
+
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    fmt::Display,
+    ops::{Add, BitXor, Div, Mul, Rem, Sub},
+    rc::Rc,
+};
+
+use derive_new::new;
+
+use crate::{
+    as_obj_utils::{Label, ObjPtr, RecursiveRepr, Seen},
+    ast::Stmt,
+    runner::Runner,
+};
+
+pub type ASResult<T> = Result<T, ASErreurType>;
+
+#[derive(Debug, new)]
+pub enum ASObj {
+    // A placeholder value for representing the absence of values
+    ASNoValue,
+
+    ASEntier(i64),
+    ASDecimal(f64),
+    ASBooleen(bool),
+    ASNul,
+
+    ASTuple(Vec<ASObj>),
+
+    ASTexte(String),
+    ASListe(Rc<RefCell<Vec<ASObj>>>),
+
+    ASDict(Rc<RefCell<ASDict>>),
+
+    ASFonc(Rc<ASFonc>),
+
+    ASMethode(Rc<ASMethode>),
+
+    ASClasse(Rc<ASClasse>),
+
+    ASModule {
+        name: String,
+        alias: Option<String>,
+        env: Rc<RefCell<ASScope>>,
+    },
+
+    ASClasseInst(Rc<ASClasseInst>),
+}
+
+impl ASObj {
+    pub fn liste(l: Vec<ASObj>) -> ASObj {
+        ASObj::ASListe(Rc::new(RefCell::new(l)))
+    }
+
+    pub fn texte(s: impl ToString) -> ASObj {
+        ASObj::ASTexte(s.to_string())
+    }
+
+    pub fn dict(d: ASDict) -> ASObj {
+        ASObj::ASDict(Rc::new(RefCell::new(d)))
+    }
+
+    pub fn native_fn(
+        name: &str,
+        docs: Option<&str>,
+        params: Vec<ASFnParam>,
+        body: Rc<dyn Fn(&mut Runner) -> Result<Option<ASObj>, ASErreurType>>,
+        return_type: ASType,
+    ) -> ASObj {
+        Self::ASFonc(Rc::new(ASFonc::new(
+            Some(name.into()),
+            docs.map(|docs| docs.into()),
+            params,
+            vec![Stmt::native_fn(Rc::clone(&body))],
+            return_type,
+            ASEnv::new(),
+        )))
+    }
+
+    pub fn get_type(&self) -> ASType {
+        use ASObj::*;
+
+        match self {
+            ASEntier(..) => ASType::Entier,
+            ASDecimal(..) => ASType::Decimal,
+            ASTexte(..) => ASType::Texte,
+            ASNul => ASType::Nul,
+            ASBooleen(..) => ASType::Booleen,
+            ASListe(ls) => ASType::Array(ls.borrow().iter().map(|e| e.get_type()).collect()),
+            ASFonc { .. } => ASType::Fonction,
+            ASMethode(..) => ASType::Fonction,
+            ASDict(..) => ASType::Dict,
+            ASClasse(..) => ASType::Classe,
+            ASClasseInst(inst) => ASType::Objet(inst.classe_parent().name().clone()),
+            as_type => todo!("Type inconnue {:?}", as_type),
+        }
+    }
+
+    pub fn to_bool(&self) -> bool {
+        use ASObj::*;
+
+        match self {
+            ASEntier(x) => *x != 0,
+            ASDecimal(x) => *x != 0f64,
+            ASTexte(s) => !s.is_empty(),
+            ASBooleen(b) => *b,
+            ASNul => false,
+            ASListe(l) => !l.borrow().is_empty(),
+            ASDict(d) => !d.borrow().is_empty(),
+            _ => true,
+        }
+    }
+
+    pub fn div_int(&self, rhs: Self) -> ASObj {
+        use ASObj::*;
+
+        match (self, rhs) {
+            (ASEntier(x), ASEntier(y)) => ASEntier(x / y),
+            (ASDecimal(x), ASEntier(y)) => ASEntier(*x as i64 / y),
+            (ASEntier(x), ASDecimal(y)) => ASEntier(x / y as i64),
+            (ASDecimal(x), ASDecimal(y)) => ASEntier(*x as i64 / y as i64),
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn pow(&self, rhs: Self) -> ASObj {
+        use ASObj::*;
+
+        match (self, rhs) {
+            (ASEntier(x), ASEntier(y)) => ASEntier(x.pow(y as u32)),
+            (ASDecimal(x), ASEntier(y)) => ASDecimal(x.powi(y as i32)),
+            (ASEntier(x), ASDecimal(y)) => ASDecimal((*x as f64).powf(y)),
+            (ASDecimal(x), ASDecimal(y)) => ASDecimal(x.powf(y)),
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn contains(&self, rhs: &Self) -> Result<bool, ASErreurType> {
+        use ASObj::*;
+
+        match (self, rhs) {
+            (ASTexte(s), ASTexte(sub_s)) => Ok(s.contains(sub_s)),
+            (ASListe(l), rhs) => Ok(l.borrow().contains(rhs)),
+            (ASDict(d), rhs) => Ok(d.borrow().contains(rhs)),
+
+            (ASTuple(_), _) => todo!("Tuple pas encore (et peut-être jamais) dans le langage"),
+            (ASClasse(classe), _) => todo!("Check présense du field?"),
+            (ASModule { name, alias, env }, _) => todo!(),
+            _ => Err(ASErreurType::new_erreur_operation(
+                "dans".into(),
+                self.get_type(),
+                rhs.get_type(),
+            )),
+        }
+    }
+
+    pub fn repr(&self) -> String {
+        self.recursive_repr(None)
+    }
+}
+
+impl RecursiveRepr for ASObj {
+    /// Repr récursif, utilisé pour les listes, les dicts, etc.
+    fn recursive_repr(
+        &self,
+        seen_map: Option<Rc<RefCell<HashMap<ObjPtr, (Label, Seen)>>>>,
+    ) -> String {
+        use ASObj::*;
+
+        let seen_map = seen_map.unwrap_or_else(|| Rc::new(RefCell::new(HashMap::new())));
+
+        match self {
+            ASTexte(s) => format!("\"{}\"", s),
+            ASListe(l) => {
+                let hash = l.as_ptr() as usize;
+                let maybe_label = {
+                    let seen_map_borrow = seen_map.borrow();
+                    seen_map_borrow.get(&hash).map(|(label, seen)| *label)
+                };
+                if let Some(label) = maybe_label {
+                    seen_map.borrow_mut().insert(hash, (label, true));
+                    return format!("[<{}>]", label);
+                }
+
+                let label = seen_map.borrow().len() + 1;
+
+                {
+                    let mut seen_t = seen_map.borrow_mut();
+                    seen_t.insert(hash, (label, false));
+                }
+
+                let res = l
+                    .borrow()
+                    .iter()
+                    .map(|el| el.recursive_repr(Some(Rc::clone(&seen_map))))
+                    .collect::<Vec<_>>();
+
+                let seen = seen_map.borrow()[&hash].1;
+
+                format!(
+                    "{}[{}]",
+                    if seen {
+                        format!("<{}>@", label)
+                    } else {
+                        "".into()
+                    },
+                    res.join(", ")
+                )
+            }
+            ASDict(d) => d.borrow().recursive_repr(Some(Rc::clone(&seen_map))),
+            // ASPaire { key, val } => format!(
+            //     "{}: {}",
+            //     key.recursive_repr(Some(Rc::clone(&seen_map))),
+            //     val.recursive_repr(Some(Rc::clone(&seen_map)))
+            // ),
+            ASClasseInst(inst) => inst.recursive_repr(Some(Rc::clone(&seen_map))),
+            o => o.to_string(),
+        }
+    }
+}
+
+impl Clone for ASObj {
+    fn clone(&self) -> Self {
+        use ASObj::*;
+
+        match self {
+            ASEntier(i) => ASEntier(*i),
+            ASDecimal(d) => ASDecimal(*d),
+            ASBooleen(b) => ASBooleen(*b),
+            ASNul => ASNul,
+            ASNoValue => ASNoValue,
+            ASTexte(t) => ASTexte(t.clone()),
+            ASListe(l) => ASListe(Rc::clone(&l)),
+            ASDict(d) => ASDict(Rc::clone(&d)),
+            ASFonc(fonc) => ASFonc(fonc.clone()),
+            ASClasse(classe) => ASClasse(Rc::clone(classe)),
+            ASModule { name, alias, env } => ASModule {
+                name: name.clone(),
+                alias: alias.clone(),
+                env: Rc::clone(env),
+            },
+            ASClasseInst(inst) => ASClasseInst(Rc::clone(inst)),
+            ASMethode(methode) => ASMethode(methode.clone()),
+            ASTuple(_) => todo!(),
+        }
+    }
+}
+
+impl PartialEq for ASObj {
+    fn eq(&self, other: &Self) -> bool {
+        use ASObj::*;
+
+        match (self, other) {
+            (ASEntier(i), ASDecimal(d)) | (ASDecimal(d), ASEntier(i)) => *d == *i as f64,
+            (ASEntier(i1), ASEntier(i2)) => i1 == i2,
+            (ASTexte(t1), ASTexte(t2)) => t1 == t2,
+            (ASBooleen(b1), ASBooleen(b2)) => b1 == b2,
+            (ASListe(l1), ASListe(l2)) => {
+                l1.borrow().as_ref() as &Vec<ASObj> == l2.borrow().as_ref() as &Vec<ASObj>
+            }
+            (ASDict(d1), ASDict(d2)) => d1 == d2,
+            (ASFonc(f1), ASFonc(f2)) => f1 == f2,
+            (ASClasse(classe1), ASClasse(classe2)) => classe1 == classe2,
+            (ASClasseInst(inst1), ASClasseInst(inst2)) => inst1 == inst2,
+            (ASNul, ASNul) => true,
+            (ASNoValue, ASNoValue) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Add for ASObj {
+    type Output = ASObj;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        use ASObj::*;
+
+        match (self, rhs) {
+            (ASTexte(s), any) => ASTexte(format!("{}{}", s, any.to_string())),
+            (any, ASTexte(s)) => ASTexte(format!("{}{}", any.to_string(), s)),
+            (ASEntier(x), ASEntier(y)) => ASEntier(x + y),
+            (ASDecimal(x), ASEntier(y)) => ASDecimal(x + y as f64),
+            (ASEntier(x), ASDecimal(y)) => ASDecimal(x as f64 + y),
+            (ASDecimal(x), ASDecimal(y)) => ASDecimal(x + y),
+            (ASListe(l), any) => ASListe({
+                let mut l = l.borrow().clone();
+                l.push(any);
+                Rc::new(RefCell::new(l))
+            }),
+            _ => unimplemented!(),
+        }
+    }
+}
+
+impl Sub for ASObj {
+    type Output = ASObj;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        use ASObj::*;
+
+        match (self, rhs) {
+            (ASTexte(s), ASTexte(s2)) => ASTexte(s.replace(s2.as_str(), "")),
+            (ASEntier(x), ASEntier(y)) => ASEntier(x - y),
+            (ASDecimal(x), ASEntier(y)) => ASDecimal(x - y as f64),
+            (ASEntier(x), ASDecimal(y)) => ASDecimal(x as f64 - y),
+            (ASDecimal(x), ASDecimal(y)) => ASDecimal(x - y),
+            _ => unimplemented!(),
+        }
+    }
+}
+
+impl Mul for ASObj {
+    type Output = ASObj;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        use ASObj::*;
+
+        match (self, rhs) {
+            (ASTexte(s), ASEntier(n)) => ASTexte(s.repeat(if n >= 0 { n as usize } else { 0 })),
+            (ASEntier(x), ASEntier(y)) => ASEntier(x * y),
+            (ASDecimal(x), ASEntier(y)) => ASDecimal(x * y as f64),
+            (ASEntier(x), ASDecimal(y)) => ASDecimal(x as f64 * y),
+            (ASDecimal(x), ASDecimal(y)) => ASDecimal(x * y),
+            (ASListe(l), ASEntier(n)) => ASListe(if n <= 0 {
+                Rc::new(RefCell::new(vec![]))
+            } else {
+                let n = n as usize;
+                let l = l.borrow();
+                let len = l.len();
+                let mut new_vec = Vec::with_capacity(n * len);
+                for i in 0..n * len {
+                    new_vec.push(l[i % len].clone());
+                }
+                Rc::new(RefCell::new(new_vec))
+            }),
+            _ => unimplemented!(),
+        }
+    }
+}
+
+impl Div for ASObj {
+    type Output = ASObj;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        use ASObj::*;
+
+        match (self, rhs) {
+            (ASEntier(x), ASEntier(y)) => ASDecimal(x as f64 / y as f64),
+            (ASDecimal(x), ASEntier(y)) => ASDecimal(x / y as f64),
+            (ASEntier(x), ASDecimal(y)) => ASDecimal(x as f64 / y),
+            (ASDecimal(x), ASDecimal(y)) => ASDecimal(x / y),
+            _ => unimplemented!(),
+        }
+    }
+}
+
+impl Rem for ASObj {
+    type Output = ASObj;
+
+    fn rem(self, rhs: Self) -> Self::Output {
+        use ASObj::*;
+
+        match (self, rhs) {
+            (ASEntier(x), ASEntier(y)) => ASEntier((x % y + y) % y),
+            (ASDecimal(x), ASEntier(y)) => ASDecimal((x % y as f64 + y as f64) % y as f64),
+            (ASEntier(x), ASDecimal(y)) => ASDecimal((x as f64 % y + y) % y),
+            (ASDecimal(x), ASDecimal(y)) => ASDecimal((x % y + y) % y),
+            _ => unimplemented!(),
+        }
+    }
+}
+
+impl BitXor for ASObj {
+    type Output = Result<ASObj, ASErreurType>;
+
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        use ASObj::*;
+
+        let type_1 = self.get_type().clone();
+        let type_2 = rhs.get_type().clone();
+        match (self, rhs) {
+            (ASEntier(x), ASEntier(y)) => Ok(ASEntier(x ^ y)),
+            (ASBooleen(x), ASBooleen(y)) => Ok(ASBooleen(x ^ y)),
+            _ => Err(ASErreurType::new_erreur_operation(
+                "xor".into(),
+                type_1,
+                type_2,
+            )),
+        }
+    }
+}
+
+impl PartialOrd for ASObj {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use ASObj::*;
+
+        let (x, y) = match (self, other) {
+            (ASEntier(x), ASEntier(y)) => (*x as f64, *y as f64),
+            (ASDecimal(x), ASEntier(y)) => (*x, *y as f64),
+            (ASEntier(x), ASDecimal(y)) => (*x as f64, *y),
+            (ASDecimal(x), ASDecimal(y)) => (*x, *y),
+            _ => unimplemented!(),
+        };
+
+        x.partial_cmp(&y)
+    }
+}
+
+impl Display for ASObj {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ASObj::*;
+
+        let to_string = match self {
+            ASEntier(i) => i.to_string(),
+            ASDecimal(d) => d.to_string(),
+            ASTexte(s) => s.clone(),
+            ASBooleen(b) => if *b { "vrai" } else { "faux" }.into(),
+            ASNul => "nul".into(),
+            ASListe(_) | ASDict(_) | ASClasseInst(_) => self.repr(),
+            ASClasse(classe) => format!("classe {}", classe.name()),
+            ASFonc(fonc) => fonc.to_string(),
+            ASModule { name, alias, .. } => format!(
+                "module {}{}",
+                name,
+                if let Some(alias) = alias {
+                    format!(" alias {}", alias)
+                } else {
+                    "".into()
+                }
+            ),
+            ASNoValue => String::from("<pas-de-valeur>"),
+            _ => String::from("ASObj sans to_string"),
+        };
+        write!(f, "{}", to_string)
+    }
+}

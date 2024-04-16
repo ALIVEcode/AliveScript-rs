@@ -6,6 +6,7 @@ mod as_temps;
 mod as_tests;
 mod as_texte;
 mod as_voiture;
+mod as_game;
 mod fonction_macro;
 
 use once_cell::sync::Lazy;
@@ -24,6 +25,8 @@ use self::as_temps::TEMPS_MOD;
 use self::as_tests::TEST_MOD;
 use self::as_texte::TEXTE_MOD;
 use self::as_voiture::VOITURE_MOD;
+use self::as_game::GAME_MOD;
+
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub enum ASModuleBuiltin {
