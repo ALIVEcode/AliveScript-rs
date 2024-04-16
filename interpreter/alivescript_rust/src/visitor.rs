@@ -58,6 +58,8 @@ pub trait Visitor {
     fn visit_stmt_deffn(&mut self, stmt: &Stmt);
     fn visit_stmt_defclasse(&mut self, stmt: &Stmt);
 
+    fn visit_stmt_type(&mut self, stmt: &Stmt);
+
     // Types
     fn visit_type_lit(&mut self, t: &Type);
     fn visit_type_binop(&mut self, t: &Type);

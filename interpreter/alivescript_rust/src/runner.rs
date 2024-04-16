@@ -1,6 +1,6 @@
 use lalrpop_util::ParseError;
 
-use std::{cell::RefCell, ops::IndexMut, path::Path, rc::Rc, str::FromStr};
+use std::{cell::RefCell, ops::IndexMut, path::Path, rc::Rc};
 
 use crate::{
     as_modules::ASModuleBuiltin,
@@ -145,6 +145,7 @@ impl<'a> Runner<'a> {
             used_files: vec![],
         };
         ASModuleBuiltin::Builtin.load_non_custom(&None, &Some(vec!["*".into()]), &mut new.env);
+        ASType::load_builtin_types(&mut new.env);
         new
     }
 
@@ -160,6 +161,7 @@ impl<'a> Runner<'a> {
             used_files: vec![file],
         };
         ASModuleBuiltin::Builtin.load_non_custom(&None, &Some(vec!["*".into()]), &mut new.env);
+        ASType::load_builtin_types(&mut new.env);
         new
     }
 
@@ -1847,6 +1849,12 @@ impl Visitor for Runner<'_> {
                 as_classe,
             ));
 
+            // declare the type of the class
+            throw_err!(?, self, self.env.declare_strict(
+                ASVar::new(format!("@type:{}", name), Some(ASType::Type), true),
+                ASObj::ASTypeObj(ASType::Type),
+            ));
+
             for (name, value_expr) in static_fields {
                 let field_value = eval!(expr, self, value_expr, "Classe static value");
                 let mut env_borrow = static_env.borrow_mut();
@@ -1855,11 +1863,37 @@ impl Visitor for Runner<'_> {
         }
     }
 
+    fn visit_stmt_type(&mut self, stmt: &Stmt) {
+        let Stmt::TypeDecl { var, val } = stmt else {
+            return;
+        };
+
+        let Type::Lit(ref name) = **var else {
+            throw_err!(self, ASErreurType::new_erreur_nom_type(var.clone()));
+        };
+
+        let type_val = eval!(type, self, val, "Stmt type value");
+
+        throw_err!(?, self, self.env.declare_strict(
+            ASVar::new(format!("@type:{}", name), Some(ASType::Type), true),
+            ASObj::ASTypeObj(type_val),
+        ));
+    }
+
     fn visit_type_lit(&mut self, t: &Type) {
-        if let Type::Lit(t) = t {
-            self.type_results
-                .push(ASType::from_str(t.as_str()).unwrap())
-        }
+        let Type::Lit(t) = t else {
+            return;
+        };
+
+        let Some(val) = self.env.get_value(&format!("@type:{}", t)) else {
+            throw_err!(self, ASErreurType::new_type_inconnu(t.clone()));
+        };
+
+        let ASObj::ASTypeObj(t) = val else {
+            throw_err!(self, ASErreurType::new_erreur_type(ASType::Type, val.get_type()));
+        };
+
+        self.type_results.push(t);
     }
 
     fn visit_type_array(&mut self, t: &Type) {

@@ -7,6 +7,9 @@ pub enum Token {
     #[token("utiliser")]
     KwUtiliser,
 
+    #[token("type")]
+    KwType,
+
     #[token("alias")]
     KwAlias,
 
@@ -276,6 +279,7 @@ impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let to_string = match self {
             Token::KwUtiliser => "utiliser".to_owned(),
+            Token::KwType => "type".to_owned(),
             Token::KwAlias => "alias".to_owned(),
 
             Token::KwLire => "lire".to_owned(),

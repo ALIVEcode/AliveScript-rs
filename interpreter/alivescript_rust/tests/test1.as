@@ -1,3 +1,5 @@
-utiliser "mod1.as"
+utiliser Test {affirmerEgal}
 
-afficher mod1.a
+utiliser "tests/mod1.as"
+
+affirmerEgal(mod1.a, 12)

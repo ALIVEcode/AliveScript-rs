@@ -46,6 +46,11 @@ pub enum Stmt {
         val: Box<Expr>,
     },
 
+    TypeDecl {
+        var: Box<Type>,
+        val: Box<Type>,
+    },
+
     OpAssign {
         var: AssignVar,
         op: BinOpcode,
@@ -207,6 +212,7 @@ impl Visitable for Stmt {
             S::Utiliser { .. } => visitor.visit_stmt_utiliser(self),
             S::Expr(..) => visitor.visit_stmt_expr(self),
             S::Decl { .. } => visitor.visit_stmt_decl(self),
+            S::TypeDecl { .. } => visitor.visit_stmt_type(self),
             S::Assign { .. } => visitor.visit_stmt_assign(self),
             S::OpAssign { .. } => visitor.visit_stmt_opassign(self),
             S::Si { .. } => visitor.visit_stmt_si(self),

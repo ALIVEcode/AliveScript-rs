@@ -1,9 +1,11 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc, str::FromStr};
 
 use crate::{
-    as_obj::{ASErreurType, ASObj},
+    as_obj::{ASErreurType, ASObj, ASResult, ASVar},
     lexer::LexicalError,
 };
+
+use super::ASEnv;
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum ASType {
@@ -34,6 +36,59 @@ pub enum ASType {
     Union(Vec<ASType>),
     Array(Vec<ASType>),
     Optional(Box<ASType>),
+
+    Type,
+}
+
+macro_rules! decl_types {
+    ($env:ident <- { $($name:ident = $value:expr;)* }) => {{
+        $($env.declare(
+                ASVar::new(format!("@type:{}", stringify!($name)), Some(ASType::Type), true),
+                ASObj::ASTypeObj($value),
+            );)*
+    }}
+}
+
+impl ASType {
+    pub fn load_builtin_types(env: &mut ASEnv) {
+        use ASType as T;
+
+        decl_types!(env <- {
+            tout = T::Tout;
+            rien = T::Rien;
+            nul = T::Nul;
+
+            entier = T::Entier;
+
+            decimal = T::Decimal;
+            décimal = T::Decimal;
+
+            nombre = T::nombre();
+            iterable = T::iterable();
+            itérable = T::iterable();
+
+            booleen = T::Booleen;
+            booléen = T::Booleen;
+
+            texte = T::Texte;
+
+            liste = T::Liste;
+            dict = T::Dict;
+
+            fonction = T::Fonction;
+            classe = T::Classe;
+            module = T::Module;
+
+            instance = T::ClasseInst;
+            objet = T::union(vec![
+                Self::ClasseInst,
+                Self::Dict,
+                Self::Classe,
+            ]);
+
+            type = T::Type;
+        });
+    }
 }
 
 impl ASType {
@@ -51,6 +106,7 @@ impl ASType {
             Texte => Ok(ASTexte("".into())),
             Liste => Ok(ASListe(Rc::new(RefCell::new(vec![])))),
             Dict => Ok(ASDict(Rc::new(RefCell::new(ASDictObj::default())))),
+            Type => todo!(),
             ClasseInst => todo!(),
             Fonction => todo!(),
             Classe => todo!(),
@@ -302,6 +358,8 @@ impl Display for ASType {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
+
+            Type => "type".into(),
         };
         write!(f, "{}", to_string)
     }

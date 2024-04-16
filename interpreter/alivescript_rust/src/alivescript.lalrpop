@@ -41,6 +41,8 @@ pub Stmt: Box<Stmt> = {
         Box::new(Stmt::Utiliser { module, alias, vars: Some(vars), is_path: true } ),
     "utiliser" <alias:ModuleIdent?> "{" "*" "}" <module:"text"> "eos" => 
         Box::new(Stmt::Utiliser { module, alias, vars: Some(vec![String::from("*")]), is_path: true }),
+    
+    "type" <var:TypeTerm> "assign" <val:Type> => Box::new(Stmt::TypeDecl {<>}),
 
     "si" <cond:Expr> "alors"? "eos" <then_br:Script> 
          <elif_brs:("sinon" "si" <Expr> "alors"? "eos" <Script>)*>
@@ -631,6 +633,8 @@ extern {
 
         "var" => Token::KwVar,
         "const" => Token::KwConst,
+
+        "type" => Token::KwType,
 
         "afficher" => Token::KwAfficher,
         "lire" => Token::KwLire,

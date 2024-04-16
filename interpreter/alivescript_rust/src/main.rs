@@ -7,8 +7,10 @@ use alivescript_rust::{
     data::{Data, Response},
     get_err_line,
     io::InterpretorIO,
-    run_script_with_runner, run_script_from_file,
+    run_script_from_file, run_script_with_runner,
 };
+
+const ALIVESCRIPT_VERSION: &'static str = "0.5.0";
 
 struct IO {}
 
@@ -49,7 +51,9 @@ impl InterpretorIO for ReplIO {
     fn send(&mut self, data: Data) {
         match data {
             Data::Afficher(s) => writeln!(self.console.borrow_mut(), "{}", s).unwrap(),
-            Data::Erreur { texte, ligne } => writeln!(self.console.borrow_mut(), "{}", texte).unwrap(),
+            Data::Erreur { texte, ligne } => {
+                writeln!(self.console.borrow_mut(), "{}", texte).unwrap()
+            }
             _ => todo!(),
         }
     }
@@ -76,7 +80,14 @@ impl InterpretorIO for ReplIO {
 }
 
 fn main() -> std::io::Result<()> {
-    if let Some(script_file) = env::args().nth(1) {
+    let mut args = env::args();
+    let first_arg = args.nth(1);
+    if first_arg.is_some_and(|f| f == "--version") {
+        println!("{}", ALIVESCRIPT_VERSION);
+        return Ok(());
+    }
+
+    if let Some(script_file) = args.nth(1) {
         let mut io = IO {};
         let script = std::fs::read_to_string(&script_file).unwrap();
         run_script_from_file(&script, &mut io, script_file);

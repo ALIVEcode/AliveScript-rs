@@ -6,54 +6,6 @@ use std::{
 
 use crate::as_obj::{ASErreurType, ASObj, ASResult, ASType};
 
-#[derive(Debug, Hash, Eq, Clone, PartialEq)]
-pub struct ASVar {
-    name: String,
-    static_type: ASType,
-    is_const: bool,
-}
-
-impl PartialEq<String> for ASVar {
-    fn eq(&self, other: &String) -> bool {
-        &self.name == other
-    }
-}
-
-impl ASVar {
-    pub fn new(name: String, static_type: Option<ASType>, is_const: bool) -> Self {
-        Self {
-            name,
-            static_type: static_type.into(),
-            is_const,
-        }
-    }
-
-    pub fn new_with_value(
-        name: impl ToString,
-        static_type: Option<ASType>,
-        is_const: bool,
-        value: ASObj,
-    ) -> (Self, ASObj) {
-        (Self::new(name.to_string(), static_type, is_const), value)
-    }
-
-    pub fn get_name(&self) -> &String {
-        &self.name
-    }
-
-    pub fn get_type(&self) -> &ASType {
-        &self.static_type
-    }
-
-    pub fn is_const(&self) -> bool {
-        self.is_const
-    }
-
-    pub fn type_match(&self, static_type: &ASType) -> bool {
-        ASType::type_match(&self.static_type, static_type)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct ASScope(HashMap<String, (ASVar, ASObj)>);
 
@@ -226,5 +178,53 @@ impl ASEnv {
     pub fn assign(&mut self, var_name: &String, val: ASObj) -> ASResult<Option<(ASVar, ASObj)>> {
         let mut scope = self.get_env_of_var(var_name);
         scope.assign(var_name, val)
+    }
+}
+
+#[derive(Debug, Hash, Eq, Clone, PartialEq)]
+pub struct ASVar {
+    name: String,
+    static_type: ASType,
+    is_const: bool,
+}
+
+impl PartialEq<String> for ASVar {
+    fn eq(&self, other: &String) -> bool {
+        &self.name == other
+    }
+}
+
+impl ASVar {
+    pub fn new(name: String, static_type: Option<ASType>, is_const: bool) -> Self {
+        Self {
+            name,
+            static_type: static_type.into(),
+            is_const,
+        }
+    }
+
+    pub fn new_with_value(
+        name: impl ToString,
+        static_type: Option<ASType>,
+        is_const: bool,
+        value: ASObj,
+    ) -> (Self, ASObj) {
+        (Self::new(name.to_string(), static_type, is_const), value)
+    }
+
+    pub fn get_name(&self) -> &String {
+        &self.name
+    }
+
+    pub fn get_type(&self) -> &ASType {
+        &self.static_type
+    }
+
+    pub fn is_const(&self) -> bool {
+        self.is_const
+    }
+
+    pub fn type_match(&self, static_type: &ASType) -> bool {
+        ASType::type_match(&self.static_type, static_type)
     }
 }

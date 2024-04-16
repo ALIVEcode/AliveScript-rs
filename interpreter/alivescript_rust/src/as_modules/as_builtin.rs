@@ -22,7 +22,7 @@ as_mod! {
     },
     as_fonction! {
         typeDe(obj: ASType::any()) -> ASType::Texte; {
-            Ok(Some(ASObj::ASTexte(obj.get_type().to_string())))
+            Ok(Some(ASObj::ASTypeObj(obj.get_type())))
         }
     },
     as_fonction! {

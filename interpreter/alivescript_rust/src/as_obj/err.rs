@@ -4,6 +4,7 @@ use derive_new::new;
 
 use crate::{
     as_obj::{ASObj, ASType},
+    ast::Type,
     data::Data,
 };
 
@@ -12,11 +13,17 @@ pub enum ASErreurType {
     VariableInconnue {
         var_name: String,
     },
+    TypeInconnu {
+        type_name: String,
+    },
     ErreurVariableRedeclaree {
         var_name: String,
     },
     AffectationConstante {
         var_name: String,
+    },
+    ErreurNomType {
+        bad_type: Box<Type>,
     },
     ErreurType {
         type_attendu: ASType,
@@ -92,6 +99,7 @@ impl ASErreurType {
     pub const fn error_name(&self) -> &'static str {
         match self {
             ASErreurType::VariableInconnue { .. } => "VariableInconnue",
+            ASErreurType::TypeInconnu { .. } => "TypeInconnu",
             ASErreurType::ErreurVariableRedeclaree { .. } => "ErreurVariableRedeclaree",
             ASErreurType::AffectationConstante { .. } => "AffectationConstante",
             ASErreurType::ErreurType { .. } => "ErreurType",
@@ -109,6 +117,7 @@ impl ASErreurType {
             ASErreurType::ErreurNbArgs { .. } => "ErreurNbArgs",
             ASErreurType::ErreurFichierIntrouvable { .. } => "ErreurFichierIntrouvable",
             ASErreurType::ErreurModuleInvalide { .. } => "ErreurModuleInvalide",
+            ASErreurType::ErreurNomType { .. } => "ErreurNomType",
             ASErreurType::Erreur { .. } => "Erreur",
         }
     }
@@ -119,6 +128,7 @@ impl Display for ASErreurType {
         use ASErreurType::*;
 
         let to_string = match self {
+            TypeInconnu { type_name } => format!("Type inconnu '{}'", type_name),
             VariableInconnue { var_name } => format!("Variable inconnue '{}'", var_name),
             ErreurVariableRedeclaree { var_name } => {
                 format!("Variable '{}' déjà déclarée", var_name)
@@ -203,6 +213,8 @@ impl Display for ASErreurType {
 
             ErreurFichierIntrouvable { fichier } => format!("Fichier introuvable: {}", fichier),
             ErreurModuleInvalide { module } => format!("Module introuvable: {}", module),
+
+            ErreurNomType { bad_type } => format!("Mauvais type: {:?}", bad_type),
 
             Erreur { nom, msg } => msg.clone(),
         };

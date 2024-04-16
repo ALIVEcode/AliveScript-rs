@@ -59,6 +59,8 @@ pub enum ASObj {
         env: Rc<RefCell<ASScope>>,
     },
 
+    ASTypeObj(ASType),
+
     ASClasseInst(Rc<ASClasseInst>),
 }
 
@@ -236,27 +238,29 @@ impl RecursiveRepr for ASObj {
 
 impl Clone for ASObj {
     fn clone(&self) -> Self {
-        use ASObj::*;
+        use ASObj as A;
 
         match self {
-            ASEntier(i) => ASEntier(*i),
-            ASDecimal(d) => ASDecimal(*d),
-            ASBooleen(b) => ASBooleen(*b),
-            ASNul => ASNul,
-            ASNoValue => ASNoValue,
-            ASTexte(t) => ASTexte(t.clone()),
-            ASListe(l) => ASListe(Rc::clone(&l)),
-            ASDict(d) => ASDict(Rc::clone(&d)),
-            ASFonc(fonc) => ASFonc(fonc.clone()),
-            ASClasse(classe) => ASClasse(Rc::clone(classe)),
-            ASModule { name, alias, env } => ASModule {
+            A::ASEntier(i) => A::ASEntier(*i),
+            A::ASDecimal(d) => A::ASDecimal(*d),
+            A::ASBooleen(b) => A::ASBooleen(*b),
+            A::ASNul => A::ASNul,
+            A::ASNoValue => A::ASNoValue,
+            A::ASTexte(t) => A::ASTexte(t.clone()),
+            A::ASListe(l) => A::ASListe(Rc::clone(&l)),
+            A::ASDict(d) => A::ASDict(Rc::clone(&d)),
+            A::ASFonc(fonc) => A::ASFonc(fonc.clone()),
+            A::ASClasse(classe) => A::ASClasse(Rc::clone(classe)),
+            A::ASModule { name, alias, env } => A::ASModule {
                 name: name.clone(),
                 alias: alias.clone(),
                 env: Rc::clone(env),
             },
-            ASClasseInst(inst) => ASClasseInst(Rc::clone(inst)),
-            ASMethode(methode) => ASMethode(methode.clone()),
-            ASTuple(_) => todo!(),
+
+            A::ASClasseInst(inst) => A::ASClasseInst(Rc::clone(inst)),
+            A::ASMethode(methode) => A::ASMethode(methode.clone()),
+            A::ASTuple(_) => todo!(),
+            A::ASTypeObj(t) => A::ASTypeObj(t.clone()),
         }
     }
 }
