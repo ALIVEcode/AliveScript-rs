@@ -368,16 +368,17 @@ pub Term: Box<Expr> = {
   //<docs:(<"DOCS"> "eos"*)?> "fonction" <name:ident> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
   //    <body:Script> "fin" "fonction" "eos" => Box::new(Expr::DefFn(DefFn::new(docs, Some(name), params, return_type, body))),
 
-  ident => Box::new(Expr::Ident(<>)),
+  <ident:ident> => Box::new(Expr::Ident(<>)),
 
   AccessProp,
 
   Slice,
 
-  TermExpr,
-
   Collection,
+
+  TermExpr,
 };
+
 
 //#[inline]
 ident: String = {
@@ -388,21 +389,18 @@ ident: String = {
     //"statique" => String::from("statique"),
 };
 
-#[inline]
 AccessProp: Box<Expr> = 
     <obj:Term> "." <prop:ident> => Box::new(Expr::AccessProp{<>});
 
 #[inline]
 TermExpr: Box<Expr> = "(" "eos"* <Expr> "eos"* ")";
 
-#[inline]
 Collection: Box<Expr> = {
   CommaCollection<"[", "]", Expr> => Box::new(Expr::List(<>)),
 
   CommaCollection<"{", "}", DictContent> => Box::new(Expr::Dict(<>)),
 }
 
-#[inline]
 DictContent: Paire = {
     Paire,
     <ident:ident> => Paire {
