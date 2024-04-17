@@ -82,12 +82,11 @@ impl InterpretorIO for ReplIO {
 fn main() -> std::io::Result<()> {
     let mut args = env::args();
     let first_arg = args.nth(1);
-    if first_arg.is_some_and(|f| f == "--version") {
-        println!("{}", ALIVESCRIPT_VERSION);
-        return Ok(());
-    }
-
-    if let Some(script_file) = args.nth(1) {
+    if let Some(script_file) = first_arg {
+        if script_file == "--version" {
+            println!("{}", ALIVESCRIPT_VERSION);
+            return Ok(());
+        }
         let mut io = IO {};
         let script = std::fs::read_to_string(&script_file).unwrap();
         run_script_from_file(&script, &mut io, script_file);
