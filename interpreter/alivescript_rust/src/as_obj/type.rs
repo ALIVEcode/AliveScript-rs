@@ -1,7 +1,7 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc, str::FromStr};
 
 use crate::{
-    as_obj::{ASErreurType, ASObj, ASResult, ASVar},
+    as_obj::{ASErreurType, ASObj, ASVar},
     lexer::LexicalError,
 };
 
@@ -188,11 +188,14 @@ impl ASType {
 
         match (type1, type2) {
             (t1, t2) if t1 == t2 => true,
+
             (Tout, other) | (other, Tout) => other != &Rien && other != &Nul,
 
             (Optional(t), other) | (other, Optional(t)) => {
                 other == &Nul || ASType::type_match(t.as_ref(), other)
             }
+
+            (Classe, Type) | (Type, Classe) => true,
 
             (Objet(..), ClasseInst) | (ClasseInst, Objet(..)) => true,
 
@@ -340,7 +343,7 @@ impl Display for ASType {
             Objet(o) => o.clone(),
 
             Fonction => "fonction".into(),
-            Classe => "structure".into(),
+            Classe => "classe".into(),
 
             ClasseInst => "objet".into(),
 

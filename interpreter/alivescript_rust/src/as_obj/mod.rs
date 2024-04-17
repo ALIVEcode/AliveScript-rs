@@ -109,6 +109,7 @@ impl ASObj {
             ASDict(..) => ASType::Dict,
             ASClasse(..) => ASType::Classe,
             ASClasseInst(inst) => ASType::Objet(inst.classe_parent().name().clone()),
+            ASTypeObj(..) => ASType::Type,
             as_type => todo!("Type inconnue {:?}", as_type),
         }
     }
@@ -448,6 +449,7 @@ impl Display for ASObj {
                 }
             ),
             ASNoValue => String::from("<pas-de-valeur>"),
+            ASTypeObj(t) => t.to_string(),
             _ => String::from("ASObj sans to_string"),
         };
         write!(f, "{}", to_string)

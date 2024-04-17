@@ -387,6 +387,7 @@ ident: String = {
     "ident",
     "bond" => String::from("bond"),
     "chaque" => String::from("chaque"),
+    "type" => String::from("type"),
     //"alias" => String::from("alias"),
     //"statique" => String::from("statique"),
 };

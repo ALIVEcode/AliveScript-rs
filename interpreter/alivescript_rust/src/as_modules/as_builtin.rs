@@ -21,7 +21,7 @@ as_mod! {
         }
     },
     as_fonction! {
-        typeDe(obj: ASType::any()) -> ASType::Texte; {
+        typeDe(obj: ASType::any()) -> ASType::Type; {
             Ok(Some(ASObj::ASTypeObj(obj.get_type())))
         }
     },

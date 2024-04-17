@@ -1852,7 +1852,10 @@ impl Visitor for Runner<'_> {
             // declare the type of the class
             throw_err!(?, self, self.env.declare_strict(
                 ASVar::new(format!("@type:{}", name), Some(ASType::Type), true),
-                ASObj::ASTypeObj(ASType::Type),
+                ASObj::ASTypeObj(ASType::union_of(
+                    ASType::Objet(name.clone()),
+                    ASType::Classe
+                )),
             ));
 
             for (name, value_expr) in static_fields {
@@ -1890,7 +1893,10 @@ impl Visitor for Runner<'_> {
         };
 
         let ASObj::ASTypeObj(t) = val else {
-            throw_err!(self, ASErreurType::new_erreur_type(ASType::Type, val.get_type()));
+            throw_err!(
+                self,
+                ASErreurType::new_erreur_type(ASType::Type, val.get_type())
+            );
         };
 
         self.type_results.push(t);
