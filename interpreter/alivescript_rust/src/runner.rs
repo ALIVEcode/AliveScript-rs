@@ -1733,6 +1733,16 @@ impl Visitor for Runner<'_> {
                 // toutes les classes ont
                 vec![as_var!(const __nom__: ASType::Texte => ASObj::ASTexte(name.clone()))],
             );
+
+            // declare the type of the class here so it can be used by fields
+            throw_err!(?, self, self.env.declare_strict(
+                ASVar::new(format!("@type:{}", &name), Some(ASType::Type), true),
+                ASObj::ASTypeObj(ASType::union_of(
+                    ASType::Objet(name.clone()),
+                    ASType::Classe
+                )),
+            ));
+
             let mut static_fields = vec![];
             let mut as_fields = Vec::with_capacity(fields.len());
             for field in fields.into_iter() {
@@ -1854,15 +1864,6 @@ impl Visitor for Runner<'_> {
             throw_err!(?, self, self.env.declare_strict(
                 ASVar::new(name.clone(), Some(ASType::Classe), true),
                 as_classe,
-            ));
-
-            // declare the type of the class
-            throw_err!(?, self, self.env.declare_strict(
-                ASVar::new(format!("@type:{}", name), Some(ASType::Type), true),
-                ASObj::ASTypeObj(ASType::union_of(
-                    ASType::Objet(name.clone()),
-                    ASType::Classe
-                )),
             ));
 
             for (name, value_expr) in static_fields {
