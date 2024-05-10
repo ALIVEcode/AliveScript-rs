@@ -181,7 +181,7 @@ impl ASEnv {
     }
 }
 
-#[derive(Debug, Hash, Eq, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ASVar {
     name: String,
     static_type: ASType,

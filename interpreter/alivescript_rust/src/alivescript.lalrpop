@@ -108,7 +108,7 @@ ClasseFieldDecl: ClasseField = {
 ClasseInit: DefFn = {
     "init" <params:CommaCollection<"(", ")", FnParam>> "eos"
         <body:Script> "fin" "init" "eos" => 
-            DefFn::new(None, Some(String::new()), params, Some(Box::new(Type::Lit("rien".to_owned()))), body),
+            DefFn::new(None, Some(String::new()), params, Some(Box::new(Type::Name("rien".to_owned()))), body),
 };
 
 #[inline]
@@ -573,10 +573,16 @@ Type: Box<Type> = {
 };
 
 TypeTerm: Box<Type> = {
-    <name:ident> <generic:CommaCollection<"<", ">", Type>?> => Box::new(Type::Lit(name)),
-    "fonction" => Box::new(Type::Lit("fonction".into())),
-    "nul" => Box::new(Type::Lit("nul".into())),
-    "classe" => Box::new(Type::Lit("classe".into())),
+    <name:ident> <generic:CommaCollection<"<", ">", Type>?> => Box::new(Type::Name(name)),
+    <val:Lit> => {
+        match val {
+            Expr::Lit(v) if v == ASObj::ASNul => Box::new(Type::Name("nul".into())),
+            Expr::Lit(v) => Box::new(Type::Lit(v)),
+            _ => panic!("Not a literal, {:?}", val),
+        }
+    },
+    "fonction" => Box::new(Type::Name("fonction".into())),
+    "classe" => Box::new(Type::Name("classe".into())),
 };
 
 BinOpcodeAssign: BinOpcode = {

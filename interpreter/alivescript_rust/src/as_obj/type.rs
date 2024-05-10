@@ -7,7 +7,7 @@ use crate::{
 
 use super::ASEnv;
 
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ASType {
     /// Type englobant tous les autres types, sauf [`ASType::Rien`] et [`ASType::Nul`]
     Tout,
@@ -38,6 +38,8 @@ pub enum ASType {
     Optional(Box<ASType>),
 
     Type,
+
+    Lit(Box<ASObj>),
 }
 
 macro_rules! decl_types {
@@ -95,25 +97,26 @@ impl ASType {
     pub fn default_value(&self) -> Result<ASObj, ASErreurType> {
         use crate::as_obj::ASDict as ASDictObj;
         use ASObj::*;
-        use ASType::*;
+        use ASType as T;
 
         match self {
-            Rien | Nul | Optional(_) => Ok(ASNul),
-            Tout => Ok(ASEntier(0)),
-            Entier => Ok(ASEntier(0)),
-            Decimal => Ok(ASDecimal(0f64)),
-            Booleen => Ok(ASBooleen(false)),
-            Texte => Ok(ASTexte("".into())),
-            Liste => Ok(ASListe(Rc::new(RefCell::new(vec![])))),
-            Dict => Ok(ASDict(Rc::new(RefCell::new(ASDictObj::default())))),
-            Type => todo!(),
-            ClasseInst => todo!(),
-            Fonction => todo!(),
-            Classe => todo!(),
-            Module => todo!(),
-            Objet(_) => todo!(),
-            Union(_) => todo!(),
-            Array(_) => todo!(),
+            T::Rien | T::Nul | T::Optional(_) => Ok(ASNul),
+            T::Tout => Ok(ASEntier(0)),
+            T::Entier => Ok(ASEntier(0)),
+            T::Decimal => Ok(ASDecimal(0f64)),
+            T::Booleen => Ok(ASBooleen(false)),
+            T::Texte => Ok(ASTexte("".into())),
+            T::Liste => Ok(ASListe(Rc::new(RefCell::new(vec![])))),
+            T::Dict => Ok(ASDict(Rc::new(RefCell::new(ASDictObj::default())))),
+            T::Type => todo!(),
+            T::ClasseInst => todo!(),
+            T::Fonction => todo!(),
+            T::Classe => todo!(),
+            T::Module => todo!(),
+            T::Objet(_) => todo!(),
+            T::Union(_) => todo!(),
+            T::Array(_) => todo!(),
+            T::Lit(o) => Ok(*o.clone()),
         }
     }
 
@@ -363,6 +366,8 @@ impl Display for ASType {
             ),
 
             Type => "type".into(),
+
+            Lit(o) => o.repr(),
         };
         write!(f, "{}", to_string)
     }

@@ -8,7 +8,6 @@ use crate::{
         ASClasse, ASClasseField, ASClasseInst, ASDict, ASEnv, ASErreur, ASErreurType, ASFnParam,
         ASFonc, ASMethode, ASObj, ASResult, ASScope, ASType, ASVar,
     },
-    as_py::run_python_script,
     as_var,
     ast::{
         AssignVar, BinCompcode, BinLogiccode, BinOpcode, CallRust, DeclVar, Expr, FnParam, LireVar,
@@ -21,6 +20,14 @@ use crate::{
     run_script_with_runner,
     visitor::{Visitable, Visitor},
 };
+
+#[cfg(feature = "py")]
+use crate::as_py::run_python_script;
+
+#[cfg(not(feature = "py"))]
+fn run_python_script(script: String) -> Option<Rc<RefCell<ASScope>>> {
+    None
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum EarlyExit {
@@ -210,7 +217,7 @@ impl<'a> Runner<'a> {
     }
 
     fn throw_err(&mut self, err: ASErreurType) {
-        let error = ASErreur::new(err, 0);
+        let error = ASErreur::new(err, 0, self.current_file.clone());
         self.send_data(error.into());
         self.early_exit = Some(EarlyExit::Erreur);
     }
@@ -1392,7 +1399,7 @@ impl Visitor for Runner<'_> {
                     return;
                 };
 
-                let mod_scope = Rc::clone(&self.run_script(script, Some(module.clone())).unwrap());
+                let mod_scope = Rc::clone(&self.run_script(script, Some(module_path.clone())).unwrap());
 
                 ASModuleBuiltin::load_from_scope(
                     mod_scope,
@@ -1871,7 +1878,7 @@ impl Visitor for Runner<'_> {
             return;
         };
 
-        let Type::Lit(ref name) = **var else {
+        let Type::Name(ref name) = **var else {
             throw_err!(self, ASErreurType::new_erreur_nom_type(var.clone()));
         };
 
@@ -1884,7 +1891,14 @@ impl Visitor for Runner<'_> {
     }
 
     fn visit_type_lit(&mut self, t: &Type) {
-        let Type::Lit(t) = t else {
+        let Type::Lit(v) = t else {
+            return;
+        };
+        
+    }
+
+    fn visit_type_name(&mut self, t: &Type) {
+        let Type::Name(t) = t else {
             return;
         };
 

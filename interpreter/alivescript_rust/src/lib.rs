@@ -2,6 +2,7 @@
 
 mod as_modules;
 mod visitor;
+#[cfg(feature = "py")]
 mod as_py;
 mod as_obj_utils;
 
@@ -99,7 +100,6 @@ pub fn run_script_with_runner<'a>(
 ) -> Result<(), ParseError<usize, token::Token, LexicalError>> {
     let lexer = Lexer::new(script.as_str());
     let result_stmts = alivescript::ScriptParser::new().parse(lexer);
-    dbg!(&result_stmts);
 
     match result_stmts {
         Ok(stmts) => {

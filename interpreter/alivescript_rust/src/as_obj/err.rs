@@ -227,12 +227,17 @@ impl Display for ASErreurType {
 pub struct ASErreur {
     err_type: ASErreurType,
     ligne: usize,
+    file: Option<String>,
 }
 
 impl Into<Data> for ASErreur {
     fn into(self) -> Data {
         Data::Erreur {
-            texte: self.err_type.to_string(),
+            texte: format!(
+                "{}{}",
+                self.file.map(|f| format!("Dans {}: ", f)).unwrap_or_default(),
+                self.err_type.to_string()
+            ),
             ligne: self.ligne,
         }
     }

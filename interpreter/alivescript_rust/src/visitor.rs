@@ -61,6 +61,7 @@ pub trait Visitor {
     fn visit_stmt_type(&mut self, stmt: &Stmt);
 
     // Types
+    fn visit_type_name(&mut self, t: &Type);
     fn visit_type_lit(&mut self, t: &Type);
     fn visit_type_binop(&mut self, t: &Type);
     fn visit_type_array(&mut self, t: &Type);
