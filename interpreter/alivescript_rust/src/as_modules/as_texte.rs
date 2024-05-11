@@ -1,6 +1,6 @@
 use crate::{
     as_cast, as_fonction, as_mod,
-    as_obj::{ASObj, ASType},
+    as_obj::{ASErreurType, ASObj, ASType},
 };
 
 as_mod! {
@@ -15,6 +15,18 @@ as_mod! {
         minus(txt: ASType::Texte) -> ASType::Texte; {
             as_cast!(ASObj::ASTexte(txt) = txt);
             Ok(Some(ASObj::ASTexte(txt.to_lowercase())))
+        }
+    },
+    as_fonction! {
+        car(c: ASType::Entier) -> ASType::Texte; {
+            as_cast!(ASObj::ASEntier(i) = c);
+            match char::from_u32(i as u32) {
+                Some(c) => Ok(Some(ASObj::ASTexte(c.to_string()))),
+                None => Err(ASErreurType::new_erreur_valeur(
+                    Some(format!("La valeur {} n'est pas un caractère valide", i)),
+                    c,
+                )),
+            }
         }
     },
     as_fonction! {

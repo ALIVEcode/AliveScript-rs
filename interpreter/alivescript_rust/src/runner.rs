@@ -213,8 +213,10 @@ impl<'a> Runner<'a> {
             B::BitwiseXor => (lhs ^ rhs).unwrap(),
             B::Exp => lhs.pow(rhs),
             B::Extend => lhs.extend(rhs).unwrap(),
-            B::BitwiseOr => todo!(),
-            B::BitwiseAnd => todo!(),
+            B::BitwiseOr => (lhs | rhs).unwrap(),
+            B::BitwiseAnd => (lhs & rhs).unwrap(),
+            B::ShiftLeft => (lhs << rhs).unwrap(),
+            B::ShiftRight => (lhs >> rhs).unwrap(),
         }
     }
 

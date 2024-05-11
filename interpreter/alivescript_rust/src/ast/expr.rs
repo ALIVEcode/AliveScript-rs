@@ -133,6 +133,8 @@ pub enum BinOpcode {
     BitwiseOr,
     BitwiseAnd,
     BitwiseXor,
+    ShiftLeft,
+    ShiftRight,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

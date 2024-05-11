@@ -16,7 +16,7 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     fmt::Display,
-    ops::{Add, BitXor, Div, Mul, Rem, Sub},
+    ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Sub, Shl, Shr},
     rc::Rc,
 };
 
@@ -440,6 +440,84 @@ impl BitXor for ASObj {
             (ASBooleen(x), ASBooleen(y)) => Ok(ASBooleen(x ^ y)),
             _ => Err(ASErreurType::new_erreur_operation(
                 "xor".into(),
+                type_1,
+                type_2,
+            )),
+        }
+    }
+}
+
+impl BitAnd for ASObj {
+    type Output = Result<ASObj, ASErreurType>;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        use ASObj::*;
+
+        let type_1 = self.get_type().clone();
+        let type_2 = rhs.get_type().clone();
+        match (self, rhs) {
+            (ASEntier(x), ASEntier(y)) => Ok(ASEntier(x & y)),
+            (ASBooleen(x), ASBooleen(y)) => Ok(ASBooleen(x & y)),
+            _ => Err(ASErreurType::new_erreur_operation(
+                "&".into(),
+                type_1,
+                type_2,
+            )),
+        }
+    }
+}
+
+impl BitOr for ASObj {
+    type Output = Result<ASObj, ASErreurType>;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        use ASObj::*;
+
+        let type_1 = self.get_type().clone();
+        let type_2 = rhs.get_type().clone();
+        match (self, rhs) {
+            (ASEntier(x), ASEntier(y)) => Ok(ASEntier(x | y)),
+            (ASBooleen(x), ASBooleen(y)) => Ok(ASBooleen(x | y)),
+            _ => Err(ASErreurType::new_erreur_operation(
+                "|".into(),
+                type_1,
+                type_2,
+            )),
+        }
+    }
+}
+
+impl Shl for ASObj {
+    type Output = Result<ASObj, ASErreurType>;
+
+    fn shl(self, rhs: Self) -> Self::Output {
+        use ASObj::*;
+
+        let type_1 = self.get_type().clone();
+        let type_2 = rhs.get_type().clone();
+        match (self, rhs) {
+            (ASEntier(x), ASEntier(y)) => Ok(ASEntier(x << y)),
+            _ => Err(ASErreurType::new_erreur_operation(
+                "<<".into(),
+                type_1,
+                type_2,
+            )),
+        }
+    }
+}
+
+impl Shr for ASObj {
+    type Output = Result<ASObj, ASErreurType>;
+
+    fn shr(self, rhs: Self) -> Self::Output {
+        use ASObj::*;
+
+        let type_1 = self.get_type().clone();
+        let type_2 = rhs.get_type().clone();
+        match (self, rhs) {
+            (ASEntier(x), ASEntier(y)) => Ok(ASEntier(x >> y)),
+            _ => Err(ASErreurType::new_erreur_operation(
+                ">>".into(),
                 type_1,
                 type_2,
             )),

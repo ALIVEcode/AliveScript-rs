@@ -162,6 +162,15 @@ pub enum Token {
     #[token("|")]
     OpPipe,
 
+    #[token("&")]
+    OpBitwiseAnd, 
+
+    #[token("<<")]
+    OpShiftLeft,
+
+    #[token(">>")]
+    OpShiftRight,
+
     // Opérateurs Binaires
     #[token("+=")]
     OpAddAssign,
@@ -189,6 +198,15 @@ pub enum Token {
 
     #[token("++=")]
     OpExtendAssign,
+
+    #[token("&=")]
+    OpBitwiseAndAssign, 
+
+    #[token("<<=")]
+    OpShiftLeftAssign,
+
+    #[token(">>=")]
+    OpShiftRightAssign,
 
     // Comparaisons Binaires
     #[token("==")]
@@ -335,6 +353,10 @@ impl fmt::Display for Token {
             Token::OpMod => "MODULO(%, mod)".to_owned(),
             Token::OpExp => "EXPOSANT(**, ^)".to_owned(),
             Token::OpPipe => "BARRE(|)".to_owned(),
+            Token::OpBitwiseAnd => "BITWISE_ET(&)".to_owned(),
+
+            Token::OpShiftLeft => "SHIFT_LEFT(<<)".to_owned(),
+            Token::OpShiftRight => "SHIGT_RIGHT(>>)".to_owned(),
 
             Token::OpAddAssign => "PLUS_AFFECT(+=)".to_owned(),
             Token::OpMinusAssign => "MOINS_AFFECT(-=)".to_owned(),
@@ -344,6 +366,9 @@ impl fmt::Display for Token {
             Token::OpModAssign => "MODULO_AFFECT(%=, mod=)".to_owned(),
             Token::OpExpAssign => "EXPOSANT_AFFECT(**=, ^=)".to_owned(),
             Token::OpExtendAssign => "ÉTEND_AFFECT(++=)".to_owned(),
+            Token::OpBitwiseAndAssign => "BITWISE_ET_AFFECT(&=)".to_owned(),
+            Token::OpShiftLeftAssign => "SHIFT_LEFT_AFFECT(>>=)".to_owned(),
+            Token::OpShiftRightAssign => "SHIFT_RIGHT_AFFECT(<<=)".to_owned(),
 
             Token::CompEq => "EGAL(==)".to_owned(),
             Token::CompNotEq => "PAS_EGAL(!=, <>, ≠)".to_owned(),
