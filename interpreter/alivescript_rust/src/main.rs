@@ -10,7 +10,7 @@ use alivescript_rust::{
     run_script_from_file, run_script_with_runner,
 };
 
-const ALIVESCRIPT_VERSION: &'static str = "0.9.0";
+const ALIVESCRIPT_VERSION: &'static str = "0.9.3";
 
 struct IO {}
 

@@ -1514,7 +1514,18 @@ impl Visitor for Runner<'_> {
             let cond_result = eval!(expr, self, cond, "Si cond");
             if throw_err!(?, self, self.to_bool(&cond_result)) {
                 self.visit_body(then_br);
-            } else if let Some(else_br) = else_br {
+                return;
+            }
+
+            for (elif_cond, elif_body) in elif_brs {
+                let cond_result = eval!(expr, self, elif_cond, "Sinon Si cond");
+                if throw_err!(?, self, self.to_bool(&cond_result)) {
+                    self.visit_body(elif_body);
+                    return;
+                }
+            }
+
+            if let Some(else_br) = else_br {
                 self.visit_body(else_br);
             }
         }

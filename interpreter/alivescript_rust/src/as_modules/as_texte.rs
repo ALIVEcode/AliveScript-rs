@@ -30,6 +30,18 @@ as_mod! {
         }
     },
     as_fonction! {
+        ord(c: ASType::Texte) -> ASType::Entier; {
+            as_cast!(ASObj::ASTexte(ref s) = c);
+            if s.len() != 1 {
+                return Err(ASErreurType::new_erreur_valeur(
+                    Some(format!("La fonction ord accepte seulement un texte de longeur 1.")),
+                    c,
+                ));
+            }
+            Ok(Some(ASObj::ASEntier(s.chars().nth(0).unwrap() as i64)))
+        }
+    },
+    as_fonction! {
         couper(txt: ASType::Texte, pattern: ASType::Texte, limite: ASType::optional(ASType::Entier) => ASObj::ASNul) -> ASType::Liste; {
             as_cast!(ASObj::ASTexte(txt) = txt);
             as_cast!(ASObj::ASTexte(pattern) = pattern);

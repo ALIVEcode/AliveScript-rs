@@ -277,6 +277,14 @@ pub Expr: Box<Expr> = {
     })
   },
 
+  <lhs:Expr> "|" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::BitwiseOr,
+      rhs
+    })
+  },
+
   #[precedence(level="8")]
   "pas" <expr:Expr> => {
     Box::new(Expr::UnaryOp {
@@ -391,7 +399,7 @@ pub Expr: Box<Expr> = {
     Box::new(Expr::Ternary { <> })
   },
 
-  #[precedence(level="11")]
+  #[precedence(level="12")]
   "fonction" <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> ":" <body:Expr> => 
     Box::new(Expr::DefFn(DefFn::new(None, None, params, return_type, vec![Box::new(Stmt::Retourner(vec![body]))]))),
 };
@@ -761,7 +769,7 @@ extern {
         "exp" => Token::OpExp,
         "|" => Token::OpPipe,
         "++" => Token::OpExtend,
-        "&" => Token::BitwiseAnd,
+        "&" => Token::OpBitwiseAnd,
         "<<" => Token::OpShiftLeft,
         ">>" => Token::OpShiftRight,
 
@@ -773,7 +781,7 @@ extern {
         "//=" => Token::OpDivIntAssign,
         "%=" => Token::OpModAssign,
         "exp=" => Token::OpExpAssign,
-        "&=" => Token::BitwiseAndAssign,
+        "&=" => Token::OpBitwiseAndAssign,
         "<<=" => Token::OpShiftLeftAssign,
         ">>=" => Token::OpShiftRightAssign,
       }
