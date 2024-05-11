@@ -134,6 +134,9 @@ pub enum Token {
     #[token("+")]
     OpAdd,
 
+    #[token("++")]
+    OpExtend,
+
     #[token("-")]
     OpMinus,
 
@@ -183,6 +186,9 @@ pub enum Token {
     #[token("**=")]
     #[token("^=")]
     OpExpAssign,
+
+    #[token("++=")]
+    OpExtendAssign,
 
     // Comparaisons Binaires
     #[token("==")]
@@ -321,6 +327,7 @@ impl fmt::Display for Token {
             Token::Bool(b) => format!("BOOLÉEN({b})"),
 
             Token::OpAdd => "PLUS(+)".to_owned(),
+            Token::OpExtend => "ÉTEND(++)".to_owned(),
             Token::OpMinus => "MOINS(-)".to_owned(),
             Token::Star => "ÉTOILE(*)".to_owned(),
             Token::OpDiv => "DIV(/)".to_owned(),
@@ -336,6 +343,7 @@ impl fmt::Display for Token {
             Token::OpDivIntAssign => "DIV_ENTIÈRE_AFFECT(//=, div=)".to_owned(),
             Token::OpModAssign => "MODULO_AFFECT(%=, mod=)".to_owned(),
             Token::OpExpAssign => "EXPOSANT_AFFECT(**=, ^=)".to_owned(),
+            Token::OpExtendAssign => "ÉTEND_AFFECT(++=)".to_owned(),
 
             Token::CompEq => "EGAL(==)".to_owned(),
             Token::CompNotEq => "PAS_EGAL(!=, <>, ≠)".to_owned(),

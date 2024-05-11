@@ -201,18 +201,20 @@ impl<'a> Runner<'a> {
     }
 
     pub fn do_op(lhs: ASObj, op: &BinOpcode, rhs: ASObj) -> ASObj {
-        use BinOpcode::*;
+        use BinOpcode as B;
 
         match op {
-            Add => lhs + rhs,
-            Sub => lhs - rhs,
-            Mul => lhs * rhs,
-            Div => lhs / rhs,
-            DivInt => lhs.div_int(rhs),
-            Mod => lhs % rhs,
-            BitwiseXor => (lhs ^ rhs).unwrap(),
-            Exp => lhs.pow(rhs),
-            _ => todo!(),
+            B::Add => lhs + rhs,
+            B::Sub => lhs - rhs,
+            B::Mul => lhs * rhs,
+            B::Div => lhs / rhs,
+            B::DivInt => lhs.div_int(rhs),
+            B::Mod => lhs % rhs,
+            B::BitwiseXor => (lhs ^ rhs).unwrap(),
+            B::Exp => lhs.pow(rhs),
+            B::Extend => lhs.extend(rhs).unwrap(),
+            B::BitwiseOr => todo!(),
+            B::BitwiseAnd => todo!(),
         }
     }
 
@@ -1399,7 +1401,8 @@ impl Visitor for Runner<'_> {
                     return;
                 };
 
-                let mod_scope = Rc::clone(&self.run_script(script, Some(module_path.clone())).unwrap());
+                let mod_scope =
+                    Rc::clone(&self.run_script(script, Some(module_path.clone())).unwrap());
 
                 ASModuleBuiltin::load_from_scope(
                     mod_scope,
@@ -1895,7 +1898,8 @@ impl Visitor for Runner<'_> {
         let Type::Lit(v) = t else {
             return;
         };
-        
+
+        self.type_results.push(ASType::Lit(Box::new(v.clone())))
     }
 
     fn visit_type_name(&mut self, t: &Type) {

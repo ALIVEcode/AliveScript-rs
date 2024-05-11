@@ -1,5 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
+use derive_getters::Dissolve;
 use derive_new::new;
 
 use crate::{
@@ -92,7 +93,7 @@ impl RecursiveRepr for ASDict {
     }
 }
 
-#[derive(Debug, Clone, new, PartialEq)]
+#[derive(Debug, Clone, new, PartialEq, Dissolve)]
 pub struct ASPaire {
     key: Box<ASObj>,
     val: Box<ASObj>,

@@ -129,6 +129,7 @@ pub enum BinOpcode {
     Sub,
     Exp,
     Mod,
+    Extend,
     BitwiseOr,
     BitwiseAnd,
     BitwiseXor,

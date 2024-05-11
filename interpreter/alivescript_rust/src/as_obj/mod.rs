@@ -30,6 +30,13 @@ use crate::{
 
 pub type ASResult<T> = Result<T, ASErreurType>;
 
+/// w_lit means "With literal"
+macro_rules! w_lit {
+    ($type:expr, $self:ident) => {
+        ASType::union_of($type, ASType::Lit(Box::new($self.clone())))
+    };
+}
+
 #[derive(Debug, new)]
 pub enum ASObj {
     // A placeholder value for representing the absence of values
@@ -95,21 +102,21 @@ impl ASObj {
     }
 
     pub fn get_type(&self) -> ASType {
-        use ASObj::*;
+        use ASObj as A;
 
         match self {
-            ASEntier(..) => ASType::Entier,
-            ASDecimal(..) => ASType::Decimal,
-            ASTexte(..) => ASType::Texte,
-            ASNul => ASType::Nul,
-            ASBooleen(..) => ASType::Booleen,
-            ASListe(ls) => ASType::Array(ls.borrow().iter().map(|e| e.get_type()).collect()),
-            ASFonc { .. } => ASType::Fonction,
-            ASMethode(..) => ASType::Fonction,
-            ASDict(..) => ASType::Dict,
-            ASClasse(..) => ASType::Classe,
-            ASClasseInst(inst) => ASType::Objet(inst.classe_parent().name().clone()),
-            ASTypeObj(..) => ASType::Type,
+            A::ASEntier(..) => w_lit!(ASType::Entier, self),
+            A::ASDecimal(..) => w_lit!(ASType::Decimal, self),
+            A::ASTexte(..) => w_lit!(ASType::Texte, self),
+            A::ASNul => w_lit!(ASType::Nul, self),
+            A::ASBooleen(..) => w_lit!(ASType::Booleen, self),
+            A::ASListe(ls) => ASType::Array(ls.borrow().iter().map(|e| e.get_type()).collect()),
+            A::ASFonc { .. } => ASType::Fonction,
+            A::ASMethode(..) => ASType::Fonction,
+            A::ASDict(..) => ASType::Dict,
+            A::ASClasse(..) => ASType::Classe,
+            A::ASClasseInst(inst) => ASType::Objet(inst.classe_parent().name().clone()),
+            A::ASTypeObj(..) => ASType::Type,
             as_type => todo!("Type inconnue {:?}", as_type),
         }
     }
@@ -150,6 +157,36 @@ impl ASObj {
             (ASEntier(x), ASDecimal(y)) => ASDecimal((*x as f64).powf(y)),
             (ASDecimal(x), ASDecimal(y)) => ASDecimal(x.powf(y)),
             _ => unimplemented!(),
+        }
+    }
+
+    pub fn extend(&self, rhs: Self) -> Result<ASObj, ASErreurType> {
+        use ASObj::*;
+
+        match (self, rhs) {
+            (ASTexte(s), rhs @ ASTexte(..)) => Ok(self.clone() + rhs),
+            (ASListe(l), ASListe(l2)) => {
+                let mut l3 = l.borrow().clone();
+                l3.extend(l2.borrow().to_owned());
+                Ok(ASObj::liste(l3))
+            }
+
+            (ASDict(d), ASDict(d2)) => {
+                let mut d3 = d.borrow().clone();
+                for e in d2.borrow().items() {
+                    d3.insert(e.key().to_owned(), e.val().to_owned());
+                }
+                Ok(ASObj::dict(d3))
+            }
+
+            (ASTuple(_), _) => todo!("Tuple pas encore (et peut-être jamais) dans le langage"),
+            (ASClasse(classe), _) => todo!("Check présense du field?"),
+            (ASModule { name, alias, env }, _) => todo!(),
+            (_, rhs) => Err(ASErreurType::new_erreur_operation(
+                "++".into(),
+                self.get_type(),
+                rhs.get_type(),
+            )),
         }
     }
 

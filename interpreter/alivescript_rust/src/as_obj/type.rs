@@ -194,6 +194,10 @@ impl ASType {
 
             (Tout, other) | (other, Tout) => other != &Rien && other != &Nul,
 
+            (Lit(o1), Lit(o2)) => {
+                o1 == o2
+            }
+
             (Optional(t), other) | (other, Optional(t)) => {
                 other == &Nul || ASType::type_match(t.as_ref(), other)
             }

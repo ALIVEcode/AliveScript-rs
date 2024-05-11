@@ -242,6 +242,16 @@ pub Expr: Box<Expr> = {
   },
 
   #[precedence(level="6")]
+  #[assoc(side="left")]
+  <lhs:Expr> "++" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Extend,
+      rhs
+    })
+  },
+
+  #[precedence(level="7")]
   "pas" <expr:Expr> => {
     Box::new(Expr::UnaryOp {
       expr,
@@ -256,7 +266,7 @@ pub Expr: Box<Expr> = {
     })
   },
 
-  #[precedence(level="7")]
+  #[precedence(level="8")]
   #[assoc(side="left")]
   <lhs:Expr> "==" <rhs:Expr> => {
     Box::new(Expr::BinComp {
@@ -315,7 +325,7 @@ pub Expr: Box<Expr> = {
     })
   },
 
-  #[precedence(level="8")]
+  #[precedence(level="9")]
   #[assoc(side="left")]
   <lhs:Expr> "et" <rhs:Expr> => {
     Box::new(Expr::BinLogic {
@@ -349,13 +359,13 @@ pub Expr: Box<Expr> = {
     })
   },
 
-  #[precedence(level="9")]
+  #[precedence(level="10")]
   #[assoc(side="left")]
   <cond:Expr> "?" <then_expr:Expr> ":" <else_expr:Expr> => {
     Box::new(Expr::Ternary { <> })
   },
 
-  #[precedence(level="10")]
+  #[precedence(level="11")]
   "fonction" <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> ":" <body:Expr> => 
     Box::new(Expr::DefFn(DefFn::new(None, None, params, return_type, vec![Box::new(Stmt::Retourner(vec![body]))]))),
 };
@@ -593,6 +603,7 @@ BinOpcodeAssign: BinOpcode = {
     "//=" => BinOpcode::DivInt,
     "%=" => BinOpcode::Mod,
     "exp=" => BinOpcode::Exp,
+    "++=" => BinOpcode::Extend,
 }
 
 ModuleIdent: String = {
@@ -720,7 +731,9 @@ extern {
         "%" => Token::OpMod,
         "exp" => Token::OpExp,
         "|" => Token::OpPipe,
+        "++" => Token::OpExtend,
 
+        "++=" => Token::OpExtendAssign,
         "+=" => Token::OpAddAssign,
         "-=" => Token::OpMinusAssign,
         "*=" => Token::OpTimesAssign,
