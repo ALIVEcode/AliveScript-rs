@@ -104,7 +104,29 @@ classe mapIter
     fin methode
 fin classe
 
+fonction pourTout(f: fonction, l: iterable)
+    pour chaque e dans l
+        f(e)
+    fin pour
+fin fonction
 
+fonction toutVrai(f: fonction, l: iterable)
+    pour chaque e dans l
+        retourner faux si pas f(e)
+    fin pour
+    retourner vrai
+fin fonction
+
+fonction unVrai(f: fonction, l: iterable)
+    pour chaque e dans l
+        retourner vrai si f(e)
+    fin pour
+    retourner faux
+fin fonction
+
+(-:
+ - Fonction qui doit être changé pour être builtin dans le langage
+:-)
 fonction map(f: fonction, l: iterable) -> liste
     var liste_finale = []
     pour chaque e dans l

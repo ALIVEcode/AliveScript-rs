@@ -120,16 +120,25 @@ ClasseMethode: DefMethod = {
         <body:Script> "fin" "methode" "eos" => DefMethod::new(docs, Some(name), params, return_type, body, true),
 };
 
+// Expr => Box::new(Stmt::Expr(<>)),
+//<f:Term> <exprs:Comma<Expr>> => {
+//    if exprs.is_empty() && !matches!(*f, Expr::Ident(..)) {
+//        return Box::new(Stmt::Expr(f));
+//    }
+//    
+//    Box::new(Stmt::Expr(Box::new(Expr::FnCall{func: f, args: exprs})))
+//},
+
 SubStmt: Box<Stmt> = {
     Expr => Box::new(Stmt::Expr(<>)),
 
     <var:DeclVar> "assign" <val:Expr> => Box::new(Stmt::Decl { <> }),
 
-    <var:AssignVar> "assign" <val:Expr> => Box::new(Stmt::Assign { <> }),
+    <var:AssignVarSimple> "assign" <val:Expr> => Box::new(Stmt::Assign { <> }),
     <var:AssignVarSimple> <op:BinOpcodeAssign> <val:Expr> => Box::new(Stmt::OpAssign { <> }),
 
-
     "afficher" <arg:Comma<Expr>> => Box::new(Stmt::Afficher(arg)),
+
 
     "lire" <factory:(<Term> "dans")?> <var:DeclVarSimple> <prompt:("," <Expr>)?> => 
         Box::new(Stmt::Lire {
@@ -431,7 +440,7 @@ ident: String = {
     "ident",
     "bond" => String::from("bond"),
     "chaque" => String::from("chaque"),
-    "type" => String::from("type"),
+    //"type" => String::from("type"),
     //"alias" => String::from("alias"),
     //"statique" => String::from("statique"),
 };

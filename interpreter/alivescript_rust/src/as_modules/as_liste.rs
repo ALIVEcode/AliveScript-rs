@@ -7,6 +7,18 @@ use crate::{
     visitor::Visitable,
 };
 
+#[derive(PartialOrd, PartialEq, Debug)]
+struct SortableASObj(ASObj);
+
+impl Ord for SortableASObj {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).expect("Not comparable")
+    }
+}
+
+impl Eq for SortableASObj {
+}
+
 as_mod!(
     LISTE_MOD,
     as_fonction! {
@@ -22,16 +34,15 @@ as_mod!(
                 }
                 clef @ ASObj::ASFonc { .. } => {
                     let clef = Expr::literal(clef.clone());
-                    for el in lst.get_mut().iter_mut() {
-                        let to_call = Expr::FnCall {
-                            func: clef.clone(),
-                            args: vec![Expr::literal(el.clone())],
-                        };
-                        to_call.accept(runner);
-                        *el = runner.pop_value().unwrap();
-                    }
                     lst.get_mut()
-                        .sort_by(|a, b| a.partial_cmp(b).expect("Comparable"));
+                        .sort_by_cached_key(|el| {
+                            let to_call = Expr::FnCall {
+                                func: clef.clone(),
+                                args: vec![Expr::literal(el.clone())],
+                            };
+                            to_call.accept(runner);
+                            SortableASObj(runner.pop_value().unwrap())
+                        });
                     ASObj::ASListe(Rc::new(lst))
                 }
                 _ => unreachable!(),

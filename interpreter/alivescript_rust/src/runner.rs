@@ -1321,7 +1321,11 @@ impl Visitor for Runner<'_> {
             }
 
             let var = ASVar::new(name.clone(), Some(static_type), is_const);
-            self.env.declare(var, value);
+            if is_assign && self.env.get_var(name).is_some() {
+                self.env.assign(name, value).unwrap();
+            } else {
+                self.env.declare(var, value);
+            }
         }
     }
 
@@ -1471,6 +1475,10 @@ impl Visitor for Runner<'_> {
                         let old_value = lst.borrow()[i as usize].clone();
                         *lst.borrow_mut().index_mut(i as usize) =
                             Runner::<'_>::do_op(old_value, op, value);
+                    }
+                    (ASDict(d), obj) => {
+                        let old_value = d.borrow().get(&obj).unwrap().val().clone();
+                        d.borrow_mut().insert(obj, Runner::<'_>::do_op(old_value, op, value));
                     }
                     _ => todo!(),
                 }

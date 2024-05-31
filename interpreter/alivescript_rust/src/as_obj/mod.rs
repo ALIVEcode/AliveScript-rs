@@ -333,17 +333,17 @@ impl Add for ASObj {
         use ASObj::*;
 
         match (self, rhs) {
+            (ASListe(l), any) => ASListe({
+                let mut l = l.borrow().clone();
+                l.push(any);
+                Rc::new(RefCell::new(l))
+            }),
             (ASTexte(s), any) => ASTexte(format!("{}{}", s, any.to_string())),
             (any, ASTexte(s)) => ASTexte(format!("{}{}", any.to_string(), s)),
             (ASEntier(x), ASEntier(y)) => ASEntier(x + y),
             (ASDecimal(x), ASEntier(y)) => ASDecimal(x + y as f64),
             (ASEntier(x), ASDecimal(y)) => ASDecimal(x as f64 + y),
             (ASDecimal(x), ASDecimal(y)) => ASDecimal(x + y),
-            (ASListe(l), any) => ASListe({
-                let mut l = l.borrow().clone();
-                l.push(any);
-                Rc::new(RefCell::new(l))
-            }),
             _ => unimplemented!(),
         }
     }
@@ -534,7 +534,7 @@ impl PartialOrd for ASObj {
             (ASDecimal(x), ASEntier(y)) => (*x, *y as f64),
             (ASEntier(x), ASDecimal(y)) => (*x as f64, *y),
             (ASDecimal(x), ASDecimal(y)) => (*x, *y),
-            _ => unimplemented!(),
+            _ => None?,
         };
 
         x.partial_cmp(&y)

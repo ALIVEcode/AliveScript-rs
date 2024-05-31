@@ -6,9 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = []
+default = ["sys"]
 # game = ["bevy"]
 py = ["dep:pyo3"]
+sys = []
+fs = []
 
 [build-dependencies]
 lalrpop = "0.20.0"

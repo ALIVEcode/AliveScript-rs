@@ -2,7 +2,7 @@ use unindent::Unindent;
 
 use crate::{
     as_cast, as_fonction, as_mod,
-    as_obj::{ASDict, ASErreurType, ASObj, ASType},
+    as_obj::{ASDict, ASErreurType, ASObj, ASPaire, ASType},
     as_var, call_methode, union_of,
 };
 
@@ -152,7 +152,23 @@ as_mod! {
                 return result;
             }
             Ok(Some(match obj {
-                ASObj::ASListe(l) => todo!(),
+                ASObj::ASListe(l) => {
+                    let mut dict = Vec::with_capacity(l.borrow().len());
+                    for e in l.borrow().iter() {
+                        let ASObj::ASListe(kv) = e else {
+                            return Err(ASErreurType::new_erreur_type(ASType::Liste, e.get_type()));
+                        };
+                        if kv.borrow().len() != 2 {
+                            return Err(ASErreurType::new_erreur_valeur(
+                                    Some("Seules les listes de listes à deux arguments peuvent former un dictionnaire".into()),
+                                    e.clone()
+                                ));
+                        }
+                        let kv = kv.borrow();
+                        dict.push(ASPaire::new(Box::new(kv[0].clone()), Box::new(kv[1].clone())));
+                    }
+                    ASObj::dict(ASDict::new(dict))
+                }
                 ASObj::ASDict(d) => ASObj::ASDict(d.clone()),
                 _ => unreachable!()
             }))
@@ -240,6 +256,12 @@ as_mod! {
         const CHIFFRES: ASType::Texte => ASObj::ASTexte("0123456789".into())
     },
     as_var! {
+        const ALPHANUM: ASType::Texte => ASObj::ASTexte("abcdefghijklmnopqrstuvwxyz0123456789".into())
+    },
+    as_var! {
         const SYMBOLES: ASType::Texte => ASObj::ASTexte("+-*/%&|!^~@<>=()[]{}.,:;".into())
+    },
+    as_var! {
+        const BOB: ASType::Texte => ASObj::ASTexte("(~°3°)~".into())
     }
 }
