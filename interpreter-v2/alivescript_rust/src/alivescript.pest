@@ -1,0 +1,109 @@
+WHITESPACE = _{ " " | "\t" }
+COMMENT    = _{ "(:" ~ (!":)" ~ ANY)* ~ ":)" }
+
+eos    = _{ NEWLINE | ";" }
+script = _{ SOI ~ eos* ~ (stmt ~ eos+)* ~ stmt? ~ EOI }
+
+stmt = _{
+    utiliserStmt
+  | declStmt
+  | assignStmt
+  | subStmt ~ ("si" ~ expr)?
+}
+
+utiliserStmt = { "utiliser" }
+
+declStmt  = {
+    (varKw ~ assignVar)
+  | (constKw ~ assignVar)
+}
+
+constKw = { "const" }
+varKw = { "var" }
+
+assignStmt = { assignVar }
+
+assignVar = _{
+    declIdent ~ assign ~ expr
+}
+declIdent = _{
+    ident ~ (":" ~ typeExpr)?
+}
+
+subStmt = _{
+    afficherStmt
+  | expr
+}
+
+afficherStmt = { "afficher" ~ expr }
+
+expr    =  { prefix? ~ primary ~ postfix? ~ (infix ~ prefix? ~ primary ~ postfix?)* }
+primary = _{ term }
+infix   = _{ add | sub | mul | div | divInt | pow | modulo | range | rangeEq | eq | pipe }
+add     =  { "+" }
+sub     =  { "-" }
+mul     =  { "*" }
+div     =  { "/" }
+divInt  =  { "//" }
+modulo  =  { "%" }
+range   =  { ".." }
+rangeEq =  { "..=" }
+pow     =  { "^" | "**" }
+pipe    =  { "|" }
+eq      =  { "==" }
+prefix  = _{ neg | not }
+neg     =  { "-" }
+not     =  { "pas" | "non" }
+postfix =  { "@" }
+
+assign = { "=" | "<-" }
+
+term = _{
+    lit
+  | faireBloc
+  | fnCall
+  | ident
+  | list
+  | dict
+  | "(" ~ "\n"* ~ expr ~ "\n"* ~ ")"
+}
+
+faireBloc = { "faire" ~ eos ~ script ~ "fin" }
+
+list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
+dict = { "{" ~ (expr ~ ",")* ~ expr? ~ "}" }
+
+callable = _{
+    ident
+  | faireBloc
+}
+
+fnCall = { callable ~ functionParams }
+
+functionParams = {
+    "(" ~ (expr ~ ",")* ~ expr? ~ ")"
+}
+
+lit = {
+    bool
+  | integer
+  | decimal
+  | text
+  | null
+}
+
+typeExpr    =  { typePrefix? ~ typeTerm ~ typePostfix? ~ (typeInfix ~ typePrefix? ~ typeTerm ~ typePostfix?)* }
+typeTerm    =  {
+    ident
+  | lit
+}
+typeInfix   = _{ pipe }
+typePrefix  = _{ "@" }
+typePostfix = _{ "?" }
+
+bool    = @{ "vrai" | "faux" }
+text    = @{ PUSH("\"" | "'") ~ ("\\" ~ PEEK | !PEEK ~ ANY)* ~ POP }
+ident   = @{ LETTER ~ (LETTER | ASCII_DIGIT)* }
+integer = @{ "-"? ~ ASCII_DIGIT+ }
+decimal = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+null    = @{ "nul" }

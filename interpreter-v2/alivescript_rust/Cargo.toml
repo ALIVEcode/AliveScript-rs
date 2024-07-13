@@ -1,0 +1,41 @@
+[package]
+name = "alivescript_rust"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["sys"]
+py = ["dep:pyo3"]
+sys = []
+fs = []
+no-ast = []
+
+[build-dependencies]
+
+[dependencies.uuid]
+version = "1.6.1"
+features = ["v4", "fast-rng"]
+
+[dependencies]
+derive-new = "0.6.0"
+logos = "0.12.0"
+once_cell = "1.18.0"
+thiserror = "1.0.47"
+unindent = "0.2.3"
+derive-getters = "0.3.0"
+console = "0.15.7"
+pyo3 = { version = "0.19.2", features = ["auto-initialize"], optional = true }
+pest = "2.7.11"
+pest_derive = { version = "2.7.11", features = ["grammar-extras"] }
+lazy_static = "1.5.0"
+
+# console = { version = "0.15.7", optional = true }
+#
+# [features]
+# build-binary = ["dep:console"]
+#
+# [[bin]]
+# name = "alivescript_rust"
+# required-features = ["build-binary"]
