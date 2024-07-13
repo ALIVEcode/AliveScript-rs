@@ -13,13 +13,13 @@ stmt = _{
 
 utiliserStmt = { "utiliser" }
 
-declStmt  = {
+declStmt = {
     (varKw ~ assignVar)
   | (constKw ~ assignVar)
 }
 
 constKw = { "const" }
-varKw = { "var" }
+varKw   = { "var" }
 
 assignStmt = { assignVar }
 
@@ -39,22 +39,53 @@ afficherStmt = { "afficher" ~ expr }
 
 expr    =  { prefix? ~ primary ~ postfix? ~ (infix ~ prefix? ~ primary ~ postfix?)* }
 primary = _{ term }
-infix   = _{ add | sub | mul | div | divInt | pow | modulo | range | rangeEq | eq | pipe }
-add     =  { "+" }
-sub     =  { "-" }
-mul     =  { "*" }
-div     =  { "/" }
-divInt  =  { "//" }
-modulo  =  { "%" }
-range   =  { ".." }
-rangeEq =  { "..=" }
-pow     =  { "^" | "**" }
-pipe    =  { "|" }
-eq      =  { "==" }
-prefix  = _{ neg | not }
-neg     =  { "-" }
-not     =  { "pas" | "non" }
-postfix =  { "@" }
+
+infix      = _{
+    binOpInfix
+  | range
+  | rangeEq
+  | compInfix
+}
+binOpInfix = _{
+    add
+  | sub
+  | mul
+  | div
+  | divInt
+  | pow
+  | modulo
+  | pipe
+  | ampersant
+}
+compInfix  = _{
+    eq
+  | neq
+  | gt
+  | gte
+  | lt
+  | lte
+}
+add        =  { "+" }
+sub        =  { "-" }
+mul        =  { "*" }
+div        =  { "/" }
+divInt     =  { "//" }
+modulo     =  { "%" }
+range      =  { ".." }
+rangeEq    =  { "..=" }
+pow        =  { "^" | "**" }
+ampersant  =  { "&" }
+pipe       =  { "|" }
+eq         =  { "==" }
+neq        =  { "!=" }
+gt         =  { ">" }
+lt         =  { "<" }
+gte        =  { ">=" }
+lte        =  { "<=" }
+prefix     = _{ neg | not }
+neg        =  { "-" }
+not        =  { "pas" | "non" }
+postfix    = _{ "@" }
 
 assign = { "=" | "<-" }
 

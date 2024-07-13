@@ -1061,7 +1061,16 @@ impl Visitor for Runner<'_> {
 
             let result = match op {
                 Pas => ASObj::ASBooleen(!throw_err!(?, self, self.to_bool(&value))),
-                Negate => todo!(),
+                Negate => eval!(
+                    expr,
+                    self,
+                    Expr::BinOp {
+                        lhs: Expr::literal(ASObj::ASEntier(0)),
+                        op: BinOpcode::Sub,
+                        rhs: Expr::literal(value)
+                    },
+                    "Negate"
+                ),
             };
 
             self.push_value(result);
