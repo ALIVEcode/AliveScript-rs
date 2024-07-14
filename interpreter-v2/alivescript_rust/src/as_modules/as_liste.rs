@@ -16,8 +16,7 @@ impl Ord for SortableASObj {
     }
 }
 
-impl Eq for SortableASObj {
-}
+impl Eq for SortableASObj {}
 
 as_mod!(
     LISTE_MOD,

@@ -15,7 +15,6 @@ as_mod!(
             }
         }
     },
-
     as_fonction! {
         affirmerFaux(test: Booleen) -> Rien; {
             if !test.to_bool() {
@@ -25,7 +24,6 @@ as_mod!(
             }
         }
     },
-
     as_fonction! {
         affirmerEgal(obj1: ASType::any(), obj2: ASType::any()) -> ASType::Rien; {
             if obj1 == obj2 {
@@ -35,7 +33,6 @@ as_mod!(
             }
         }
     },
-
     as_fonction! {
         affirmerPasEgal(obj1: ASType::any(), obj2: ASType::any()) -> ASType::Rien; {
             if obj1 != obj2 {
@@ -45,7 +42,6 @@ as_mod!(
             }
         }
     },
-
     as_fonction! {
         affirmerEgalType(obj1: ASType::any(), obj2: ASType::any()) -> ASType::Rien; {
             if obj1.get_type() == obj2.get_type() {

@@ -235,7 +235,9 @@ impl Into<Data> for ASErreur {
         Data::Erreur {
             texte: format!(
                 "{}{}",
-                self.file.map(|f| format!("Dans {}: ", f)).unwrap_or_default(),
+                self.file
+                    .map(|f| format!("Dans {}: ", f))
+                    .unwrap_or_default(),
                 self.err_type.to_string()
             ),
             ligne: self.ligne,

@@ -127,7 +127,7 @@ pub struct DefFn {
     body: Vec<Box<Stmt>>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, new, Getters)]
 pub struct FnParam {
     pub name: String,
     pub static_type: Option<Box<Type>>,

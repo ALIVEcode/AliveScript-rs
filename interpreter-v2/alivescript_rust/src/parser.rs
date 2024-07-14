@@ -1,6 +1,10 @@
 use crate::{
     as_obj::{ASErreur, ASErreurType, ASObj},
-    ast::{AssignVar, BinCompcode, BinOpcode, DeclVar, Expr, Stmt, Type, UnaryOpcode},
+    ast::{
+        AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, DefFn, Expr, FnParam, Stmt, Type,
+        UnaryOpcode,
+    },
+    utils::Invert,
     Rule,
 };
 use pest::error::{Error as PestError, ErrorVariant as PestErrorVariant};
@@ -15,11 +19,41 @@ lazy_static::lazy_static! {
 
         // Precedence is defined lowest to highest
         PrattParser::new()
-            .op(Op::prefix(Rule::neg))
-            // Addition and subtract have equal precedence
-            .op(Op::infix(Rule::add, Left) | Op::infix(Rule::sub, Left))
-            .op(Op::infix(Rule::mul, Left) | Op::infix(Rule::div, Left))
-            .op(Op::prefix(Rule::not))
+            // Ternary
+            .op(Op::postfix(Rule::Ternary))
+
+            // Logic op
+            .op(Op::infix(Rule::Or, Left))
+            .op(Op::infix(Rule::And, Left))
+            .op(Op::prefix(Rule::Not))
+
+            // Comparaison op
+            .op(Op::infix(Rule::In, Left) |
+                Op::infix(Rule::NotIn, Left) |
+                Op::infix(Rule::Eq, Left) |
+                Op::infix(Rule::Neq, Left) |
+                Op::infix(Rule::Gt, Left) |
+                Op::infix(Rule::Lt, Left) |
+                Op::infix(Rule::Gte, Left) |
+                Op::infix(Rule::Lte, Left))
+
+            // Bitwise op
+            .op(Op::infix(Rule::Xor, Left))
+            .op(Op::infix(Rule::Pipe, Left))
+            .op(Op::infix(Rule::Ampersant, Left))
+            // Range op
+            .op(Op::infix(Rule::Range, Left) | Op::infix(Rule::RangeEq, Left))
+            // Bitwise op
+            .op(Op::infix(Rule::BitwiseLeft, Left) | Op::infix(Rule::BitwiseRight, Left))
+
+            // Arithmetic op
+            .op(Op::infix(Rule::Add, Left) | Op::infix(Rule::Sub, Left))
+            .op(Op::infix(Rule::Mul, Left) |
+                Op::infix(Rule::Div, Left) |
+                Op::infix(Rule::DivInt, Left) |
+                Op::infix(Rule::Modulo, Left))
+            .op(Op::prefix(Rule::Neg) | Op::prefix(Rule::Pos))
+            .op(Op::infix(Rule::Pow, Left))
     };
 }
 
@@ -38,15 +72,15 @@ impl TryFrom<&Pair<'_, Rule>> for BinOpcode {
     fn try_from(pair: &Pair<Rule>) -> Result<Self, Self::Error> {
         use BinOpcode as B;
         Ok(match pair.as_rule() {
-            Rule::add => B::Add,
-            Rule::sub => B::Sub,
-            Rule::mul => B::Mul,
-            Rule::div => B::Div,
-            Rule::divInt => B::DivInt,
-            Rule::pow => B::Exp,
-            Rule::pipe => B::BitwiseOr,
-            Rule::ampersant => B::BitwiseAnd,
-            Rule::modulo => B::Mod,
+            Rule::Add => B::Add,
+            Rule::Sub => B::Sub,
+            Rule::Mul => B::Mul,
+            Rule::Div => B::Div,
+            Rule::DivInt => B::DivInt,
+            Rule::Pow => B::Exp,
+            Rule::Pipe => B::BitwiseOr,
+            Rule::Ampersant => B::BitwiseAnd,
+            Rule::Modulo => B::Mod,
             _ => Err(())?,
         })
     }
@@ -58,67 +92,103 @@ impl TryFrom<&Pair<'_, Rule>> for BinCompcode {
     fn try_from(pair: &Pair<Rule>) -> Result<Self, Self::Error> {
         use BinCompcode as B;
         Ok(match pair.as_rule() {
-            Rule::eq => B::Eq,
-            Rule::neq => B::NotEq,
-            Rule::lt => B::Lth,
-            Rule::gt => B::Gth,
-            Rule::lte => B::Leq,
-            Rule::gte => B::Geq,
+            Rule::Eq => B::Eq,
+            Rule::Neq => B::NotEq,
+            Rule::Lt => B::Lth,
+            Rule::Gt => B::Gth,
+            Rule::Lte => B::Leq,
+            Rule::Gte => B::Geq,
+            Rule::In => B::Dans,
+            Rule::NotIn => B::PasDans,
             _ => Err(())?,
         })
     }
 }
+
 impl TryFrom<&Pair<'_, Rule>> for UnaryOpcode {
     type Error = ();
 
     fn try_from(pair: &Pair<Rule>) -> Result<Self, Self::Error> {
         use UnaryOpcode as U;
         Ok(match pair.as_rule() {
-            Rule::neg => U::Negate,
-            Rule::not => U::Pas,
+            Rule::Neg => U::Negate,
+            Rule::Not => U::Pas,
+            Rule::Pos => U::Positive,
             _ => Err(())?,
         })
     }
 }
 
-fn parse_lit(pair: Pair<Rule>) -> Result<ASObj, PestError<Rule>> {
-    Ok(match pair.as_rule() {
-        Rule::integer => ASObj::ASEntier(pair.as_str().parse::<i64>().unwrap()),
-        Rule::decimal => ASObj::ASDecimal(pair.as_str().parse::<f64>().unwrap()),
-        Rule::bool => ASObj::ASBooleen(pair.as_str() == "vrai"),
-        Rule::null => ASObj::ASNul,
-        Rule::text => {
-            let slice = pair.as_str();
-            let s: String = slice[1..slice.len() - 1].parse().unwrap();
-            ASObj::ASTexte(
-                s.replace(r"\n", "\n")
-                    .replace(r"\t", "\t")
-                    .replace(r"\r", "\r")
-                    .to_owned(),
-            )
-        }
-        rule => Err(PestError::new_from_span(
-            PestErrorVariant::ParsingError {
-                positives: vec![Rule::lit],
-                negatives: vec![rule],
-            },
-            pair.as_span(),
-        ))?,
-    })
+impl TryFrom<&Pair<'_, Rule>> for BinLogiccode {
+    type Error = ();
+
+    fn try_from(pair: &Pair<Rule>) -> Result<Self, Self::Error> {
+        use BinLogiccode as B;
+        Ok(match pair.as_rule() {
+            Rule::And => B::Et,
+            Rule::Or => B::Ou,
+            Rule::NonNull => B::NonNul,
+            _ => Err(())?,
+        })
+    }
 }
 
 fn parse_expr(pairs: Pairs<Rule>) -> Result<Box<Expr>, PestError<Rule>> {
     PRATT_EXPR_PARSER
         .map_primary(|primary| match primary.as_rule() {
-            Rule::expr => parse_expr(primary.into_inner()),
-            Rule::term => parse_expr(primary.into_inner()),
-            Rule::ident => Ok(Box::new(Expr::Ident(primary.as_str().to_string()))),
-            Rule::lit => Ok(Expr::literal(parse_lit(
+            Rule::Term => parse_expr(primary.into_inner()),
+            Rule::List => Ok(Box::new(Expr::List(
+                primary
+                    .into_inner()
+                    .map(|arg| parse_expr(arg.into_inner()))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ))),
+            Rule::Expr => parse_expr(primary.into_inner()),
+            Rule::Ident => Ok(Box::new(Expr::Ident(primary.as_str().to_string()))),
+            Rule::Lit => Ok(Expr::literal(parse_lit(
                 primary.into_inner().next().unwrap(),
             )?)),
+            Rule::FnCall => {
+                let mut inner = primary.into_inner();
+                Ok(Box::new(Expr::FnCall {
+                    func: parse_expr(inner.next().unwrap().into_inner())?,
+                    args: inner
+                        .next()
+                        .unwrap()
+                        .into_inner()
+                        .map(|arg| parse_expr(arg.into_inner()))
+                        .collect::<Result<Vec<_>, _>>()?,
+                }))
+            }
+            Rule::FaireBloc => Ok(Box::new(Expr::Faire(build_ast_stmts(
+                primary.into_inner()
+            )?))),
+            Rule::FnExpr => {
+                let inner = primary.into_inner();
+                Ok(Box::new(Expr::DefFn(DefFn::new(
+                    None,
+                    None,
+                    parse_fn_params(inner.find_first_tagged("params").unwrap().into_inner())?,
+                    inner
+                        .find_first_tagged("return_type")
+                        .map(|te| parse_type(te.into_inner()))
+                        .invert()?,
+                    inner
+                        .find_first_tagged("body")
+                        .map(|body| match body.as_rule() {
+                            Rule::Expr => Ok(vec![Box::new(Stmt::Retourner(vec![parse_expr(
+                                body.into_inner(),
+                            )?]))]),
+                            Rule::StmtBody => build_ast_stmts(body.into_inner()),
+                            _ => unreachable!(),
+                        })
+                        .invert()?
+                        .unwrap(),
+                ))))
+            }
             rule => Err(PestError::new_from_span(
                 PestErrorVariant::ParsingError {
-                    positives: vec![Rule::term],
+                    positives: vec![Rule::Term],
                     negatives: vec![rule],
                 },
                 primary.as_span(),
@@ -132,7 +202,7 @@ fn parse_expr(pairs: Pairs<Rule>) -> Result<Box<Expr>, PestError<Rule>> {
             } else {
                 Err(PestError::new_from_span(
                     PestErrorVariant::ParsingError {
-                        positives: vec![Rule::not, Rule::neg],
+                        positives: vec![Rule::Not, Rule::Neg, Rule::Pos],
                         negatives: vec![prefix.as_rule()],
                     },
                     prefix.as_span(),
@@ -149,31 +219,111 @@ fn parse_expr(pairs: Pairs<Rule>) -> Result<Box<Expr>, PestError<Rule>> {
             if let Ok(op) = BinCompcode::try_from(&infix) {
                 return Ok(Box::new(Expr::BinComp { lhs, op, rhs }));
             }
+            if let Ok(op) = BinLogiccode::try_from(&infix) {
+                return Ok(Box::new(Expr::BinLogic { lhs, op, rhs }));
+            }
 
-            todo!()
+            match infix.as_rule() {
+                rule @ (Rule::Range | Rule::RangeEq) => {
+                    let inner = infix.into_inner();
+                    let start = lhs;
+                    let end = inner
+                        .find_first_tagged("end")
+                        .map(|end| parse_expr(end.into_inner()))
+                        .invert()?;
+
+                    let (end, step) = if end.is_some() {
+                        (end.unwrap(), Some(rhs))
+                    } else {
+                        (rhs, None)
+                    };
+
+                    Ok(Box::new(Expr::Range {
+                        start,
+                        end,
+                        step,
+                        is_incl: rule == Rule::RangeEq,
+                    }))
+                }
+                _ => Err(PestError::new_from_span(
+                    PestErrorVariant::ParsingError {
+                        positives: vec![Rule::Not, Rule::Neg, Rule::Pos],
+                        negatives: vec![infix.as_rule()],
+                    },
+                    infix.as_span(),
+                )),
+            }
+        })
+        .map_postfix(|lhs, postfix| {
+            let lhs = lhs?;
+
+            match postfix.as_rule() {
+                Rule::Ternary => {
+                    let inner = postfix.into_inner();
+                    let then_expr =
+                        parse_expr(inner.find_first_tagged("then_expr").unwrap().into_inner())?; // skip the "?"
+                    let else_expr =
+                        parse_expr(inner.find_first_tagged("else_expr").unwrap().into_inner())?; // skip the ":"
+                    Ok(Box::new(Expr::Ternary {
+                        cond: lhs,
+                        then_expr,
+                        else_expr,
+                    }))
+                }
+                _ => Err(PestError::new_from_span(
+                    PestErrorVariant::ParsingError {
+                        positives: vec![Rule::Not, Rule::Neg, Rule::Pos],
+                        negatives: vec![postfix.as_rule()],
+                    },
+                    postfix.as_span(),
+                )),
+            }
         })
         .parse(pairs)
 }
 
-fn parse_type(pairs: Pairs<Rule>) -> Result<Box<Type>, PestError<Rule>> {
-    PRATT_TYPE_PARSER
-        .map_primary(|primary| match primary.as_rule() {
-            Rule::typeTerm => parse_type(primary.into_inner()),
-            Rule::typeExpr => parse_type(primary.into_inner()),
-            Rule::ident => Ok(Box::new(Type::Name(primary.as_str().to_string()))),
-            Rule::lit => Ok(Box::new(Type::Lit(parse_lit(
-                primary.into_inner().next().unwrap(),
-            )?))),
-            rule => Err(PestError::new_from_span(
-                PestErrorVariant::ParsingError {
-                    positives: vec![Rule::typeTerm],
-                    negatives: vec![rule],
-                },
-                primary.as_span(),
-            )),
+fn parse_fn_params(pairs: Pairs<Rule>) -> Result<Vec<FnParam>, PestError<Rule>> {
+    Ok(pairs
+        .filter_map(|pair| {
+            let span = pair.as_span();
+            let inner = pair.into_inner();
+            let name = inner.find_first_tagged("p_name");
+
+            let Some(name) = name else {
+                return Some(Err(PestError::new_from_span(
+                    PestErrorVariant::ParsingError {
+                        positives: vec![Rule::Ident],
+                        negatives: inner.map(|p| p.as_rule()).collect(),
+                    },
+                    span,
+                )));
+            };
+
+            let static_type = inner
+                .find_first_tagged("p_type")
+                .map(|t| parse_type(t.into_inner()))
+                .invert();
+
+            let Ok(static_type) = static_type else {
+                return Some(Err(static_type.err().unwrap()));
+            };
+
+            let default_value = inner
+                .find_first_tagged("p_default")
+                .map(|d| parse_expr(d.into_inner()))
+                .invert();
+
+            let Ok(default_value) = default_value else {
+                return Some(Err(default_value.err().unwrap()));
+            };
+
+            Some(Ok(FnParam::new(
+                name.as_str().to_string(),
+                static_type,
+                default_value,
+            )))
         })
-        .map_infix(|lhs, infix, rhs| todo!())
-        .parse(pairs)
+        .collect::<Result<Vec<_>, _>>()?)
 }
 
 fn parse_assign(pairs: Pairs<Rule>) -> Result<(DeclVar, Box<Expr>), PestError<Rule>> {
@@ -184,11 +334,11 @@ fn parse_assign(pairs: Pairs<Rule>) -> Result<(DeclVar, Box<Expr>), PestError<Ru
 
     for pair in pairs {
         match pair.as_rule() {
-            Rule::constKw => is_const = true,
-            Rule::varKw | Rule::assign => {}
-            Rule::expr => expr = Some(parse_expr(pair.into_inner())?),
-            Rule::typeExpr => static_type = Some(parse_type(pair.into_inner())?),
-            Rule::ident => name = Some(pair.as_str().to_string()),
+            Rule::Const => is_const = true,
+            Rule::Var | Rule::Assign => {}
+            Rule::Expr => expr = Some(parse_expr(pair.into_inner())?),
+            Rule::TypeExpr => static_type = Some(parse_type(pair.into_inner())?),
+            Rule::Ident => name = Some(pair.as_str().to_string()),
             _ => panic!("{:#?}", pair),
         }
     }
@@ -203,6 +353,52 @@ fn parse_assign(pairs: Pairs<Rule>) -> Result<(DeclVar, Box<Expr>), PestError<Ru
     ))
 }
 
+fn parse_lit(pair: Pair<Rule>) -> Result<ASObj, PestError<Rule>> {
+    Ok(match pair.as_rule() {
+        Rule::Integer => ASObj::ASEntier(pair.as_str().parse::<i64>().unwrap()),
+        Rule::Decimal => ASObj::ASDecimal(pair.as_str().parse::<f64>().unwrap()),
+        Rule::Bool => ASObj::ASBooleen(pair.as_str() == "vrai"),
+        Rule::Null => ASObj::ASNul,
+        Rule::Text => {
+            let slice = pair.as_str();
+            let s: String = slice[1..slice.len() - 1].parse().unwrap();
+            ASObj::ASTexte(
+                s.replace(r"\n", "\n")
+                    .replace(r"\t", "\t")
+                    .replace(r"\r", "\r")
+                    .to_owned(),
+            )
+        }
+        rule => Err(PestError::new_from_span(
+            PestErrorVariant::ParsingError {
+                positives: vec![Rule::Lit],
+                negatives: vec![rule],
+            },
+            pair.as_span(),
+        ))?,
+    })
+}
+
+fn parse_type(pairs: Pairs<Rule>) -> Result<Box<Type>, PestError<Rule>> {
+    PRATT_TYPE_PARSER
+        .map_primary(|primary| match primary.as_rule() {
+            Rule::TypeExpr => parse_type(primary.into_inner()),
+            Rule::Ident => Ok(Box::new(Type::Name(primary.as_str().to_string()))),
+            Rule::Lit => Ok(Box::new(Type::Lit(parse_lit(
+                primary.into_inner().next().unwrap(),
+            )?))),
+            rule => Err(PestError::new_from_span(
+                PestErrorVariant::ParsingError {
+                    positives: vec![Rule::typeTerm],
+                    negatives: vec![rule],
+                },
+                primary.as_span(),
+            )),
+        })
+        .map_infix(|lhs, infix, rhs| todo!())
+        .parse(pairs)
+}
+
 pub fn build_ast_stmts(pairs: Pairs<Rule>) -> Result<Vec<Box<Stmt>>, PestError<Rule>> {
     let mut stmts = vec![];
     for pair in pairs {
@@ -210,12 +406,12 @@ pub fn build_ast_stmts(pairs: Pairs<Rule>) -> Result<Vec<Box<Stmt>>, PestError<R
             continue;
         };
         stmts.push(Box::new(match pair.as_rule() {
-            Rule::afficherStmt => Stmt::Afficher(vec![parse_expr(pair.into_inner())?]),
-            Rule::declStmt => {
+            Rule::AfficherStmt => Stmt::Afficher(vec![parse_expr(pair.into_inner())?]),
+            Rule::DeclStmt => {
                 let (var, val) = parse_assign(pair.into_inner())?;
                 Stmt::Decl { var, val }
             }
-            Rule::assignStmt => {
+            Rule::AssignStmt => {
                 let (
                     DeclVar::Var {
                         name,
@@ -232,7 +428,13 @@ pub fn build_ast_stmts(pairs: Pairs<Rule>) -> Result<Vec<Box<Stmt>>, PestError<R
                     val,
                 }
             }
-            Rule::expr => Stmt::Expr(parse_expr(pair.into_inner())?),
+            Rule::RetournerStmt => Stmt::Retourner(
+                pair.into_inner()
+                    .map(|expr| parse_expr(expr.into_inner()))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+            Rule::Expr => Stmt::Expr(parse_expr(pair.into_inner())?),
+            Rule::Term => Stmt::Expr(parse_expr(pair.into_inner())?),
             rule => Err(PestError::new_from_span(
                 PestErrorVariant::ParsingError {
                     positives: vec![Rule::stmt],

@@ -163,7 +163,7 @@ pub enum Token {
     OpPipe,
 
     #[token("&")]
-    OpBitwiseAnd, 
+    OpBitwiseAnd,
 
     #[token("<<")]
     OpShiftLeft,
@@ -200,7 +200,7 @@ pub enum Token {
     OpExtendAssign,
 
     #[token("&=")]
-    OpBitwiseAndAssign, 
+    OpBitwiseAndAssign,
 
     #[token("<<=")]
     OpShiftLeftAssign,

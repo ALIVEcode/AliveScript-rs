@@ -118,6 +118,7 @@ impl Expr {
 pub enum UnaryOpcode {
     Pas,
     Negate,
+    Positive,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

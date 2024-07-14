@@ -16,7 +16,7 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     fmt::Display,
-    ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Sub, Shl, Shr},
+    ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub},
     rc::Rc,
 };
 

@@ -1,140 +1,184 @@
 WHITESPACE = _{ " " | "\t" }
-COMMENT    = _{ "(:" ~ (!":)" ~ ANY)* ~ ":)" }
+COMMENT    = _{
+    "(:" ~ (!":)" ~ ANY)* ~ ":)"
+  | "#" ~ (!NEWLINE ~ ANY)* ~ NEWLINE
+}
 
 eos    = _{ NEWLINE | ";" }
 script = _{ SOI ~ eos* ~ (stmt ~ eos+)* ~ stmt? ~ EOI }
 
+StmtBody = {
+    eos* ~ (stmt ~ eos+)+
+}
+
 stmt = _{
-    utiliserStmt
-  | declStmt
-  | assignStmt
-  | subStmt ~ ("si" ~ expr)?
+    UtiliserStmt
+  | DeclStmt
+  | AssignStmt
+  | subStmt ~ ("si" ~ Expr)?
 }
 
-utiliserStmt = { "utiliser" }
+UtiliserStmt = { "utiliser" }
 
-declStmt = {
-    (varKw ~ assignVar)
-  | (constKw ~ assignVar)
+DeclStmt = {
+    (Var ~ assignVar)
+  | (Const ~ assignVar)
 }
 
-constKw = { "const" }
-varKw   = { "var" }
+Const = { "const" }
+Var   = { "var" }
 
-assignStmt = { assignVar }
+AssignStmt = { assignVar }
 
 assignVar = _{
-    declIdent ~ assign ~ expr
+    declIdent ~ Assign ~ Expr
 }
 declIdent = _{
-    ident ~ (":" ~ typeExpr)?
+    Ident ~ (":" ~ TypeExpr)?
 }
 
 subStmt = _{
-    afficherStmt
-  | expr
+    AfficherStmt
+  | RetournerStmt
+  | Expr
 }
 
-afficherStmt = { "afficher" ~ expr }
+AfficherStmt  = { "afficher" ~ Expr }
+RetournerStmt = { "retourner" ~ (Expr ~ ",")* ~ Expr? }
 
-expr    =  { prefix? ~ primary ~ postfix? ~ (infix ~ prefix? ~ primary ~ postfix?)* }
-primary = _{ term }
+FnParams = {
+    "(" ~ (FnParam ~ ",")* ~ FnParam? ~ ")"
+}
 
-infix      = _{
+FnParam = {
+    (#p_name = Ident) ~ (":" ~ #p_type = TypeExpr)? ~ (Assign ~ #p_default = Expr)?
+}
+
+Expr    =  { prefix? ~ primary ~ postfix? ~ (infix ~ prefix? ~ primary ~ postfix?)* }
+primary = _{ Term }
+
+infix        = _{
     binOpInfix
-  | range
-  | rangeEq
+  | RangeEq
+  | Range
   | compInfix
+  | logicInfix
 }
-binOpInfix = _{
-    add
-  | sub
-  | mul
-  | div
-  | divInt
-  | pow
-  | modulo
-  | pipe
-  | ampersant
+binOpInfix   = _{
+    Add
+  | Sub
+  | Pow
+  | Mul
+  | DivInt
+  | Div
+  | Modulo
+  | Pipe
+  | Ampersant
+  | Xor
+  | BitwiseLeft
+  | BitwiseRight
 }
-compInfix  = _{
-    eq
-  | neq
-  | gt
-  | gte
-  | lt
-  | lte
+compInfix    = _{
+    Eq
+  | Neq
+  | In
+  | NotIn
+  | Gt
+  | Gte
+  | Lt
+  | Lte
 }
-add        =  { "+" }
-sub        =  { "-" }
-mul        =  { "*" }
-div        =  { "/" }
-divInt     =  { "//" }
-modulo     =  { "%" }
-range      =  { ".." }
-rangeEq    =  { "..=" }
-pow        =  { "^" | "**" }
-ampersant  =  { "&" }
-pipe       =  { "|" }
-eq         =  { "==" }
-neq        =  { "!=" }
-gt         =  { ">" }
-lt         =  { "<" }
-gte        =  { ">=" }
-lte        =  { "<=" }
-prefix     = _{ neg | not }
-neg        =  { "-" }
-not        =  { "pas" | "non" }
-postfix    = _{ "@" }
-
-assign = { "=" | "<-" }
-
-term = _{
-    lit
-  | faireBloc
-  | fnCall
-  | ident
-  | list
-  | dict
-  | "(" ~ "\n"* ~ expr ~ "\n"* ~ ")"
+logicInfix   = _{
+    And
+  | Or
+  | NonNull
 }
-
-faireBloc = { "faire" ~ eos ~ script ~ "fin" }
-
-list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
-dict = { "{" ~ (expr ~ ",")* ~ expr? ~ "}" }
-
-callable = _{
-    ident
-  | faireBloc
+Add          =  { "+" }
+Sub          =  { "-" }
+Mul          =  { "*" }
+Div          =  { "/" }
+DivInt       =  { "//" }
+Modulo       =  { "%" }
+BitwiseLeft  =  { "<<" }
+BitwiseRight =  { ">>" }
+Pow          =  { "^" | "**" }
+Ampersant    =  { "&" }
+Pipe         =  { "|" }
+Xor          =  { "xor" }
+Eq           =  { "==" }
+Neq          =  { "!=" }
+In           =  { "dans" }
+NotIn        =  { "pas" ~ In }
+Gt           =  { ">" }
+Lt           =  { "<" }
+Gte          =  { ">=" }
+Lte          =  { "<=" }
+And          =  { "et" }
+Or           =  { "ou" }
+NonNull      =  { "??" }
+prefix       = _{ Neg | Not | Pos }
+Neg          =  { "-" }
+Pos          =  { "+" }
+Not          =  { "pas" | "non" }
+postfix      = _{ Ternary }
+Range        =  { ".." ~ ((#end = primary) ~ "bond")? }
+RangeEq      =  { "..=" ~ ((#end = primary) ~ "bond")? }
+Ternary      =  {
+    "?" ~ (#then_expr = primary) ~ ":" ~ (#else_expr = primary)
 }
-
-fnCall = { callable ~ functionParams }
-
-functionParams = {
-    "(" ~ (expr ~ ",")* ~ expr? ~ ")"
+FnExpr       =  {
+    PUSH("fonction" | "fn") ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ #body = (":" ~ Expr ~ DROP | eos ~ StmtBody ~ "fin" ~ POP)
 }
 
-lit = {
-    bool
-  | integer
-  | decimal
-  | text
-  | null
+Assign = { "=" | "<-" }
+
+Term = {
+    Lit
+  | FnExpr
+  | FnCall
+  | FaireBloc
+  | Ident
+  | List
+  | Dict
+  | "(" ~ NEWLINE* ~ Expr ~ NEWLINE* ~ ")"
 }
 
-typeExpr    =  { typePrefix? ~ typeTerm ~ typePostfix? ~ (typeInfix ~ typePrefix? ~ typeTerm ~ typePostfix?)* }
-typeTerm    =  {
-    ident
-  | lit
+FaireBloc = { "faire" ~ eos+ ~ (!"fin" ~ stmt ~ eos+)* ~ "fin" }
+
+List = { "[" ~ (Expr ~ ",")* ~ Expr? ~ "]" }
+Dict = { "{" ~ (Expr ~ ",")* ~ Expr? ~ "}" }
+
+Callable = {
+    Ident
+  | "(" ~ NEWLINE* ~ Expr ~ NEWLINE* ~ ")"
 }
-typeInfix   = _{ pipe }
+
+FnCall = { Callable ~ FunctionArgs }
+
+FunctionArgs = {
+    "(" ~ (Expr ~ ",")* ~ Expr? ~ ")"
+}
+
+Lit = {
+    Bool
+  | Integer
+  | Decimal
+  | Text
+  | Null
+}
+
+TypeExpr    =  { typePrefix? ~ typeTerm ~ typePostfix? ~ (typeInfix ~ typePrefix? ~ typeTerm ~ typePostfix?)* }
+typeTerm    = _{
+    Ident
+  | Lit
+}
+typeInfix   = _{ Pipe }
 typePrefix  = _{ "@" }
 typePostfix = _{ "?" }
 
-bool    = @{ "vrai" | "faux" }
-text    = @{ PUSH("\"" | "'") ~ ("\\" ~ PEEK | !PEEK ~ ANY)* ~ POP }
-ident   = @{ LETTER ~ (LETTER | ASCII_DIGIT)* }
-integer = @{ "-"? ~ ASCII_DIGIT+ }
-decimal = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
-null    = @{ "nul" }
+Bool    = @{ "vrai" | "faux" }
+Text    = @{ PUSH("\"" | "'") ~ ("\\" ~ PEEK | !PEEK ~ ANY)* ~ POP }
+Ident   = @{ LETTER ~ (LETTER | ASCII_DIGIT)* }
+Integer = @{ "-"? ~ ASCII_DIGIT+ }
+Decimal = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+Null    = @{ "nul" }

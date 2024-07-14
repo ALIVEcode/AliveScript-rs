@@ -16,6 +16,7 @@ pub mod token;
 pub mod data;
 pub mod io;
 pub mod runner;
+pub mod utils;
 
 use as_obj::ASErreur;
 use ast::{Expr, Stmt};

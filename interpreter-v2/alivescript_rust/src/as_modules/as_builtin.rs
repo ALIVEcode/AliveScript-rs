@@ -3,7 +3,9 @@ use unindent::Unindent;
 use crate::{
     as_cast, as_fonction, as_mod,
     as_obj::{ASDict, ASErreurType, ASObj, ASPaire, ASType},
-    as_var, call_methode, union_of,
+    as_var, call_methode,
+    data::Data,
+    union_of,
 };
 
 as_mod! {
@@ -17,6 +19,12 @@ as_mod! {
     as_fonction! {
         afficherErr(msg: ASType::any()) -> ASType::Nul; {
             eprintln!("{}", msg);
+            Ok(Some(ASObj::ASNul))
+        }
+    },
+    as_fonction! {
+        afficher[runner](msg: ASType::any()) -> ASType::Nul; {
+            runner.send_data(Data::Afficher(msg.to_string()));
             Ok(Some(ASObj::ASNul))
         }
     },

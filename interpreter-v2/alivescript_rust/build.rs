@@ -17,5 +17,4 @@ fn main() {
 }
 
 #[cfg(feature = "no-ast")]
-fn main() {
-}
+fn main() {}

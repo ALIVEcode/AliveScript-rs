@@ -598,7 +598,8 @@ impl Visitor for Runner<'_> {
         self.env.pop_scope();
         if !self.should_early_exit() {
             if self.expr_results.last().is_none() {
-                self.push_value(ASObj::ASNul);
+                let rst = self.stmt_result.take().unwrap_or(ASObj::ASNul);
+                self.push_value(rst);
             }
         } else if !self.early_exit_matches(EarlyExit::Retourner) {
             panic!("Sortie d'une fonction autrement qu'avec `retourner`")
@@ -1071,6 +1072,7 @@ impl Visitor for Runner<'_> {
                     },
                     "Negate"
                 ),
+                Positive => value,
             };
 
             self.push_value(result);
