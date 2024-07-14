@@ -22,11 +22,13 @@ stmt = _{
 UtiliserStmt = { "utiliser" }
 
 SiStmt = {
-    "si" ~ (#cond = Expr) ~ "alors"? ~ eos+ ~ thenBr ~ sinonSiBr* ~ sinonBr? ~ "fin" ~ "si"
+    "si" ~ (#cond = Expr) ~ "alors"? ~ eos+ ~ thenBr ~ sinonSiBr* ~ sinonBr? ~ finSi
 }
 thenBr = {
     (!(sinonSiKw | "sinon") ~ stmt ~ eos+)*
 }
+
+finSi = @{ "fin" ~ WHITESPACE+ ~ "si" }
 
 sinonSiKw = @{ "sinon" ~ WHITESPACE+ ~ "si" }
 
