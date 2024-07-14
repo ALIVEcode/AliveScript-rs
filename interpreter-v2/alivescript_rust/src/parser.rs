@@ -161,7 +161,7 @@ fn parse_expr(pairs: Pairs<Rule>) -> Result<Box<Expr>, PestError<Rule>> {
                 }))
             }
             Rule::FaireBloc => Ok(Box::new(Expr::Faire(build_ast_stmts(
-                primary.into_inner()
+                primary.into_inner(),
             )?))),
             Rule::FnExpr => {
                 let inner = primary.into_inner();
@@ -426,6 +426,50 @@ pub fn build_ast_stmts(pairs: Pairs<Rule>) -> Result<Vec<Box<Stmt>>, PestError<R
                 Stmt::Assign {
                     var: AssignVar::Var { name, static_type },
                     val,
+                }
+            }
+            Rule::SiStmt => {
+                let inner = pair.into_inner();
+                Stmt::Si {
+                    cond: parse_expr(
+                        inner
+                            .clone()
+                            .find(|p| matches!(p.as_node_tag(), Some("cond")))
+                            .unwrap()
+                            .into_inner(),
+                    )?,
+                    then_br: build_ast_stmts(
+                        inner
+                            .clone()
+                            .find(|p| p.as_rule() == Rule::thenBr)
+                            .unwrap()
+                            .into_inner(),
+                    )?,
+                    elif_brs: inner
+                        .clone()
+                        .filter_map(|elif| {
+                            if elif.as_rule() != Rule::sinonSiBr {
+                                return None;
+                            };
+                            let inner_elif = elif.into_inner();
+                            let cond = parse_expr(
+                                inner_elif.find_first_tagged("cond").unwrap().into_inner(),
+                            );
+                            let body = build_ast_stmts(inner_elif.last().unwrap().into_inner());
+                            let Ok(cond) = cond else {
+                                return Some(Err(cond.err().unwrap()));
+                            };
+                            let Ok(body) = body else {
+                                return Some(Err(body.err().unwrap()));
+                            };
+                            Some(Ok((cond, body)))
+                        })
+                        .collect::<Result<_, _>>()?,
+                    else_br: inner
+                        .clone()
+                        .find(|p| p.as_rule() == Rule::sinonBr)
+                        .map(|br| build_ast_stmts(br.into_inner()))
+                        .invert()?,
                 }
             }
             Rule::RetournerStmt => Stmt::Retourner(

@@ -15,10 +15,26 @@ stmt = _{
     UtiliserStmt
   | DeclStmt
   | AssignStmt
+  | SiStmt
   | subStmt ~ ("si" ~ Expr)?
 }
 
 UtiliserStmt = { "utiliser" }
+
+SiStmt = {
+    "si" ~ (#cond = Expr) ~ "alors"? ~ eos+ ~ thenBr ~ sinonSiBr* ~ sinonBr? ~ "fin" ~ "si"
+}
+thenBr = {
+    (!(sinonSiKw | "sinon") ~ stmt ~ eos+)*
+}
+
+sinonSiKw = @{ "sinon" ~ WHITESPACE+ ~ "si" }
+
+sinonSiBr = {
+    sinonSiKw ~ (#cond = Expr) ~ "alors"? ~ eos ~ thenBr
+}
+
+sinonBr = { "sinon" ~ eos+ ~ (stmt ~ eos+)* }
 
 DeclStmt = {
     (Var ~ assignVar)
