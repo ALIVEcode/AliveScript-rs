@@ -68,7 +68,11 @@ pub fn run_script_from_file<'a, IO: InterpretorIO + 'a>(
     interpretor_io: &mut IO,
     script_file: String,
 ) {
+    let debug = script.starts_with("#debug!");
     let result_stmts = AlivescriptParser::parse(Rule::script, script);
+    if debug {
+        println!("{:#?}", result_stmts);
+    }
 
     match result_stmts {
         Ok(stmts) => {
@@ -77,7 +81,7 @@ pub fn run_script_from_file<'a, IO: InterpretorIO + 'a>(
             visitor.visit_body(&stmts);
         }
         Err(err) => interpretor_io.send(Data::Erreur {
-            texte: format!("ErreurSyntaxe: {}", err.to_string()),
+            texte: format!("ErreurSyntaxe: {}\n{:#?}", err.to_string(), err.parse_attempts()),
             ligne: 0,
         }),
     };

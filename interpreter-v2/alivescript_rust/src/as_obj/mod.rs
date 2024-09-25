@@ -69,6 +69,8 @@ pub enum ASObj {
     ASTypeObj(ASType),
 
     ASClasseInst(Rc<ASClasseInst>),
+
+    ASErreur(Box<ASErreur>),
 }
 
 impl ASObj {
@@ -299,6 +301,7 @@ impl Clone for ASObj {
             A::ASMethode(methode) => A::ASMethode(methode.clone()),
             A::ASTuple(_) => todo!(),
             A::ASTypeObj(t) => A::ASTypeObj(t.clone()),
+            A::ASErreur(e) => A::ASErreur(e.clone()),
         }
     }
 }

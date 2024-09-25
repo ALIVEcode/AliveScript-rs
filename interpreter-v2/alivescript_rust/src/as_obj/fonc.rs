@@ -18,6 +18,12 @@ pub struct ASFonc {
     env: ASEnv,
 }
 
+impl ASFonc {
+    pub fn is_anon(&self) -> bool {
+        self.name().is_some()
+    }
+}
+
 impl PartialEq for ASFonc {
     fn eq(&self, other: &Self) -> bool {
         ptr::eq(self, other)

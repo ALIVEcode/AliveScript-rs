@@ -21,8 +21,8 @@ use crate::{
 };
 // use crate::run_script_with_runner;
 
-#[cfg(feature = "py")]
-use crate::as_py::run_python_script;
+//#[cfg(feature = "py")]
+//use crate::as_py::run_python_script;
 
 #[cfg(not(feature = "py"))]
 fn run_python_script(script: String) -> Option<Rc<RefCell<ASScope>>> {
@@ -138,6 +138,7 @@ pub struct Runner<'a> {
     stmt_result: Option<ASObj>,
     current_file: Option<String>,
     used_files: Vec<String>,
+    capture_error: bool,
 }
 
 impl<'a> Runner<'a> {
@@ -151,6 +152,7 @@ impl<'a> Runner<'a> {
             stmt_result: None,
             current_file: None,
             used_files: vec![],
+            capture_error: false,
         };
         ASModuleBuiltin::Builtin.load_non_custom(&None, &Some(vec!["*".into()]), &mut new.env);
         ASType::load_builtin_types(&mut new.env);
@@ -167,6 +169,7 @@ impl<'a> Runner<'a> {
             stmt_result: None,
             current_file: Some(file.clone()),
             used_files: vec![file],
+            capture_error: false,
         };
         ASModuleBuiltin::Builtin.load_non_custom(&None, &Some(vec!["*".into()]), &mut new.env);
         ASType::load_builtin_types(&mut new.env);
@@ -223,7 +226,11 @@ impl<'a> Runner<'a> {
 
     fn throw_err(&mut self, err: ASErreurType) {
         let error = ASErreur::new(err, 0, self.current_file.clone());
-        self.send_data(error.into());
+        if !self.capture_error {
+            self.send_data(error.into());
+        } else {
+            self.expr_results.push(ASObj::ASErreur(Box::new(error)));
+        }
         self.early_exit = Some(EarlyExit::Erreur);
     }
 
@@ -589,8 +596,8 @@ impl Visitor for Runner<'_> {
         }
     }
 
-    fn visit_expr_faire(&mut self, expr: &Expr) {
-        let Expr::Faire(body) = expr else {
+    fn visit_expr_debut(&mut self, expr: &Expr) {
+        let Expr::Debut(body) = expr else {
             unreachable!()
         };
         self.env.push_new_scope(ASScope::new());
@@ -754,6 +761,28 @@ impl Visitor for Runner<'_> {
             };
 
             self.push_value(result);
+        }
+    }
+
+    fn visit_expr_essayer(&mut self, expr: &Expr) {
+        let Expr::Essayer(expr) = expr else {
+            unreachable!()
+        };
+
+        self.capture_error = true;
+        expr.accept(self);
+        self.capture_error = false;
+
+        if self.error_thrown() {
+            let error = self
+                .expr_results
+                .pop()
+                .expect("Une erreur a été lancée, mais essayer n'y a pas accès");
+            self.expr_results.clear();
+            self.push_value(ASObj::liste(vec![ASObj::new_as_nul(), error]));
+        } else {
+            let val = self.expr_results.pop().expect("Essayer valeur");
+            self.push_value(ASObj::liste(vec![val, ASObj::new_as_nul()]));
         }
     }
 

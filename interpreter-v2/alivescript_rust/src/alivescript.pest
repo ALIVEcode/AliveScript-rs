@@ -19,6 +19,16 @@ stmt = _{
   | subStmt ~ ("si" ~ Expr)?
 }
 
+subStmt = _{
+    AfficherStmt
+  | RetournerStmt
+  | Expr
+}
+
+CommandStmt = {
+    Ident ~ (Expr ~ ",")* ~ Expr
+}
+
 UtiliserStmt = { "utiliser" }
 
 SiStmt = {
@@ -52,13 +62,7 @@ assignVar = _{
     declIdent ~ Assign ~ Expr
 }
 declIdent = _{
-    Ident ~ (":" ~ TypeExpr)?
-}
-
-subStmt = _{
-    AfficherStmt
-  | RetournerStmt
-  | Expr
+    (Ident | IdentList) ~ (":" ~ TypeExpr)?
 }
 
 AfficherStmt  = { "afficher" ~ Expr }
@@ -72,8 +76,7 @@ FnParam = {
     (#p_name = Ident) ~ (":" ~ #p_type = TypeExpr)? ~ (Assign ~ #p_default = Expr)?
 }
 
-Expr    =  { prefix? ~ primary ~ postfix? ~ (infix ~ prefix? ~ primary ~ postfix?)* }
-primary = _{ Term }
+Expr = { prefix? ~ term ~ postfix? ~ (infix ~ prefix? ~ term ~ postfix?)* }
 
 infix        = _{
     binOpInfix
@@ -139,29 +142,33 @@ Neg          =  { "-" }
 Pos          =  { "+" }
 Not          =  { "pas" | "non" }
 postfix      = _{ Ternary }
-Range        =  { ".." ~ ((#end = primary) ~ "bond")? }
-RangeEq      =  { "..=" ~ ((#end = primary) ~ "bond")? }
+Range        =  { (".." | "..<") ~ ((#end = term) ~ "bond")? }
+RangeEq      =  { ("..=" | "jusqu'à" | "jusqu'a") ~ ((#end = term) ~ "bond")? }
 Ternary      =  {
-    "?" ~ (#then_expr = primary) ~ ":" ~ (#else_expr = primary)
-}
-FnExpr       =  {
-    PUSH("fonction" | "fn") ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ #body = (":" ~ Expr ~ DROP | eos ~ StmtBody ~ "fin" ~ POP)
+    "?" ~ (#then_expr = term) ~ ":" ~ (#else_expr = term)
 }
 
-Assign = { "=" | "<-" }
+Assign = @{ ":=" | "=" | "<-" | "←" }
 
-Term = {
+term = _{
     Lit
+  | EssayerExpr
   | FnExpr
   | FnCall
-  | FaireBloc
+  | DebutBloc
   | Ident
   | List
   | Dict
   | "(" ~ NEWLINE* ~ Expr ~ NEWLINE* ~ ")"
 }
 
-FaireBloc = { "faire" ~ eos+ ~ (!"fin" ~ stmt ~ eos+)* ~ "fin" }
+DebutBloc = { ("debut" | "début") ~ eos+ ~ (!"fin" ~ stmt ~ eos+)* ~ "fin" }
+
+FnExpr = {
+    PUSH("fonction" | "fn") ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ #body = (":" ~ Expr ~ DROP | eos ~ StmtBody ~ "fin" ~ POP)
+}
+
+EssayerExpr = { "essayer" ~ Expr }
 
 List = { "[" ~ (Expr ~ ",")* ~ Expr? ~ "]" }
 Dict = { "{" ~ (Expr ~ ",")* ~ Expr? ~ "}" }
@@ -194,9 +201,13 @@ typeInfix   = _{ Pipe }
 typePrefix  = _{ "@" }
 typePostfix = _{ "?" }
 
-Bool    = @{ "vrai" | "faux" }
-Text    = @{ PUSH("\"" | "'") ~ ("\\" ~ PEEK | !PEEK ~ ANY)* ~ POP }
-Ident   = @{ LETTER ~ (LETTER | ASCII_DIGIT)* }
-Integer = @{ "-"? ~ ASCII_DIGIT+ }
-Decimal = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
-Null    = @{ "nul" }
+Bool      = @{ "vrai" | "faux" }
+Text      = @{ PUSH("\"" | "'") ~ ("\\" ~ PEEK | !PEEK ~ ANY)* ~ POP }
+Ident     = @{ LETTER ~ (LETTER | ASCII_DIGIT)* }
+IdentList =  {
+    ("[" ~ (Ident ~ ",")* ~ Ident? ~ "]")
+  | ((Ident ~ ",")+ ~ Ident?)
+}
+Integer   = @{ "-"? ~ ASCII_DIGIT+ }
+Decimal   = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+Null      = @{ "nul" }

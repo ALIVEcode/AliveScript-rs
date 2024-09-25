@@ -24,7 +24,7 @@ pub enum Expr {
     /// Définition d'une fonction
     DefFn(DefFn),
 
-    Faire(Vec<Box<Stmt>>),
+    Debut(Vec<Box<Stmt>>),
 
     AccessProp {
         obj: Box<Expr>,
@@ -80,6 +80,9 @@ pub enum Expr {
         then_expr: Box<Expr>,
         else_expr: Box<Expr>,
     },
+
+    /// Essayer
+    Essayer(Box<Expr>),
 
     CallRust(CallRust),
 }
@@ -178,7 +181,8 @@ impl Visitable for Expr {
             E::Slice { .. } => visitor.visit_expr_slice(self),
             E::CallRust(..) => visitor.visit_expr_callrust(self),
             E::DefFn { .. } => visitor.visit_expr_deffn(self),
-            E::Faire(..) => visitor.visit_expr_faire(self),
+            E::Debut(..) => visitor.visit_expr_debut(self),
+            E::Essayer(..) => visitor.visit_expr_essayer(self),
         }
     }
 }

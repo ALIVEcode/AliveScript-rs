@@ -133,67 +133,75 @@ impl TryFrom<&Pair<'_, Rule>> for BinLogiccode {
     }
 }
 
-fn parse_expr(pairs: Pairs<Rule>) -> Result<Box<Expr>, PestError<Rule>> {
-    PRATT_EXPR_PARSER
-        .map_primary(|primary| match primary.as_rule() {
-            Rule::Term => parse_expr(primary.into_inner()),
-            Rule::List => Ok(Box::new(Expr::List(
-                primary
+fn parse_top_expr(primary: Pair<Rule>) -> Result<Box<Expr>, PestError<Rule>> {
+    match primary.as_rule() {
+        Rule::List => Ok(Box::new(Expr::List(
+            primary
+                .into_inner()
+                .map(|arg| parse_expr(arg.into_inner()))
+                .collect::<Result<Vec<_>, _>>()?,
+        ))),
+        Rule::Expr => parse_expr(primary.into_inner()),
+        Rule::Ident => Ok(Box::new(Expr::Ident(primary.as_str().to_string()))),
+        Rule::Lit => Ok(Expr::literal(parse_lit(
+            primary.into_inner().next().unwrap(),
+        )?)),
+        Rule::FnCall => {
+            let mut inner = primary.into_inner();
+            Ok(Box::new(Expr::FnCall {
+                func: parse_expr(inner.next().unwrap().into_inner())?,
+                args: inner
+                    .next()
+                    .unwrap()
                     .into_inner()
                     .map(|arg| parse_expr(arg.into_inner()))
                     .collect::<Result<Vec<_>, _>>()?,
-            ))),
-            Rule::Expr => parse_expr(primary.into_inner()),
-            Rule::Ident => Ok(Box::new(Expr::Ident(primary.as_str().to_string()))),
-            Rule::Lit => Ok(Expr::literal(parse_lit(
-                primary.into_inner().next().unwrap(),
-            )?)),
-            Rule::FnCall => {
-                let mut inner = primary.into_inner();
-                Ok(Box::new(Expr::FnCall {
-                    func: parse_expr(inner.next().unwrap().into_inner())?,
-                    args: inner
-                        .next()
-                        .unwrap()
-                        .into_inner()
-                        .map(|arg| parse_expr(arg.into_inner()))
-                        .collect::<Result<Vec<_>, _>>()?,
-                }))
-            }
-            Rule::FaireBloc => Ok(Box::new(Expr::Faire(build_ast_stmts(
-                primary.into_inner(),
-            )?))),
-            Rule::FnExpr => {
-                let inner = primary.into_inner();
-                Ok(Box::new(Expr::DefFn(DefFn::new(
-                    None,
-                    None,
-                    parse_fn_params(inner.find_first_tagged("params").unwrap().into_inner())?,
-                    inner
-                        .find_first_tagged("return_type")
-                        .map(|te| parse_type(te.into_inner()))
-                        .invert()?,
-                    inner
-                        .find_first_tagged("body")
-                        .map(|body| match body.as_rule() {
-                            Rule::Expr => Ok(vec![Box::new(Stmt::Retourner(vec![parse_expr(
-                                body.into_inner(),
-                            )?]))]),
-                            Rule::StmtBody => build_ast_stmts(body.into_inner()),
-                            _ => unreachable!(),
-                        })
-                        .invert()?
-                        .unwrap(),
-                ))))
-            }
-            rule => Err(PestError::new_from_span(
-                PestErrorVariant::ParsingError {
-                    positives: vec![Rule::Term],
-                    negatives: vec![rule],
-                },
-                primary.as_span(),
-            )),
-        })
+            }))
+        }
+        Rule::DebutBloc => Ok(Box::new(Expr::Debut(build_ast_stmts(
+            primary.into_inner(),
+        )?))),
+
+        Rule::EssayerExpr => {
+            Ok(Box::new(Expr::Essayer(parse_expr(primary.into_inner())?)))
+        }
+
+        Rule::FnExpr => {
+            let inner = primary.into_inner();
+            Ok(Box::new(Expr::DefFn(DefFn::new(
+                None,
+                None,
+                parse_fn_params(inner.find_first_tagged("params").unwrap().into_inner())?,
+                inner
+                    .find_first_tagged("return_type")
+                    .map(|te| parse_type(te.into_inner()))
+                    .invert()?,
+                inner
+                    .find_first_tagged("body")
+                    .map(|body| match body.as_rule() {
+                        Rule::Expr => Ok(vec![Box::new(Stmt::Retourner(vec![parse_expr(
+                            body.into_inner(),
+                        )?]))]),
+                        Rule::StmtBody => build_ast_stmts(body.into_inner()),
+                        _ => unreachable!(),
+                    })
+                    .invert()?
+                    .unwrap(),
+            ))))
+        }
+        rule => Err(PestError::new_from_span(
+            PestErrorVariant::ParsingError {
+                positives: vec![Rule::term],
+                negatives: vec![rule],
+            },
+            primary.as_span(),
+        )),
+    }
+}
+
+fn parse_expr(pairs: Pairs<Rule>) -> Result<Box<Expr>, PestError<Rule>> {
+    PRATT_EXPR_PARSER
+        .map_primary(parse_top_expr)
         .map_prefix(|prefix, rhs| {
             let rhs = rhs?;
 
@@ -428,6 +436,18 @@ pub fn build_ast_stmts(pairs: Pairs<Rule>) -> Result<Vec<Box<Stmt>>, PestError<R
                     val,
                 }
             }
+            Rule::CommandStmt => {
+                let mut inner = pair.into_inner();
+                Stmt::Expr(Box::new(Expr::FnCall {
+                    func: parse_top_expr(inner.next().unwrap())?,
+                    args: inner
+                        .next()
+                        .unwrap()
+                        .into_inner()
+                        .map(|arg| parse_expr(arg.into_inner()))
+                        .collect::<Result<Vec<_>, _>>()?,
+                }))
+            }
             Rule::SiStmt => {
                 let inner = pair.into_inner();
                 Stmt::Si {
@@ -478,7 +498,6 @@ pub fn build_ast_stmts(pairs: Pairs<Rule>) -> Result<Vec<Box<Stmt>>, PestError<R
                     .collect::<Result<Vec<_>, _>>()?,
             ),
             Rule::Expr => Stmt::Expr(parse_expr(pair.into_inner())?),
-            Rule::Term => Stmt::Expr(parse_expr(pair.into_inner())?),
             rule => Err(PestError::new_from_span(
                 PestErrorVariant::ParsingError {
                     positives: vec![Rule::stmt],
