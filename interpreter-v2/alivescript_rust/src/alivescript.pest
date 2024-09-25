@@ -58,11 +58,18 @@ Var   = { "var" }
 
 AssignStmt = { assignVar }
 
-assignVar = _{
-    declIdent ~ Assign ~ Expr
+assignVar      = _{
+    (declIdent | DeclIdentList | MultiDeclIdent) ~ Assign ~ Expr
 }
-declIdent = _{
-    (Ident | IdentList) ~ (":" ~ TypeExpr)?
+declIdent      = _{
+    Ident ~ (":" ~ TypeExpr)?
+}
+MultiDeclIdent =  {
+    ((declIdent | DeclIdentList) ~ "," ~ ((declIdent | DeclIdentList) ~ ",")* ~ (declIdent | DeclIdentList)?)
+}
+
+DeclIdentList = {
+    ("[" ~ ((declIdent | DeclIdentList) ~ ",")* ~ (declIdent | DeclIdentList)? ~ "]")
 }
 
 AfficherStmt  = { "afficher" ~ Expr }
@@ -201,13 +208,9 @@ typeInfix   = _{ Pipe }
 typePrefix  = _{ "@" }
 typePostfix = _{ "?" }
 
-Bool      = @{ "vrai" | "faux" }
-Text      = @{ PUSH("\"" | "'") ~ ("\\" ~ PEEK | !PEEK ~ ANY)* ~ POP }
-Ident     = @{ LETTER ~ (LETTER | ASCII_DIGIT)* }
-IdentList =  {
-    ("[" ~ (Ident ~ ",")* ~ Ident? ~ "]")
-  | ((Ident ~ ",")+ ~ Ident?)
-}
-Integer   = @{ "-"? ~ ASCII_DIGIT+ }
-Decimal   = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
-Null      = @{ "nul" }
+Bool    = @{ "vrai" | "faux" }
+Text    = @{ PUSH("\"" | "'") ~ ("\\" ~ PEEK | !PEEK ~ ANY)* ~ POP }
+Ident   = @{ LETTER ~ (LETTER | ASCII_DIGIT)* }
+Integer = @{ "-"? ~ ASCII_DIGIT+ }
+Decimal = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+Null    = @{ "nul" }

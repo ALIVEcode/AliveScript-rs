@@ -162,9 +162,7 @@ fn parse_top_expr(primary: Pair<Rule>) -> Result<Box<Expr>, PestError<Rule>> {
             primary.into_inner(),
         )?))),
 
-        Rule::EssayerExpr => {
-            Ok(Box::new(Expr::Essayer(parse_expr(primary.into_inner())?)))
-        }
+        Rule::EssayerExpr => Ok(Box::new(Expr::Essayer(parse_expr(primary.into_inner())?))),
 
         Rule::FnExpr => {
             let inner = primary.into_inner();
@@ -334,11 +332,56 @@ fn parse_fn_params(pairs: Pairs<Rule>) -> Result<Vec<FnParam>, PestError<Rule>> 
         .collect::<Result<Vec<_>, _>>()?)
 }
 
+fn parse_assign_vars(pairs: Pairs<Rule>, is_const: bool) -> Result<Vec<DeclVar>, PestError<Rule>> {
+    let mut vars = vec![];
+
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::TypeExpr => {
+                let DeclVar::Var {
+                    name,
+                    static_type,
+                    is_const,
+                } = vars.pop().unwrap()
+                else {
+                    return Err(PestError::new_from_span(
+                        PestErrorVariant::CustomError {
+                            message: "Only vars can be typed".into(),
+                        },
+                        pair.as_span(),
+                    ));
+                };
+                let static_type = Some(parse_type(pair.into_inner())?);
+                vars.push(DeclVar::Var {
+                    name,
+                    static_type,
+                    is_const,
+                });
+            }
+            Rule::Ident => {
+                vars.push(DeclVar::Var {
+                    name: pair.as_str().to_string(),
+                    static_type: None,
+                    is_const,
+                });
+            }
+            Rule::DeclIdentList => {
+                let var_list = parse_assign_vars(pair.into_inner(), is_const)?;
+                vars.push(DeclVar::ListUnpack(var_list));
+            }
+            _ => panic!("{:#?}", pair),
+        }
+    }
+
+    Ok(vars)
+}
+
 fn parse_assign(pairs: Pairs<Rule>) -> Result<(DeclVar, Box<Expr>), PestError<Rule>> {
     let mut name = None;
     let mut static_type = None;
     let mut is_const = false;
     let mut expr = None;
+    let mut var_list = None;
 
     for pair in pairs {
         match pair.as_rule() {
@@ -347,18 +390,25 @@ fn parse_assign(pairs: Pairs<Rule>) -> Result<(DeclVar, Box<Expr>), PestError<Ru
             Rule::Expr => expr = Some(parse_expr(pair.into_inner())?),
             Rule::TypeExpr => static_type = Some(parse_type(pair.into_inner())?),
             Rule::Ident => name = Some(pair.as_str().to_string()),
+            Rule::MultiDeclIdent => {
+                var_list = Some(parse_assign_vars(pair.into_inner(), is_const)?)
+            }
+            Rule::DeclIdentList => var_list = Some(parse_assign_vars(pair.into_inner(), is_const)?),
             _ => panic!("{:#?}", pair),
         }
     }
 
-    Ok((
-        DeclVar::Var {
-            name: name.unwrap(),
-            static_type,
-            is_const,
-        },
-        expr.unwrap(),
-    ))
+    match var_list {
+        Some(v) => Ok((DeclVar::ListUnpack(v), expr.unwrap())),
+        None => Ok((
+            DeclVar::Var {
+                name: name.unwrap(),
+                static_type,
+                is_const,
+            },
+            expr.unwrap(),
+        )),
+    }
 }
 
 fn parse_lit(pair: Pair<Rule>) -> Result<ASObj, PestError<Rule>> {
@@ -419,23 +469,23 @@ pub fn build_ast_stmts(pairs: Pairs<Rule>) -> Result<Vec<Box<Stmt>>, PestError<R
                 let (var, val) = parse_assign(pair.into_inner())?;
                 Stmt::Decl { var, val }
             }
-            Rule::AssignStmt => {
-                let (
+            Rule::AssignStmt => match parse_assign(pair.into_inner())? {
+                (
                     DeclVar::Var {
                         name,
                         static_type,
                         is_const,
                     },
                     val,
-                ) = parse_assign(pair.into_inner())?
-                else {
-                    unreachable!();
-                };
-                Stmt::Assign {
+                ) => Stmt::Assign {
                     var: AssignVar::Var { name, static_type },
                     val,
-                }
-            }
+                },
+                (decl @ DeclVar::ListUnpack(..), val) => Stmt::Assign {
+                    var: AssignVar::from(decl),
+                    val,
+                },
+            },
             Rule::CommandStmt => {
                 let mut inner = pair.into_inner();
                 Stmt::Expr(Box::new(Expr::FnCall {

@@ -196,6 +196,21 @@ pub enum AssignVar {
     },
 }
 
+impl From<DeclVar> for AssignVar {
+    fn from(value: DeclVar) -> Self {
+        match value {
+            DeclVar::Var {
+                name,
+                static_type,
+                is_const,
+            } => Self::Var { name, static_type },
+            DeclVar::ListUnpack(vars) => {
+                AssignVar::ListUnpack(vars.into_iter().map(|var| Self::from(var)).collect())
+            }
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum LireVar {
     Decl(DeclVar),
