@@ -36,6 +36,8 @@ pub enum ASType {
 
     Type,
 
+    Erreur,
+
     Lit(Box<ASObj>),
 }
 
@@ -113,6 +115,7 @@ impl ASType {
             T::Objet(_) => todo!(),
             T::Union(_) => todo!(),
             T::Array(_) => todo!(),
+            T::Erreur => todo!(),
             T::Lit(o) => Ok(*o.clone()),
         }
     }
@@ -312,6 +315,7 @@ impl FromStr for ASType {
             "classe" => Ok(Self::Classe),
             "module" => Ok(Self::Module),
             "instance" => Ok(Self::ClasseInst),
+            "erreur" => Ok(Self::Erreur),
             "objet" => Ok(Self::union(vec![
                 Self::ClasseInst,
                 Self::Dict,
@@ -365,6 +369,8 @@ impl Display for ASType {
             ),
 
             Type => "type".into(),
+
+            Erreur => "Erreur".into(),
 
             Lit(o) => o.repr(),
         };

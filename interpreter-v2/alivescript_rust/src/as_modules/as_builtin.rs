@@ -11,7 +11,19 @@ use crate::{
 as_mod! {
     BUILTIN_MOD,
     as_fonction! {
-        erreur(msg: ASType::Texte) -> ASType::Nul; {
+        lancer(err: ASType::Erreur) -> ASType::Nul; {
+            as_cast!(ASObj::ASErreur(ref err) = err);
+            Err(err.err_type().clone())
+        }
+    },
+    as_fonction! {
+        Erreur(nom: ASType::Texte, msg: ASType::Texte => ASObj::texte("")) -> ASType::Erreur; {
+            as_cast!(ASObj::ASTexte(ref msg) = msg);
+            Err(ASErreurType::new_erreur(None, msg.clone()))
+        }
+    },
+    as_fonction! {
+        typeErr(msg: ASType::Erreur) -> ASType::Texte; {
             as_cast!(ASObj::ASTexte(ref msg) = msg);
             Err(ASErreurType::new_erreur(None, msg.clone()))
         }

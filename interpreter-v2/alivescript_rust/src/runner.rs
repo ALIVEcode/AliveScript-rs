@@ -628,65 +628,7 @@ impl Visitor for Runner<'_> {
                 self.push_value(result.unwrap());
                 return;
             }
-            let result = match &obj_val {
-                ASObj::ASModule { name, alias, env } => {
-                    let env_borrow = env.borrow();
-                    let obj = env_borrow.get(prop);
-                    match obj {
-                        Some(obj) => obj.1.clone(),
-                        None => throw_err!(
-                            self,
-                            ASErreurType::new_erreur_access_propriete(
-                                obj_val.clone(),
-                                prop.clone()
-                            )
-                        ),
-                    }
-                }
-                ASObj::ASClasse(classe) => {
-                    let env_borrow = classe.static_env().borrow();
-                    let Some(value) = env_borrow.get_value(prop) else {
-                        throw_err!(
-                            self,
-                            ASErreurType::new_erreur_access_propriete(
-                                obj_val.clone(),
-                                prop.clone()
-                            )
-                        );
-                    };
-                    value.clone()
-                }
-                ASObj::ASClasseInst(inst) => {
-                    let env_borrow = inst.env().borrow();
-                    let Some(value) = env_borrow.get_value(prop) else {
-                        throw_err!(
-                            self,
-                            ASErreurType::new_erreur_access_propriete(
-                                obj_val.clone(),
-                                prop.clone()
-                            )
-                        );
-                    };
-                    value.clone()
-                }
-                ASObj::ASDict(d) => {
-                    let d = d.borrow();
-                    let Some(value) = d.get_val(&ASObj::ASTexte(prop.clone())) else {
-                        throw_err!(
-                            self,
-                            ASErreurType::new_erreur_access_propriete(
-                                obj_val.clone(),
-                                prop.clone()
-                            )
-                        );
-                    };
-                    value.clone()
-                }
-                obj => throw_err!(
-                    self,
-                    ASErreurType::new_erreur_access_propriete(obj.clone(), prop.clone())
-                ),
-            };
+            let result = throw_err!(?, self, obj_val.get_prop(prop));
             self.push_value(result);
         }
     }

@@ -211,6 +211,72 @@ impl ASObj {
         }
     }
 
+    pub fn get_prop(&self, prop: &String) -> Result<ASObj, ASErreurType> {
+        let result = match self {
+            ASObj::ASModule { name, alias, env } => {
+                let env_borrow = env.borrow();
+                let obj = env_borrow.get(prop);
+                match obj {
+                    Some(obj) => obj.1.clone(),
+                    None => {
+                        return Err(ASErreurType::new_erreur_access_propriete(
+                            self.clone(),
+                            prop.clone(),
+                        ))
+                    }
+                }
+            }
+            ASObj::ASClasse(classe) => {
+                let env_borrow = classe.static_env().borrow();
+                let Some(value) = env_borrow.get_value(prop) else {
+                    return Err(ASErreurType::new_erreur_access_propriete(
+                        self.clone(),
+                        prop.clone(),
+                    ));
+                };
+                value.clone()
+            }
+            ASObj::ASClasseInst(inst) => {
+                let env_borrow = inst.env().borrow();
+                let Some(value) = env_borrow.get_value(prop) else {
+                    return Err(ASErreurType::new_erreur_access_propriete(
+                        self.clone(),
+                        prop.clone(),
+                    ));
+                };
+                value.clone()
+            }
+            ASObj::ASDict(d) => {
+                let d = d.borrow();
+                let Some(value) = d.get_val(&ASObj::ASTexte(prop.clone())) else {
+                    return Err(ASErreurType::new_erreur_access_propriete(
+                        self.clone(),
+                        prop.clone(),
+                    ));
+                };
+                value.clone()
+            }
+            ASObj::ASErreur(err) => {
+                if prop == "nom" {
+                    ASObj::texte(err.err_type().error_name().to_string())
+                } else {
+                    return Err(ASErreurType::new_erreur_access_propriete(
+                        self.clone(),
+                        prop.clone(),
+                    ));
+                }
+            }
+            obj => {
+                return Err(ASErreurType::new_erreur_access_propriete(
+                    obj.clone(),
+                    prop.clone(),
+                ));
+            }
+        };
+
+        Ok(result)
+    }
+
     pub fn repr(&self) -> String {
         self.recursive_repr(None)
     }

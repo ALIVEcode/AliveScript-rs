@@ -16,6 +16,7 @@ stmt = _{
   | DeclStmt
   | AssignStmt
   | SiStmt
+  | PourStmt
   | subStmt ~ ("si" ~ Expr)?
 }
 
@@ -47,6 +48,17 @@ sinonSiBr = {
 }
 
 sinonBr = { "sinon" ~ eos+ ~ (stmt ~ eos+)* }
+
+PourStmt = {
+    "pour" ~ (#vars = declVar) ~ "dans" ~ (#iter = Expr) ~ "faire"? ~ eos+ ~ StmtBody ~ finPour
+}
+
+finPour = @{ "fin" ~ WHITESPACE+ ~ "pour" }
+
+declVar = {
+    (Var? ~ (MultiDeclIdent | declIdent | DeclIdentList))
+  | (Const ~ (MultiDeclIdent | declIdent | DeclIdentList))
+}
 
 DeclStmt = {
     (Var ~ assignVar)
@@ -149,11 +161,13 @@ Neg          =  { "-" }
 Pos          =  { "+" }
 Not          =  { "pas" | "non" }
 postfix      = _{ Ternary }
-Range        =  { (".." | "..<") ~ ((#end = term) ~ "bond")? }
-RangeEq      =  { ("..=" | "jusqu'à" | "jusqu'a") ~ ((#end = term) ~ "bond")? }
+Range        =  { (".." | "..<") ~ ((#end = Expr) ~ "bond")? }
+RangeEq      =  { ("..=" | "jusqu'à" | "jusqu'a") ~ ((#end = Expr) ~ "bond")? }
 Ternary      =  {
-    "?" ~ (#then_expr = term) ~ ":" ~ (#else_expr = term)
+    "?" ~ TernaryThen ~ ":" ~ TernaryElse
 }
+TernaryThen = { Expr }
+TernaryElse = { Expr }
 
 Assign = @{ ":=" | "=" | "<-" | "←" }
 

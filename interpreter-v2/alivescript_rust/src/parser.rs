@@ -266,10 +266,20 @@ fn parse_expr(pairs: Pairs<Rule>) -> Result<Box<Expr>, PestError<Rule>> {
             match postfix.as_rule() {
                 Rule::Ternary => {
                     let inner = postfix.into_inner();
-                    let then_expr =
-                        parse_expr(inner.find_first_tagged("then_expr").unwrap().into_inner())?; // skip the "?"
-                    let else_expr =
-                        parse_expr(inner.find_first_tagged("else_expr").unwrap().into_inner())?; // skip the ":"
+                    let then_expr = parse_expr(
+                        inner
+                            .clone()
+                            .find(|p| p.as_rule() == Rule::TernaryThen)
+                            .unwrap()
+                            .into_inner(),
+                    )?; // skip the "?"
+                    let else_expr = parse_expr(
+                        inner
+                            .clone()
+                            .find(|p| p.as_rule() == Rule::TernaryElse)
+                            .unwrap()
+                            .into_inner(),
+                    )?; // skip the ":"
                     Ok(Box::new(Expr::Ternary {
                         cond: lhs,
                         then_expr,
@@ -332,11 +342,17 @@ fn parse_fn_params(pairs: Pairs<Rule>) -> Result<Vec<FnParam>, PestError<Rule>> 
         .collect::<Result<Vec<_>, _>>()?)
 }
 
-fn parse_assign_vars(pairs: Pairs<Rule>, is_const: bool) -> Result<Vec<DeclVar>, PestError<Rule>> {
+fn parse_assign_vars(
+    pairs: Pairs<Rule>,
+    is_const: Option<bool>,
+) -> Result<DeclVar, PestError<Rule>> {
     let mut vars = vec![];
+    let mut is_const = is_const.unwrap_or(false);
 
     for pair in pairs {
         match pair.as_rule() {
+            Rule::Const => is_const = true,
+            Rule::Var | Rule::Assign => {}
             Rule::TypeExpr => {
                 let DeclVar::Var {
                     name,
@@ -365,15 +381,21 @@ fn parse_assign_vars(pairs: Pairs<Rule>, is_const: bool) -> Result<Vec<DeclVar>,
                     is_const,
                 });
             }
+            Rule::MultiDeclIdent => {
+                vars.push(parse_assign_vars(pair.into_inner(), Some(is_const))?);
+            }
             Rule::DeclIdentList => {
-                let var_list = parse_assign_vars(pair.into_inner(), is_const)?;
-                vars.push(DeclVar::ListUnpack(var_list));
+                vars.push(parse_assign_vars(pair.into_inner(), Some(is_const))?);
             }
             _ => panic!("{:#?}", pair),
         }
     }
 
-    Ok(vars)
+    if vars.len() == 1 {
+        Ok(vars[0].clone())
+    } else {
+        Ok(DeclVar::ListUnpack(vars))
+    }
 }
 
 fn parse_assign(pairs: Pairs<Rule>) -> Result<(DeclVar, Box<Expr>), PestError<Rule>> {
@@ -391,15 +413,17 @@ fn parse_assign(pairs: Pairs<Rule>) -> Result<(DeclVar, Box<Expr>), PestError<Ru
             Rule::TypeExpr => static_type = Some(parse_type(pair.into_inner())?),
             Rule::Ident => name = Some(pair.as_str().to_string()),
             Rule::MultiDeclIdent => {
-                var_list = Some(parse_assign_vars(pair.into_inner(), is_const)?)
+                var_list = Some(parse_assign_vars(pair.into_inner(), Some(is_const))?)
             }
-            Rule::DeclIdentList => var_list = Some(parse_assign_vars(pair.into_inner(), is_const)?),
+            Rule::DeclIdentList => {
+                var_list = Some(parse_assign_vars(pair.into_inner(), Some(is_const))?)
+            }
             _ => panic!("{:#?}", pair),
         }
     }
 
     match var_list {
-        Some(v) => Ok((DeclVar::ListUnpack(v), expr.unwrap())),
+        Some(v) => Ok((v, expr.unwrap())),
         None => Ok((
             DeclVar::Var {
                 name: name.unwrap(),
@@ -540,6 +564,32 @@ pub fn build_ast_stmts(pairs: Pairs<Rule>) -> Result<Vec<Box<Stmt>>, PestError<R
                         .find(|p| p.as_rule() == Rule::sinonBr)
                         .map(|br| build_ast_stmts(br.into_inner()))
                         .invert()?,
+                }
+            }
+            Rule::PourStmt => {
+                let inner = pair.into_inner();
+                Stmt::Pour {
+                    var: parse_assign_vars(
+                        inner
+                            .clone()
+                            .find_first_tagged("vars")
+                            .unwrap()
+                            .into_inner(),
+                        None,
+                    )?,
+                    iterable: parse_expr(
+                        inner
+                            .clone()
+                            .find_first_tagged("iter")
+                            .unwrap()
+                            .into_inner(),
+                    )?,
+                    body: inner
+                        .clone()
+                        .find(|p| p.as_rule() == Rule::StmtBody)
+                        .map(|body| build_ast_stmts(body.into_inner()))
+                        .invert()?
+                        .unwrap_or_default(),
                 }
             }
             Rule::RetournerStmt => Stmt::Retourner(
