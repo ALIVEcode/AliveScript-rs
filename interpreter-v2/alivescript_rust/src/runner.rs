@@ -780,6 +780,7 @@ impl Visitor for Runner<'_> {
                 .expect("Une erreur a été lancée, mais essayer n'y a pas accès");
             self.expr_results.clear();
             self.push_value(ASObj::liste(vec![ASObj::new_as_nul(), error]));
+            self.early_exit = None;
         } else {
             let val = self.expr_results.pop().expect("Essayer valeur");
             self.push_value(ASObj::liste(vec![val, ASObj::new_as_nul()]));

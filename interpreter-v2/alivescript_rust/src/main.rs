@@ -5,7 +5,6 @@ use std::{cell::RefCell, env, io::Write, rc::Rc};
 
 use alivescript_rust::{
     data::{Data, Response},
-    get_err_line,
     io::InterpretorIO,
     run_script_from_file, run_script_with_runner,
 };
@@ -99,7 +98,7 @@ fn main() -> std::io::Result<()> {
     let mut runner = alivescript_rust::runner::Runner::new(&mut io);
     loop {
         write!(console.borrow_mut(), "> ")?;
-        let mut in_block = false;
+        let in_block = false;
         let mut body = String::new();
         loop {
             let line = console.borrow_mut().read_line()?;

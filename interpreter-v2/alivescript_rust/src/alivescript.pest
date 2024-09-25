@@ -59,7 +59,7 @@ Var   = { "var" }
 AssignStmt = { assignVar }
 
 assignVar      = _{
-    (declIdent | DeclIdentList | MultiDeclIdent) ~ Assign ~ Expr
+    (MultiDeclIdent | declIdent | DeclIdentList) ~ Assign ~ Expr
 }
 declIdent      = _{
     Ident ~ (":" ~ TypeExpr)?

@@ -230,6 +230,12 @@ pub struct ASErreur {
     file: Option<String>,
 }
 
+impl ASErreur {
+    pub fn err_type(&self) -> &ASErreurType {
+        &self.err_type
+    }
+}
+
 impl Into<Data> for ASErreur {
     fn into(self) -> Data {
         Data::Erreur {

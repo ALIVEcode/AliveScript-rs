@@ -568,6 +568,7 @@ impl Display for ASObj {
             ),
             ASNoValue => String::from("<pas-de-valeur>"),
             ASTypeObj(t) => t.to_string(),
+            ASErreur(e) => e.err_type().to_string(),
             _ => String::from("ASObj sans to_string"),
         };
         write!(f, "{}", to_string)
