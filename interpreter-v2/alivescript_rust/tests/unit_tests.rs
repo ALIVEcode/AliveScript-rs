@@ -1,8 +1,11 @@
 mod common;
 
-use alivescript_rust::data::Data;
 use common::run_test_file;
 
+#[test]
+fn entier() {
+    run_test_file("tests/data/t_entier.as", &vec![]);
+}
 
 // #[test]
 // fn entiers() {

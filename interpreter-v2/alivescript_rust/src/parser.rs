@@ -142,6 +142,14 @@ fn parse_top_expr(primary: Pair<Rule>) -> Result<Box<Expr>, PestError<Rule>> {
                 .collect::<Result<Vec<_>, _>>()?,
         ))),
         Rule::Expr => parse_expr(primary.into_inner()),
+        Rule::ListExpr => {
+            Ok(Box::new(Expr::List(
+                primary
+                    .into_inner()
+                    .map(|expr| parse_expr(expr.into_inner()))
+                    .collect::<Result<_, _>>()?,
+            )))
+        }
         Rule::Ident => Ok(Box::new(Expr::Ident(primary.as_str().to_string()))),
         Rule::Lit => Ok(Expr::literal(parse_lit(
             primary.into_inner().next().unwrap(),
@@ -264,6 +272,13 @@ fn parse_expr(pairs: Pairs<Rule>) -> Result<Box<Expr>, PestError<Rule>> {
             let lhs = lhs?;
 
             match postfix.as_rule() {
+                Rule::AccessProp => {
+                    let mut inner = postfix.into_inner();
+                    Ok(Box::new(Expr::AccessProp {
+                        obj: lhs,
+                        prop: inner.next().unwrap().as_str().to_string(),
+                    }))
+                }
                 Rule::Ternary => {
                     let inner = postfix.into_inner();
                     let then_expr = parse_expr(
@@ -489,6 +504,29 @@ pub fn build_ast_stmts(pairs: Pairs<Rule>) -> Result<Vec<Box<Stmt>>, PestError<R
         };
         stmts.push(Box::new(match pair.as_rule() {
             Rule::AfficherStmt => Stmt::Afficher(vec![parse_expr(pair.into_inner())?]),
+            Rule::UtiliserStmt => {
+                let inner = pair.into_inner();
+                let module_name = inner.clone().next().unwrap();
+                let alias = inner
+                    .clone()
+                    .find(|node| node.as_rule() == Rule::ModuleAlias)
+                    .map(|alias| alias.as_str().to_string());
+                let vars = inner
+                    .clone()
+                    .find(|node| node.as_rule() == Rule::UtiliserMembers)
+                    .map(|node| {
+                        node.into_inner()
+                            .find_tagged("member")
+                            .map(|node| node.as_str().to_string())
+                            .collect::<Vec<String>>()
+                    });
+                Stmt::Utiliser {
+                    module: module_name.as_str().to_string(),
+                    alias,
+                    vars,
+                    is_path: module_name.as_node_tag().is_some_and(|node| node == "path"),
+                }
+            }
             Rule::DeclStmt => {
                 let (var, val) = parse_assign(pair.into_inner())?;
                 Stmt::Decl { var, val }
@@ -591,6 +629,12 @@ pub fn build_ast_stmts(pairs: Pairs<Rule>) -> Result<Vec<Box<Stmt>>, PestError<R
                         .invert()?
                         .unwrap_or_default(),
                 }
+            }
+            Rule::ContinuerStmt => {
+                Stmt::Continuer
+            }
+            Rule::SortirStmt => {
+                Stmt::Sortir
             }
             Rule::RetournerStmt => Stmt::Retourner(
                 pair.into_inner()

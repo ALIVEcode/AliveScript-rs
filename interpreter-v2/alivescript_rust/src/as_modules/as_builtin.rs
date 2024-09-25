@@ -115,7 +115,7 @@ as_mod! {
                 ASObj::ASEntier(_) => obj.clone(),
                 ASObj::ASDecimal(d) => ASObj::ASEntier(d as i64),
                 ASObj::ASTexte(ref s) => {
-                    ASObj::ASEntier(i64::from_str_radix(s, base as u32).map_err(|_| {
+                    ASObj::ASEntier(i64::from_str_radix(s.trim(), base as u32).map_err(|_| {
                         ASErreurType::new_erreur_valeur(Some(format!("\"{}\" ne peut pas se faire convertir en entier", &obj)), obj.clone())
                     })?)
                 }

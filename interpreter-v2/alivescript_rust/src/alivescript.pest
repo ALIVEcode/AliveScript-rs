@@ -23,6 +23,8 @@ stmt = _{
 subStmt = _{
     AfficherStmt
   | RetournerStmt
+  | ContinuerStmt
+  | SortirStmt
   | Expr
 }
 
@@ -30,7 +32,9 @@ CommandStmt = {
     Ident ~ (Expr ~ ",")* ~ Expr
 }
 
-UtiliserStmt = { "utiliser" }
+UtiliserStmt    = { "utiliser" ~ ((#module = Ident | #path = Text)) ~ ModuleAlias? ~ UtiliserMembers? }
+ModuleAlias     = { "alias" ~ Ident | Ident ~ "." }
+UtiliserMembers = { "{" ~ ((#member = Mul) | (((#member = Ident) ~ ",")* ~ (#member = Ident)?)) ~ "}" }
 
 SiStmt = {
     "si" ~ (#cond = Expr) ~ "alors"? ~ eos+ ~ thenBr ~ sinonSiBr* ~ sinonBr? ~ finSi
@@ -50,7 +54,17 @@ sinonSiBr = {
 sinonBr = { "sinon" ~ eos+ ~ (stmt ~ eos+)* }
 
 PourStmt = {
-    "pour" ~ (#vars = declVar) ~ "dans" ~ (#iter = Expr) ~ "faire"? ~ eos+ ~ StmtBody ~ finPour
+    "pour" ~ (#vars = declVar) ~ "dans" ~ (#iter = PourIter) ~ "faire"? ~ eos+ ~ StmtBody? ~ finPour
+}
+ContinuerStmt = { "continuer" }
+SortirStmt = { "sortir" }
+
+PourIter = {
+    ListExpr
+  | Expr
+}
+ListExpr = {
+    (Expr ~ ",")+ ~ Expr?
 }
 
 finPour = @{ "fin" ~ WHITESPACE+ ~ "pour" }
@@ -160,14 +174,14 @@ prefix       = _{ Neg | Not | Pos }
 Neg          =  { "-" }
 Pos          =  { "+" }
 Not          =  { "pas" | "non" }
-postfix      = _{ Ternary }
+postfix      = _{ AccessProp | Ternary }
 Range        =  { (".." | "..<") ~ ((#end = Expr) ~ "bond")? }
 RangeEq      =  { ("..=" | "jusqu'à" | "jusqu'a") ~ ((#end = Expr) ~ "bond")? }
 Ternary      =  {
     "?" ~ TernaryThen ~ ":" ~ TernaryElse
 }
-TernaryThen = { Expr }
-TernaryElse = { Expr }
+TernaryThen  =  { Expr }
+TernaryElse  =  { Expr }
 
 Assign = @{ ":=" | "=" | "<-" | "←" }
 
@@ -191,8 +205,12 @@ FnExpr = {
 
 EssayerExpr = { "essayer" ~ Expr }
 
-List = { "[" ~ (Expr ~ ",")* ~ Expr? ~ "]" }
-Dict = { "{" ~ (Expr ~ ",")* ~ Expr? ~ "}" }
+AccessProp = {
+    "." ~ Ident
+}
+
+List = { "[" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE* ~ "]" }
+Dict = { "{" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE* ~ "}" }
 
 Callable = {
     Ident
@@ -202,13 +220,13 @@ Callable = {
 FnCall = { Callable ~ FunctionArgs }
 
 FunctionArgs = {
-    "(" ~ (Expr ~ ",")* ~ Expr? ~ ")"
+    "(" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE* ~ ")"
 }
 
 Lit = {
     Bool
-  | Integer
   | Decimal
+  | Integer
   | Text
   | Null
 }

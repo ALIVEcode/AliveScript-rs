@@ -724,7 +724,7 @@ impl Visitor for Runner<'_> {
             self.push_value(ASObj::liste(vec![ASObj::new_as_nul(), error]));
             self.early_exit = None;
         } else {
-            let val = self.expr_results.pop().expect("Essayer valeur");
+            let val = self.expr_results.pop().unwrap_or(ASObj::ASNul);
             self.push_value(ASObj::liste(vec![val, ASObj::new_as_nul()]));
         }
     }

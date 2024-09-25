@@ -5,23 +5,23 @@ affirmerEgal(0, -0)
 affirmerEgal(0, -0.0)
 
 L = [
-        ('0', 0),
-        ('1', 1),
-        ('9', 9),
-        ('10', 10),
-        ('99', 99),
-        ('100', 100),
-        ('314', 314),
-        (' 314', 314),
-        ('314 ', 314),
-        ('  \t\t  314  \t\t  ', 314),
-        ('  1x', "erreur"),
-        ('  1  ', 1),
-        ('  1\02  ', "erreur"),
-        ('', "erreur"),
-        (' ', "erreur"),
-        ('  \t\t  ', "erreur"),
-        ("\u0200", "erreur")
+        ['0', 0],
+        ['1', 1],
+        ['9', 9],
+        ['10', 10],
+        ['99', 99],
+        ['100', 100],
+        ['314', 314],
+        [' 314', 314],
+        ['314 ', 314],
+        ['  \t\t  314  \t\t  ', 314],
+        ['  1x', "erreur"],
+        ['  1  ', 1],
+        ['  1\02  ', "erreur"],
+        ['', "erreur"],
+        [' ', "erreur"],
+        ['  \t\t  ', "erreur"],
+        ["\u0200", "erreur"]
 ]
 
 affirmerEgal(entier(314), 314)
@@ -42,12 +42,15 @@ pour s, v dans L faire
         pour prefix dans "", " ", "\t", "  \t\t  " faire
             ss = prefix + sign + s
             vv = v
-            si sign == "-" et v != "erreur":
+            si sign == "-" et v != "erreur" alors
                 vv = -v
             fin si
             result, err = essayer affirmerEgal(entier(ss), vv)
-            si err != nul  alors
-                continuer si err.nom == "ErreurType"
+            si err != nul alors
+                nom = err . nom
+                si nom == "ErreurType" alors 
+                    continuer
+                fin si
                 lancer(err)
             fin si
         fin pour
