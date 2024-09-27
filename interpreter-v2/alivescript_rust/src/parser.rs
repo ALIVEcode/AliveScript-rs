@@ -21,6 +21,7 @@ lazy_static::lazy_static! {
         PrattParser::new()
             // Ternary
             .op(Op::postfix(Rule::Ternary))
+            .op(Op::postfix(Rule::AccessProp))
 
             // Logic op
             .op(Op::infix(Rule::Or, Left))

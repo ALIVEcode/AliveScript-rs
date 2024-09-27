@@ -4,10 +4,11 @@ afficher Unit
 
 const [res, err] = essayer debut
     afficher "salut"
-    essayer entier("a")
+    const x, y = essayer entier("a")
+    afficher y.nom
 fin
 
-afficher res
+afficher 
 
 
 

@@ -196,7 +196,7 @@ prefix       = _{ Neg | Not | Pos }
 Neg          =  { "-" }
 Pos          =  { "+" }
 Not          =  { "pas" | "non" }
-postfix      = _{ AccessProp | Ternary }
+postfix      = _{ Ternary | AccessProp }
 Range        =  { (".." | "..<") ~ ((#end = Expr) ~ "bond")? }
 RangeEq      =  { ("..=" | "jusqu'à" | "jusqu'a") ~ ((#end = Expr) ~ "bond")? }
 Ternary      =  {
@@ -204,6 +204,10 @@ Ternary      =  {
 }
 TernaryThen  =  { Expr }
 TernaryElse  =  { Expr }
+
+AccessProp = {
+    "." ~ Ident
+}
 
 Assign = @{ ":=" | "=" | "<-" | "←" }
 
@@ -226,10 +230,6 @@ FnExpr = {
 }
 
 EssayerExpr = { "essayer" ~ Expr }
-
-AccessProp = {
-    "." ~ Ident
-}
 
 List = { "[" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE* ~ "]" }
 Dict = { "{" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE* ~ "}" }
