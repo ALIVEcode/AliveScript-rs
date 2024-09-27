@@ -141,6 +141,7 @@ pub struct Runner<'a> {
     stmt_result: Option<ASObj>,
     current_file: Option<String>,
     used_files: Vec<String>,
+    capture_error_stack: u16,
 }
 
 impl<'a> Runner<'a> {
@@ -154,6 +155,7 @@ impl<'a> Runner<'a> {
             stmt_result: None,
             current_file: None,
             used_files: vec![],
+            capture_error_stack: 0,
         };
         ASModuleBuiltin::Builtin.load_non_custom(
             &None,
@@ -175,6 +177,7 @@ impl<'a> Runner<'a> {
             stmt_result: None,
             current_file: Some(file.clone()),
             used_files: vec![file],
+            capture_error_stack: 0,
         };
         ASModuleBuiltin::Builtin.load_non_custom(
             &None,
@@ -236,7 +239,7 @@ impl<'a> Runner<'a> {
 
     fn throw_err(&mut self, err: ASErreurType) {
         let error = ASErreur::new(err, 0, self.current_file.clone());
-        if self.env.get_curr_scope().is_capture_error() {
+        if self.capture_error_stack > 0 {
             self.expr_results.push(ASObj::ASErreur(Box::new(error)));
         } else {
             self.send_data(error.into());
@@ -730,9 +733,9 @@ impl Visitor for Runner<'_> {
             unreachable!()
         };
 
-        self.env.push_new_scope(ASScope::new_error_captured());
+        self.capture_error_stack += 1;
         expr.accept(self);
-        self.env.pop_scope();
+        self.capture_error_stack -= 1;
 
         if self.error_thrown() {
             let error = self

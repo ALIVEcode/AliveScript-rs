@@ -32,7 +32,7 @@ macro_rules! optional_body {
 macro_rules! as_fonction {
     ($($desc:literal;)? $name:ident $([$runner:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
      -> $return_type:expr; $body:expr) => {
-        $crate::as_obj::ASVar::new_with_value(
+        $crate::as_obj::ASVar::new_public_with_value(
             std::stringify!($name),
             Some($crate::as_obj::ASType::Fonction),
             false,
@@ -64,29 +64,29 @@ macro_rules! as_fonction {
 #[macro_export]
 macro_rules! as_var {
     ($var:ident : $param_type:expr) => {
-        $crate::as_obj::ASVar::new(std::stringify!($var).to_owned(), Some($param_type), false)
+        $crate::as_obj::ASVar::new_public(std::stringify!($var).to_owned(), Some($param_type), false)
     };
     ($var:ident) => {
-        $crate::as_obj::ASVar::new(std::stringify!($var).to_owned(), None, false)
+        $crate::as_obj::ASVar::new_public(std::stringify!($var).to_owned(), None, false)
     };
     (const $var:ident : $param_type:expr) => {
-        $crate::as_obj::ASVar::new(std::stringify!($var).to_owned(), Some($param_type), true)
+        $crate::as_obj::ASVar::new_public(std::stringify!($var).to_owned(), Some($param_type), true)
     };
     (const $var:ident) => {
-        $crate::as_obj::ASVar::new(std::stringify!($var).to_owned(), None, true)
+        $crate::as_obj::ASVar::new_public(std::stringify!($var).to_owned(), None, true)
     };
 
     ($var:ident : $param_type:expr => $val:expr) => {
-        $crate::as_obj::ASVar::new_with_value(std::stringify!($var), Some($param_type), false, $val)
+        $crate::as_obj::ASVar::new_public_with_value(std::stringify!($var), Some($param_type), false, $val)
     };
     ($var:ident => $val:expr) => {
-        $crate::as_obj::ASVar::new_with_value(std::stringify!($var), None, false, $val)
+        $crate::as_obj::ASVar::new_public_with_value(std::stringify!($var), None, false, $val)
     };
     (const $var:ident : $param_type:expr => $val:expr) => {
-        $crate::as_obj::ASVar::new_with_value(std::stringify!($var), Some($param_type), true, $val)
+        $crate::as_obj::ASVar::new_public_with_value(std::stringify!($var), Some($param_type), true, $val)
     };
     (const $var:ident => $val:expr) => {
-        $crate::as_obj::ASVar::new_with_value(std::stringify!($var), None, true, $val)
+        $crate::as_obj::ASVar::new_public_with_value(std::stringify!($var), None, true, $val)
     };
 }
 #[macro_export]

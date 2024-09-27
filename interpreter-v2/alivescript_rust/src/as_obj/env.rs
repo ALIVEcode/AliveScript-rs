@@ -6,43 +6,25 @@ use std::{
 
 use crate::as_obj::{ASErreurType, ASObj, ASResult, ASType};
 
-type ErrorCaptured = bool;
-
 #[derive(Debug, Clone, PartialEq)]
-pub struct ASScope(pub(crate) HashMap<String, (ASVar, ASObj)>, ErrorCaptured);
+pub struct ASScope(pub(crate) HashMap<String, (ASVar, ASObj)>);
 
 impl ASScope {
     pub fn new() -> Self {
-        Self(HashMap::new(), false)
-    }
-
-    pub fn new_error_captured() -> Self {
-        Self(HashMap::new(), true)
+        Self(HashMap::new())
     }
 
     pub fn from(vars: Vec<(ASVar, ASObj)>) -> Self {
-        Self(
-            HashMap::from_iter(
-                vars.into_iter()
-                    .map(|(var, val)| (var.get_name().clone(), (var, val))),
-            ),
-            false,
-        )
+        Self(HashMap::from_iter(
+            vars.into_iter()
+                .map(|(var, val)| (var.get_name().clone(), (var, val))),
+        ))
     }
 
     pub fn into_only_public(&self) -> Self {
-        Self(
-            HashMap::from_iter(self.0.clone().into_iter().filter(|(k, v)| v.0.public)),
-            self.is_capture_error(),
-        )
-    }
-
-    pub fn is_capture_error(&self) -> bool {
-        self.1
-    }
-
-    pub fn set_capture_error(&mut self, capture_error: bool) {
-        self.1 = capture_error;
+        Self(HashMap::from_iter(
+            self.0.clone().into_iter().filter(|(k, v)| v.0.public),
+        ))
     }
 
     pub fn get_public(&self, var_name: &String) -> Option<&(ASVar, ASObj)> {
@@ -249,6 +231,15 @@ impl ASVar {
         }
     }
 
+    pub fn new_with_value(
+        name: impl ToString,
+        static_type: Option<ASType>,
+        is_const: bool,
+        value: ASObj,
+    ) -> (Self, ASObj) {
+        (Self::new(name.to_string(), static_type, is_const), value)
+    }
+
     pub fn new_public(name: String, static_type: Option<ASType>, is_const: bool) -> Self {
         Self {
             name,
@@ -258,13 +249,16 @@ impl ASVar {
         }
     }
 
-    pub fn new_with_value(
+    pub fn new_public_with_value(
         name: impl ToString,
         static_type: Option<ASType>,
         is_const: bool,
         value: ASObj,
     ) -> (Self, ASObj) {
-        (Self::new(name.to_string(), static_type, is_const), value)
+        (
+            Self::new_public(name.to_string(), static_type, is_const),
+            value,
+        )
     }
 
     pub fn is_public(&self) -> bool {
