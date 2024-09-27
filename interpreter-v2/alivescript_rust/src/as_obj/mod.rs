@@ -623,14 +623,17 @@ impl Display for ASObj {
             ASListe(_) | ASDict(_) | ASClasseInst(_) => self.repr(),
             ASClasse(classe) => format!("classe {}", classe.name()),
             ASFonc(fonc) => fonc.to_string(),
-            ASModule { name, alias, .. } => format!(
-                "module {}{}",
+            ASModule {
+                name, alias, env, ..
+            } => format!(
+                "module {}{} {{{}}}",
                 name,
                 if let Some(alias) = alias {
                     format!(" alias {}", alias)
                 } else {
                     "".into()
-                }
+                },
+                env.borrow().0.keys().cloned().collect::<Vec<_>>()[..].join(", ")
             ),
             ASNoValue => String::from("<pas-de-valeur>"),
             ASTypeObj(t) => t.to_string(),

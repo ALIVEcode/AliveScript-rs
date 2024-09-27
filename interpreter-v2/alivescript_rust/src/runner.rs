@@ -17,6 +17,7 @@ use crate::{
     data::{Data, Response},
     get_err_line,
     io::InterpretorIO,
+    run_script_with_runner,
     visitor::{Visitable, Visitor},
 };
 // use crate::run_script_with_runner;
@@ -129,6 +130,8 @@ macro_rules! throw_guard {
     }};
 }
 
+const OUT_DIR: &'static str = env!("OUT_DIR");
+
 pub struct Runner<'a> {
     expr_results: Vec<ASObj>,
     type_results: Vec<ASType>,
@@ -138,7 +141,6 @@ pub struct Runner<'a> {
     stmt_result: Option<ASObj>,
     current_file: Option<String>,
     used_files: Vec<String>,
-    capture_error: bool,
 }
 
 impl<'a> Runner<'a> {
@@ -152,9 +154,13 @@ impl<'a> Runner<'a> {
             stmt_result: None,
             current_file: None,
             used_files: vec![],
-            capture_error: false,
         };
-        ASModuleBuiltin::Builtin.load_non_custom(&None, &Some(vec!["*".into()]), &mut new.env);
+        ASModuleBuiltin::Builtin.load_non_custom(
+            &None,
+            &Some(vec!["*".into()]),
+            &mut new.env,
+            false,
+        );
         ASType::load_builtin_types(&mut new.env);
         new
     }
@@ -169,9 +175,13 @@ impl<'a> Runner<'a> {
             stmt_result: None,
             current_file: Some(file.clone()),
             used_files: vec![file],
-            capture_error: false,
         };
-        ASModuleBuiltin::Builtin.load_non_custom(&None, &Some(vec!["*".into()]), &mut new.env);
+        ASModuleBuiltin::Builtin.load_non_custom(
+            &None,
+            &Some(vec!["*".into()]),
+            &mut new.env,
+            false,
+        );
         ASType::load_builtin_types(&mut new.env);
         new
     }
@@ -226,10 +236,10 @@ impl<'a> Runner<'a> {
 
     fn throw_err(&mut self, err: ASErreurType) {
         let error = ASErreur::new(err, 0, self.current_file.clone());
-        if !self.capture_error {
-            self.send_data(error.into());
-        } else {
+        if self.env.get_curr_scope().is_capture_error() {
             self.expr_results.push(ASObj::ASErreur(Box::new(error)));
+        } else {
+            self.send_data(error.into());
         }
         self.early_exit = Some(EarlyExit::Erreur);
     }
@@ -304,6 +314,13 @@ impl<'a> Runner<'a> {
         let old_file = self.current_file.take();
         self.current_file = path;
         self.env.push_scope(Rc::new(RefCell::new(ASScope::new())));
+        if let Err(err) = run_script_with_runner(&script, self) {
+            self.throw_err(ASErreurType::new_erreur_syntaxe(format!(
+                "{}\n{:#?}",
+                err.to_string(),
+                err.parse_attempts()
+            )));
+        }
         // if let Err(err) = run_script_with_runner(&script, self) {
         //     let err_txt = match err {
         //         ParseError::UnrecognizedToken { token, expected } => {
@@ -391,6 +408,7 @@ impl<'a> Runner<'a> {
                 name,
                 static_type,
                 is_const,
+                public,
             } => {
                 if is_assign {
                     if let Some((var, _old_val)) = self.env.get_var(name) {
@@ -410,7 +428,8 @@ impl<'a> Runner<'a> {
                         }
                     );
                 }
-                let var = ASVar::new(name.clone(), static_type.clone(), *is_const);
+                let var =
+                    ASVar::new_maybe_public(name.clone(), static_type.clone(), *is_const, *public);
                 if self.env.declare(var, value).is_some() {
                     throw_err!(
                         self,
@@ -711,9 +730,9 @@ impl Visitor for Runner<'_> {
             unreachable!()
         };
 
-        self.capture_error = true;
+        self.env.push_new_scope(ASScope::new_error_captured());
         expr.accept(self);
-        self.capture_error = false;
+        self.env.pop_scope();
 
         if self.error_thrown() {
             let error = self
@@ -1233,6 +1252,7 @@ impl Visitor for Runner<'_> {
                     name,
                     static_type,
                     is_const,
+                    public,
                 }) => (*is_const, false, static_type, name),
 
                 LireVar::Assign(AssignVar::Var { name, static_type }) => {
@@ -1319,6 +1339,7 @@ impl Visitor for Runner<'_> {
             alias,
             vars,
             is_path,
+            public,
         } = stmt
         {
             if *is_path {
@@ -1381,16 +1402,17 @@ impl Visitor for Runner<'_> {
                     alias,
                     vars,
                     &mut self.env,
+                    *public,
                 )
             } else {
-                let module_path = module.clone() + ".as";
+                let module_path = format!("{}/stdlib/{}.as", OUT_DIR, module);
                 let script = self.request_data(Data::GetFichier(module_path.clone()));
                 self.used_files.push(module.clone());
 
                 let Some(Response::Text(script)) = script else {
                     // Si le fichier n'existe pas, on essaye de charger un module builtin
                     let module = throw_err!(?, self, ASModuleBuiltin::try_from(module.as_str()));
-                    throw_err!(?, self, module.load(alias, vars, self));
+                    throw_err!(?, self, module.load(alias, vars, self, *public));
                     return;
                 };
 
@@ -1403,6 +1425,7 @@ impl Visitor for Runner<'_> {
                     alias,
                     vars,
                     &mut self.env,
+                    *public,
                 )
             }
         }
@@ -1721,10 +1744,11 @@ impl Visitor for Runner<'_> {
                 self.env.clone(),
             ));
 
-            let func_var = ASVar::new(
+            let func_var = ASVar::new_maybe_public(
                 f.name().as_ref().unwrap().clone(),
                 Some(ASType::Fonction),
                 true,
+                *f.public(),
             );
 
             self.env.declare(func_var, ASObj::ASFonc(func));

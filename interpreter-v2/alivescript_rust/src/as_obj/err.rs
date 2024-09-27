@@ -89,6 +89,9 @@ pub enum ASErreurType {
     ErreurModuleInvalide {
         module: String,
     },
+    ErreurSyntaxe {
+        raison: String,
+    },
     Erreur {
         nom: Option<String>,
         msg: String,
@@ -118,6 +121,7 @@ impl ASErreurType {
             ASErreurType::ErreurFichierIntrouvable { .. } => "ErreurFichierIntrouvable",
             ASErreurType::ErreurModuleInvalide { .. } => "ErreurModuleInvalide",
             ASErreurType::ErreurNomType { .. } => "ErreurNomType",
+            ASErreurType::ErreurSyntaxe { raison } => "ErreurSyntaxe",
             ASErreurType::Erreur { .. } => "Erreur",
         }
     }
@@ -215,6 +219,8 @@ impl Display for ASErreurType {
             ErreurModuleInvalide { module } => format!("Module introuvable: {}", module),
 
             ErreurNomType { bad_type } => format!("Mauvais type: {:?}", bad_type),
+
+            ErreurSyntaxe { raison } => format!("ErreurSyntaxe: {}", raison),
 
             Erreur { nom, msg } => msg.clone(),
         };

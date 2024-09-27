@@ -6,19 +6,49 @@ use std::{
 
 use crate::as_obj::{ASErreurType, ASObj, ASResult, ASType};
 
+type ErrorCaptured = bool;
+
 #[derive(Debug, Clone, PartialEq)]
-pub struct ASScope(pub(crate) HashMap<String, (ASVar, ASObj)>);
+pub struct ASScope(pub(crate) HashMap<String, (ASVar, ASObj)>, ErrorCaptured);
 
 impl ASScope {
     pub fn new() -> Self {
-        Self(HashMap::new())
+        Self(HashMap::new(), false)
+    }
+
+    pub fn new_error_captured() -> Self {
+        Self(HashMap::new(), true)
     }
 
     pub fn from(vars: Vec<(ASVar, ASObj)>) -> Self {
-        Self(HashMap::from_iter(
-            vars.into_iter()
-                .map(|(var, val)| (var.get_name().clone(), (var, val))),
-        ))
+        Self(
+            HashMap::from_iter(
+                vars.into_iter()
+                    .map(|(var, val)| (var.get_name().clone(), (var, val))),
+            ),
+            false,
+        )
+    }
+
+    pub fn into_only_public(&self) -> Self {
+        Self(
+            HashMap::from_iter(self.0.clone().into_iter().filter(|(k, v)| v.0.public)),
+            self.is_capture_error(),
+        )
+    }
+
+    pub fn is_capture_error(&self) -> bool {
+        self.1
+    }
+
+    pub fn set_capture_error(&mut self, capture_error: bool) {
+        self.1 = capture_error;
+    }
+
+    pub fn get_public(&self, var_name: &String) -> Option<&(ASVar, ASObj)> {
+        self.0
+            .get(var_name)
+            .and_then(|var| if var.0.is_public() { Some(var) } else { None })
     }
 
     pub fn get(&self, var_name: &String) -> Option<&(ASVar, ASObj)> {
@@ -186,6 +216,7 @@ pub struct ASVar {
     name: String,
     static_type: ASType,
     is_const: bool,
+    public: bool,
 }
 
 impl PartialEq<String> for ASVar {
@@ -200,6 +231,30 @@ impl ASVar {
             name,
             static_type: static_type.into(),
             is_const,
+            public: false,
+        }
+    }
+
+    pub fn new_maybe_public(
+        name: String,
+        static_type: Option<ASType>,
+        is_const: bool,
+        public: bool,
+    ) -> Self {
+        Self {
+            name,
+            static_type: static_type.into(),
+            is_const,
+            public,
+        }
+    }
+
+    pub fn new_public(name: String, static_type: Option<ASType>, is_const: bool) -> Self {
+        Self {
+            name,
+            static_type: static_type.into(),
+            is_const,
+            public: true,
         }
     }
 
@@ -210,6 +265,14 @@ impl ASVar {
         value: ASObj,
     ) -> (Self, ASObj) {
         (Self::new(name.to_string(), static_type, is_const), value)
+    }
+
+    pub fn is_public(&self) -> bool {
+        self.public
+    }
+
+    pub fn set_public(&mut self, public: bool) {
+        self.public = public;
     }
 
     pub fn get_name(&self) -> &String {

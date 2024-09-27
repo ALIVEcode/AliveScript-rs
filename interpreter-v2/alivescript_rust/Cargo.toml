@@ -30,6 +30,7 @@ pyo3 = { version = "0.19.2", features = ["auto-initialize"], optional = true }
 pest = "2.7.11"
 pest_derive = { version = "2.7.11", features = ["grammar-extras"] }
 lazy_static = "1.5.0"
+dyn-fmt = "0.4.3"
 
 # console = { version = "0.15.7", optional = true }
 #

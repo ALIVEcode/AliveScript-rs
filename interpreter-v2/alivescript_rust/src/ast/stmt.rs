@@ -22,6 +22,7 @@ pub enum Stmt {
         // None signifie tout utiliser
         vars: Option<Vec<String>>,
         is_path: bool,
+        public: bool,
     },
 
     /// Afficher
@@ -116,6 +117,32 @@ impl Stmt {
             Rc::clone(&body),
         )))]))
     }
+
+    pub fn mk_public(&mut self) {
+        match self {
+            Self::DefFn(def_fn) => def_fn.public = true,
+            Self::Utiliser { public, .. } => {
+                *public = true;
+            }
+            Self::Decl { var, .. } => match var {
+                DeclVar::Var {
+                    name,
+                    static_type,
+                    is_const,
+                    public,
+                } => {
+                    *var = DeclVar::Var {
+                        name: name.clone(),
+                        static_type: static_type.clone(),
+                        is_const: *is_const,
+                        public: true,
+                    }
+                }
+                DeclVar::ListUnpack(s) => todo!(),
+            },
+            _ => {}
+        }
+    }
 }
 
 #[derive(Clone, Debug, new, Getters, PartialEq)]
@@ -125,6 +152,8 @@ pub struct DefFn {
     params: Vec<FnParam>,
     return_type: Option<Box<Type>>,
     body: Vec<Box<Stmt>>,
+    #[new(value = "false")]
+    public: bool,
 }
 
 #[derive(Debug, PartialEq, Clone, new, Getters)]
@@ -175,8 +204,32 @@ pub enum DeclVar {
         name: String,
         static_type: Option<Box<Type>>,
         is_const: bool,
+        public: bool,
     },
     ListUnpack(Vec<DeclVar>),
+}
+
+impl DeclVar {
+    pub fn mk_public(&mut self) {
+        match self {
+            DeclVar::Var {
+                name,
+                static_type,
+                is_const,
+                public,
+            } => {
+                *self = DeclVar::Var {
+                    name: name.clone(),
+                    static_type: static_type.clone(),
+                    is_const: *is_const,
+                    public: true,
+                }
+            }
+            DeclVar::ListUnpack(vars) => {
+                vars.iter_mut().for_each(|var| var.mk_public());
+            }
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -203,6 +256,7 @@ impl From<DeclVar> for AssignVar {
                 name,
                 static_type,
                 is_const,
+                public,
             } => Self::Var { name, static_type },
             DeclVar::ListUnpack(vars) => {
                 AssignVar::ListUnpack(vars.into_iter().map(|var| Self::from(var)).collect())

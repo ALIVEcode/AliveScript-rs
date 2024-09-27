@@ -87,6 +87,8 @@ impl ASType {
                 Self::Classe,
             ]);
 
+            erreur = T::Erreur;
+
             type = T::Type;
         });
     }

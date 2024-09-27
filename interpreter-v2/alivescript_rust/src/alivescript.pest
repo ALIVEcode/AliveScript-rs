@@ -11,13 +11,19 @@ StmtBody = {
     eos* ~ (stmt ~ eos+)+
 }
 
-stmt = _{
+stmtBloc = _{
     UtiliserStmt
   | DeclStmt
   | AssignStmt
   | SiStmt
   | PourStmt
+  | FnDef
   | subStmt ~ ("si" ~ Expr)?
+}
+
+stmt = _{
+    PubStmt
+  | stmtBloc
 }
 
 subStmt = _{
@@ -32,15 +38,31 @@ CommandStmt = {
     Ident ~ (Expr ~ ",")* ~ Expr
 }
 
+PubStmt = {
+    Pub ~ (UtiliserStmt | DeclStmt | FnDef)
+}
+
 UtiliserStmt    = { "utiliser" ~ ((#module = Ident | #path = Text)) ~ ModuleAlias? ~ UtiliserMembers? }
 ModuleAlias     = { "alias" ~ Ident | Ident ~ "." }
 UtiliserMembers = { "{" ~ ((#member = Mul) | (((#member = Ident) ~ ",")* ~ (#member = Ident)?)) ~ "}" }
+
+FnDef = {
+    "fonction" ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ FnBody
+}
+
+Pub = @{ "pub" }
+
+FnBody = {
+    (":" ~ Expr | eos ~ StmtBody ~ finFn)
+}
+
+finFn = @{ "fin" ~ WHITESPACE+ ~ "fonction" }
 
 SiStmt = {
     "si" ~ (#cond = Expr) ~ "alors"? ~ eos+ ~ thenBr ~ sinonSiBr* ~ sinonBr? ~ finSi
 }
 thenBr = {
-    (!(sinonSiKw | "sinon") ~ stmt ~ eos+)*
+    (!(sinonSiKw | "sinon") ~ stmtBloc ~ eos+)*
 }
 
 finSi = @{ "fin" ~ WHITESPACE+ ~ "si" }
@@ -51,13 +73,13 @@ sinonSiBr = {
     sinonSiKw ~ (#cond = Expr) ~ "alors"? ~ eos ~ thenBr
 }
 
-sinonBr = { "sinon" ~ eos+ ~ (stmt ~ eos+)* }
+sinonBr = { "sinon" ~ eos+ ~ (stmtBloc ~ eos+)* }
 
-PourStmt = {
+PourStmt      = {
     "pour" ~ (#vars = declVar) ~ "dans" ~ (#iter = PourIter) ~ "faire"? ~ eos+ ~ StmtBody? ~ finPour
 }
 ContinuerStmt = { "continuer" }
-SortirStmt = { "sortir" }
+SortirStmt    = { "sortir" }
 
 PourIter = {
     ListExpr
@@ -197,7 +219,7 @@ term = _{
   | "(" ~ NEWLINE* ~ Expr ~ NEWLINE* ~ ")"
 }
 
-DebutBloc = { ("debut" | "début") ~ eos+ ~ (!"fin" ~ stmt ~ eos+)* ~ "fin" }
+DebutBloc = { ("debut" | "début") ~ eos+ ~ (!"fin" ~ stmtBloc ~ eos+)* ~ "fin" }
 
 FnExpr = {
     PUSH("fonction" | "fn") ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ #body = (":" ~ Expr ~ DROP | eos ~ StmtBody ~ "fin" ~ POP)

@@ -142,14 +142,12 @@ fn parse_top_expr(primary: Pair<Rule>) -> Result<Box<Expr>, PestError<Rule>> {
                 .collect::<Result<Vec<_>, _>>()?,
         ))),
         Rule::Expr => parse_expr(primary.into_inner()),
-        Rule::ListExpr => {
-            Ok(Box::new(Expr::List(
-                primary
-                    .into_inner()
-                    .map(|expr| parse_expr(expr.into_inner()))
-                    .collect::<Result<_, _>>()?,
-            )))
-        }
+        Rule::ListExpr => Ok(Box::new(Expr::List(
+            primary
+                .into_inner()
+                .map(|expr| parse_expr(expr.into_inner()))
+                .collect::<Result<_, _>>()?,
+        ))),
         Rule::Ident => Ok(Box::new(Expr::Ident(primary.as_str().to_string()))),
         Rule::Lit => Ok(Expr::literal(parse_lit(
             primary.into_inner().next().unwrap(),
@@ -360,19 +358,23 @@ fn parse_fn_params(pairs: Pairs<Rule>) -> Result<Vec<FnParam>, PestError<Rule>> 
 fn parse_assign_vars(
     pairs: Pairs<Rule>,
     is_const: Option<bool>,
+    public: Option<bool>,
 ) -> Result<DeclVar, PestError<Rule>> {
     let mut vars = vec![];
     let mut is_const = is_const.unwrap_or(false);
+    let mut public = public.unwrap_or(false);
 
     for pair in pairs {
         match pair.as_rule() {
             Rule::Const => is_const = true,
             Rule::Var | Rule::Assign => {}
+            Rule::Pub => public = true,
             Rule::TypeExpr => {
                 let DeclVar::Var {
                     name,
                     static_type,
                     is_const,
+                    public,
                 } = vars.pop().unwrap()
                 else {
                     return Err(PestError::new_from_span(
@@ -387,6 +389,7 @@ fn parse_assign_vars(
                     name,
                     static_type,
                     is_const,
+                    public,
                 });
             }
             Rule::Ident => {
@@ -394,13 +397,14 @@ fn parse_assign_vars(
                     name: pair.as_str().to_string(),
                     static_type: None,
                     is_const,
+                    public,
                 });
             }
             Rule::MultiDeclIdent => {
-                vars.push(parse_assign_vars(pair.into_inner(), Some(is_const))?);
+                vars.push(parse_assign_vars(pair.into_inner(), Some(is_const), Some(public))?);
             }
             Rule::DeclIdentList => {
-                vars.push(parse_assign_vars(pair.into_inner(), Some(is_const))?);
+                vars.push(parse_assign_vars(pair.into_inner(), Some(is_const), Some(public))?);
             }
             _ => panic!("{:#?}", pair),
         }
@@ -417,6 +421,7 @@ fn parse_assign(pairs: Pairs<Rule>) -> Result<(DeclVar, Box<Expr>), PestError<Ru
     let mut name = None;
     let mut static_type = None;
     let mut is_const = false;
+    let mut public = false;
     let mut expr = None;
     let mut var_list = None;
 
@@ -424,14 +429,15 @@ fn parse_assign(pairs: Pairs<Rule>) -> Result<(DeclVar, Box<Expr>), PestError<Ru
         match pair.as_rule() {
             Rule::Const => is_const = true,
             Rule::Var | Rule::Assign => {}
+            Rule::Pub => public = true,
             Rule::Expr => expr = Some(parse_expr(pair.into_inner())?),
             Rule::TypeExpr => static_type = Some(parse_type(pair.into_inner())?),
             Rule::Ident => name = Some(pair.as_str().to_string()),
             Rule::MultiDeclIdent => {
-                var_list = Some(parse_assign_vars(pair.into_inner(), Some(is_const))?)
+                var_list = Some(parse_assign_vars(pair.into_inner(), Some(is_const), Some(public))?)
             }
             Rule::DeclIdentList => {
-                var_list = Some(parse_assign_vars(pair.into_inner(), Some(is_const))?)
+                var_list = Some(parse_assign_vars(pair.into_inner(), Some(is_const), Some(public))?)
             }
             _ => panic!("{:#?}", pair),
         }
@@ -444,6 +450,7 @@ fn parse_assign(pairs: Pairs<Rule>) -> Result<(DeclVar, Box<Expr>), PestError<Ru
                 name: name.unwrap(),
                 static_type,
                 is_const,
+                public,
             },
             expr.unwrap(),
         )),
@@ -496,160 +503,195 @@ fn parse_type(pairs: Pairs<Rule>) -> Result<Box<Type>, PestError<Rule>> {
         .parse(pairs)
 }
 
+pub fn build_ast_stmt(pair: Pair<Rule>) -> Result<Box<Stmt>, PestError<Rule>> {
+    Ok(Box::new(match pair.as_rule() {
+        Rule::AfficherStmt => Stmt::Afficher(vec![parse_expr(pair.into_inner())?]),
+        Rule::UtiliserStmt => {
+            let inner = pair.into_inner();
+            let module_name = inner.clone().next().unwrap();
+            let alias = inner
+                .clone()
+                .find(|node| node.as_rule() == Rule::ModuleAlias)
+                .map(|alias| alias.as_str().to_string());
+            let vars = inner
+                .clone()
+                .find(|node| node.as_rule() == Rule::UtiliserMembers)
+                .map(|node| {
+                    node.into_inner()
+                        .find_tagged("member")
+                        .map(|node| node.as_str().to_string())
+                        .collect::<Vec<String>>()
+                });
+            Stmt::Utiliser {
+                module: module_name.as_str().trim_matches('"').to_string(),
+                alias,
+                vars,
+                is_path: module_name.as_node_tag().is_some_and(|node| node == "path"),
+                public: false,
+            }
+        }
+        Rule::DeclStmt => {
+            let (var, val) = parse_assign(pair.into_inner())?;
+            Stmt::Decl { var, val }
+        }
+        Rule::AssignStmt => match parse_assign(pair.into_inner())? {
+            (
+                DeclVar::Var {
+                    name,
+                    static_type,
+                    is_const,
+                    public,
+                },
+                val,
+            ) => Stmt::Assign {
+                var: AssignVar::Var { name, static_type },
+                val,
+            },
+            (decl @ DeclVar::ListUnpack(..), val) => Stmt::Assign {
+                var: AssignVar::from(decl),
+                val,
+            },
+        },
+        Rule::CommandStmt => {
+            let mut inner = pair.into_inner();
+            Stmt::Expr(Box::new(Expr::FnCall {
+                func: parse_top_expr(inner.next().unwrap())?,
+                args: inner
+                    .next()
+                    .unwrap()
+                    .into_inner()
+                    .map(|arg| parse_expr(arg.into_inner()))
+                    .collect::<Result<Vec<_>, _>>()?,
+            }))
+        }
+        Rule::PubStmt => {
+            let mut inner = pair.into_inner();
+            let mut result = build_ast_stmt(inner.nth(1).unwrap())?;
+            result.mk_public();
+            *result
+        }
+        Rule::FnDef => {
+            let mut inner = pair.into_inner();
+            Stmt::DefFn(DefFn::new(
+                None,
+                inner
+                    .find_first_tagged("name")
+                    .map(|node| node.as_str().to_string()),
+                parse_fn_params(inner.find_first_tagged("params").unwrap().into_inner())?,
+                inner
+                    .find_first_tagged("return_type")
+                    .map(|te| parse_type(te.into_inner()))
+                    .invert()?,
+                inner
+                    .find(|node| node.as_rule() == Rule::FnBody)
+                    .map(|body| match body.into_inner().next().unwrap() {
+                        body if body.as_rule() == Rule::Expr => Ok(vec![Box::new(
+                            Stmt::Retourner(vec![parse_expr(body.into_inner())?]),
+                        )]),
+                        body if body.as_rule() == Rule::StmtBody => {
+                            build_ast_stmts(body.into_inner())
+                        }
+                        _ => unreachable!(),
+                    })
+                    .invert()?
+                    .unwrap(),
+            ))
+        }
+        Rule::SiStmt => {
+            let inner = pair.into_inner();
+            Stmt::Si {
+                cond: parse_expr(
+                    inner
+                        .clone()
+                        .find(|p| matches!(p.as_node_tag(), Some("cond")))
+                        .unwrap()
+                        .into_inner(),
+                )?,
+                then_br: build_ast_stmts(
+                    inner
+                        .clone()
+                        .find(|p| p.as_rule() == Rule::thenBr)
+                        .unwrap()
+                        .into_inner(),
+                )?,
+                elif_brs: inner
+                    .clone()
+                    .filter_map(|elif| {
+                        if elif.as_rule() != Rule::sinonSiBr {
+                            return None;
+                        };
+                        let inner_elif = elif.into_inner();
+                        let cond =
+                            parse_expr(inner_elif.find_first_tagged("cond").unwrap().into_inner());
+                        let body = build_ast_stmts(inner_elif.last().unwrap().into_inner());
+                        let Ok(cond) = cond else {
+                            return Some(Err(cond.err().unwrap()));
+                        };
+                        let Ok(body) = body else {
+                            return Some(Err(body.err().unwrap()));
+                        };
+                        Some(Ok((cond, body)))
+                    })
+                    .collect::<Result<_, _>>()?,
+                else_br: inner
+                    .clone()
+                    .find(|p| p.as_rule() == Rule::sinonBr)
+                    .map(|br| build_ast_stmts(br.into_inner()))
+                    .invert()?,
+            }
+        }
+        Rule::PourStmt => {
+            let inner = pair.into_inner();
+            Stmt::Pour {
+                var: parse_assign_vars(
+                    inner
+                        .clone()
+                        .find_first_tagged("vars")
+                        .unwrap()
+                        .into_inner(),
+                    None,
+                    Some(false),
+                )?,
+                iterable: parse_expr(
+                    inner
+                        .clone()
+                        .find_first_tagged("iter")
+                        .unwrap()
+                        .into_inner(),
+                )?,
+                body: inner
+                    .clone()
+                    .find(|p| p.as_rule() == Rule::StmtBody)
+                    .map(|body| build_ast_stmts(body.into_inner()))
+                    .invert()?
+                    .unwrap_or_default(),
+            }
+        }
+        Rule::ContinuerStmt => Stmt::Continuer,
+        Rule::SortirStmt => Stmt::Sortir,
+        Rule::RetournerStmt => Stmt::Retourner(
+            pair.into_inner()
+                .map(|expr| parse_expr(expr.into_inner()))
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
+        Rule::Expr => Stmt::Expr(parse_expr(pair.into_inner())?),
+        rule => Err(PestError::new_from_span(
+            PestErrorVariant::ParsingError {
+                positives: vec![Rule::stmt],
+                negatives: vec![rule],
+            },
+            pair.as_span(),
+        ))?,
+    }))
+}
+
 pub fn build_ast_stmts(pairs: Pairs<Rule>) -> Result<Vec<Box<Stmt>>, PestError<Rule>> {
     let mut stmts = vec![];
     for pair in pairs {
         if matches!(pair.as_rule(), Rule::EOI) {
             continue;
         };
-        stmts.push(Box::new(match pair.as_rule() {
-            Rule::AfficherStmt => Stmt::Afficher(vec![parse_expr(pair.into_inner())?]),
-            Rule::UtiliserStmt => {
-                let inner = pair.into_inner();
-                let module_name = inner.clone().next().unwrap();
-                let alias = inner
-                    .clone()
-                    .find(|node| node.as_rule() == Rule::ModuleAlias)
-                    .map(|alias| alias.as_str().to_string());
-                let vars = inner
-                    .clone()
-                    .find(|node| node.as_rule() == Rule::UtiliserMembers)
-                    .map(|node| {
-                        node.into_inner()
-                            .find_tagged("member")
-                            .map(|node| node.as_str().to_string())
-                            .collect::<Vec<String>>()
-                    });
-                Stmt::Utiliser {
-                    module: module_name.as_str().to_string(),
-                    alias,
-                    vars,
-                    is_path: module_name.as_node_tag().is_some_and(|node| node == "path"),
-                }
-            }
-            Rule::DeclStmt => {
-                let (var, val) = parse_assign(pair.into_inner())?;
-                Stmt::Decl { var, val }
-            }
-            Rule::AssignStmt => match parse_assign(pair.into_inner())? {
-                (
-                    DeclVar::Var {
-                        name,
-                        static_type,
-                        is_const,
-                    },
-                    val,
-                ) => Stmt::Assign {
-                    var: AssignVar::Var { name, static_type },
-                    val,
-                },
-                (decl @ DeclVar::ListUnpack(..), val) => Stmt::Assign {
-                    var: AssignVar::from(decl),
-                    val,
-                },
-            },
-            Rule::CommandStmt => {
-                let mut inner = pair.into_inner();
-                Stmt::Expr(Box::new(Expr::FnCall {
-                    func: parse_top_expr(inner.next().unwrap())?,
-                    args: inner
-                        .next()
-                        .unwrap()
-                        .into_inner()
-                        .map(|arg| parse_expr(arg.into_inner()))
-                        .collect::<Result<Vec<_>, _>>()?,
-                }))
-            }
-            Rule::SiStmt => {
-                let inner = pair.into_inner();
-                Stmt::Si {
-                    cond: parse_expr(
-                        inner
-                            .clone()
-                            .find(|p| matches!(p.as_node_tag(), Some("cond")))
-                            .unwrap()
-                            .into_inner(),
-                    )?,
-                    then_br: build_ast_stmts(
-                        inner
-                            .clone()
-                            .find(|p| p.as_rule() == Rule::thenBr)
-                            .unwrap()
-                            .into_inner(),
-                    )?,
-                    elif_brs: inner
-                        .clone()
-                        .filter_map(|elif| {
-                            if elif.as_rule() != Rule::sinonSiBr {
-                                return None;
-                            };
-                            let inner_elif = elif.into_inner();
-                            let cond = parse_expr(
-                                inner_elif.find_first_tagged("cond").unwrap().into_inner(),
-                            );
-                            let body = build_ast_stmts(inner_elif.last().unwrap().into_inner());
-                            let Ok(cond) = cond else {
-                                return Some(Err(cond.err().unwrap()));
-                            };
-                            let Ok(body) = body else {
-                                return Some(Err(body.err().unwrap()));
-                            };
-                            Some(Ok((cond, body)))
-                        })
-                        .collect::<Result<_, _>>()?,
-                    else_br: inner
-                        .clone()
-                        .find(|p| p.as_rule() == Rule::sinonBr)
-                        .map(|br| build_ast_stmts(br.into_inner()))
-                        .invert()?,
-                }
-            }
-            Rule::PourStmt => {
-                let inner = pair.into_inner();
-                Stmt::Pour {
-                    var: parse_assign_vars(
-                        inner
-                            .clone()
-                            .find_first_tagged("vars")
-                            .unwrap()
-                            .into_inner(),
-                        None,
-                    )?,
-                    iterable: parse_expr(
-                        inner
-                            .clone()
-                            .find_first_tagged("iter")
-                            .unwrap()
-                            .into_inner(),
-                    )?,
-                    body: inner
-                        .clone()
-                        .find(|p| p.as_rule() == Rule::StmtBody)
-                        .map(|body| build_ast_stmts(body.into_inner()))
-                        .invert()?
-                        .unwrap_or_default(),
-                }
-            }
-            Rule::ContinuerStmt => {
-                Stmt::Continuer
-            }
-            Rule::SortirStmt => {
-                Stmt::Sortir
-            }
-            Rule::RetournerStmt => Stmt::Retourner(
-                pair.into_inner()
-                    .map(|expr| parse_expr(expr.into_inner()))
-                    .collect::<Result<Vec<_>, _>>()?,
-            ),
-            Rule::Expr => Stmt::Expr(parse_expr(pair.into_inner())?),
-            rule => Err(PestError::new_from_span(
-                PestErrorVariant::ParsingError {
-                    positives: vec![Rule::stmt],
-                    negatives: vec![rule],
-                },
-                pair.as_span(),
-            ))?,
-        }));
+        stmts.push(build_ast_stmt(pair)?);
     }
 
     Ok(stmts)

@@ -1,4 +1,5 @@
 use unindent::Unindent;
+use dyn_fmt::AsStrFormatExt;
 
 use crate::{
     as_cast, as_fonction, as_mod,
@@ -19,7 +20,8 @@ as_mod! {
     as_fonction! {
         Erreur(nom: ASType::Texte, msg: ASType::Texte => ASObj::texte("")) -> ASType::Erreur; {
             as_cast!(ASObj::ASTexte(ref msg) = msg);
-            Err(ASErreurType::new_erreur(None, msg.clone()))
+            as_cast!(ASObj::ASTexte(ref nom) = nom);
+            Err(ASErreurType::new_erreur(Some(nom.clone()), msg.clone()))
         }
     },
     as_fonction! {
@@ -54,6 +56,15 @@ as_mod! {
                 Some(var) => ASObj::ASTexte(var.get_type().to_string()),
                 None => ASObj::ASNul,
             }))
+        }
+    },
+    as_fonction! {
+        format(template: ASType::Texte, attrs: ASType::Liste => ASObj::liste(vec![])) -> ASType::Texte; {
+            as_cast!(ASObj::ASTexte(template) = template);
+            as_cast!(ASObj::ASListe(attrs) = attrs);
+
+            let result = template.format(attrs.borrow().iter());
+            Ok(Some(ASObj::ASTexte(result)))
         }
     },
     as_fonction! {
