@@ -402,10 +402,18 @@ fn parse_assign_vars(
                 });
             }
             Rule::MultiDeclIdent => {
-                vars.push(parse_assign_vars(pair.into_inner(), Some(is_const), Some(public))?);
+                vars.push(parse_assign_vars(
+                    pair.into_inner(),
+                    Some(is_const),
+                    Some(public),
+                )?);
             }
             Rule::DeclIdentList => {
-                vars.push(parse_assign_vars(pair.into_inner(), Some(is_const), Some(public))?);
+                vars.push(parse_assign_vars(
+                    pair.into_inner(),
+                    Some(is_const),
+                    Some(public),
+                )?);
             }
             _ => panic!("{:#?}", pair),
         }
@@ -435,10 +443,18 @@ fn parse_assign(pairs: Pairs<Rule>) -> Result<(DeclVar, Box<Expr>), PestError<Ru
             Rule::TypeExpr => static_type = Some(parse_type(pair.into_inner())?),
             Rule::Ident => name = Some(pair.as_str().to_string()),
             Rule::MultiDeclIdent => {
-                var_list = Some(parse_assign_vars(pair.into_inner(), Some(is_const), Some(public))?)
+                var_list = Some(parse_assign_vars(
+                    pair.into_inner(),
+                    Some(is_const),
+                    Some(public),
+                )?)
             }
             Rule::DeclIdentList => {
-                var_list = Some(parse_assign_vars(pair.into_inner(), Some(is_const), Some(public))?)
+                var_list = Some(parse_assign_vars(
+                    pair.into_inner(),
+                    Some(is_const),
+                    Some(public),
+                )?)
             }
             _ => panic!("{:#?}", pair),
         }
@@ -502,6 +518,79 @@ fn parse_type(pairs: Pairs<Rule>) -> Result<Box<Type>, PestError<Rule>> {
         })
         .map_infix(|lhs, infix, rhs| todo!())
         .parse(pairs)
+}
+
+fn parse_if(pair: Pair<Rule>) -> Result<Stmt, PestError<Rule>> {
+    let mut elif_brs = vec![];
+    let mut else_br = None;
+    let inner = pair.clone().into_inner();
+    let mut curr_br = pair;
+    let cond = parse_expr(
+        inner
+            .clone()
+            .find(|p| matches!(p.as_node_tag(), Some("cond")))
+            .unwrap()
+            .into_inner(),
+    )?;
+    let then_br = build_ast_stmts(
+        inner
+            .clone()
+            .find(|p| matches!(p.as_node_tag(), Some("body")))
+            .unwrap()
+            .into_inner(),
+    )?;
+
+    loop {
+        match curr_br.as_rule() {
+            Rule::SiStmt => {
+                if let Some(next_br) = curr_br
+                    .into_inner()
+                    .find(|p| matches!(p.as_rule(), Rule::sinonSiBr | Rule::sinonBr))
+                {
+                    curr_br = next_br;
+                } else {
+                    break;
+                }
+            }
+            Rule::sinonSiBr => {
+                let mut inner_elif = curr_br.into_inner();
+                let cond = parse_expr(
+                    inner_elif
+                        .find(|p| matches!(p.as_node_tag(), Some("cond")))
+                        .unwrap()
+                        .into_inner(),
+                )?;
+                let body = build_ast_stmts(
+                    inner_elif
+                        .find(|p| matches!(p.as_node_tag(), Some("body")))
+                        .unwrap()
+                        .into_inner(),
+                )?;
+
+                elif_brs.push((cond, body));
+
+                if let Some(next_br) =
+                    inner_elif.find(|p| matches!(p.as_rule(), Rule::sinonSiBr | Rule::sinonBr))
+                {
+                    curr_br = next_br;
+                } else {
+                    break;
+                }
+            }
+            Rule::sinonBr => {
+                else_br = Some(build_ast_stmts(curr_br.into_inner())?);
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(Stmt::Si {
+        cond,
+        then_br,
+        elif_brs,
+        else_br,
+    })
 }
 
 pub fn build_ast_stmt(pair: Pair<Rule>) -> Result<Box<Stmt>, PestError<Rule>> {
@@ -599,47 +688,52 @@ pub fn build_ast_stmt(pair: Pair<Rule>) -> Result<Box<Stmt>, PestError<Rule>> {
             ))
         }
         Rule::SiStmt => {
-            let inner = pair.into_inner();
-            Stmt::Si {
-                cond: parse_expr(
-                    inner
-                        .clone()
-                        .find(|p| matches!(p.as_node_tag(), Some("cond")))
-                        .unwrap()
-                        .into_inner(),
-                )?,
-                then_br: build_ast_stmts(
-                    inner
-                        .clone()
-                        .find(|p| p.as_rule() == Rule::thenBr)
-                        .unwrap()
-                        .into_inner(),
-                )?,
-                elif_brs: inner
-                    .clone()
-                    .filter_map(|elif| {
-                        if elif.as_rule() != Rule::sinonSiBr {
-                            return None;
-                        };
-                        let inner_elif = elif.into_inner();
-                        let cond =
-                            parse_expr(inner_elif.find_first_tagged("cond").unwrap().into_inner());
-                        let body = build_ast_stmts(inner_elif.last().unwrap().into_inner());
-                        let Ok(cond) = cond else {
-                            return Some(Err(cond.err().unwrap()));
-                        };
-                        let Ok(body) = body else {
-                            return Some(Err(body.err().unwrap()));
-                        };
-                        Some(Ok((cond, body)))
-                    })
-                    .collect::<Result<_, _>>()?,
-                else_br: inner
-                    .clone()
-                    .find(|p| p.as_rule() == Rule::sinonBr)
-                    .map(|br| build_ast_stmts(br.into_inner()))
-                    .invert()?,
-            }
+            parse_if(pair)?
+            // let inner = pair.into_inner();
+            // Stmt::Si {
+            //     cond: parse_expr(
+            //         inner
+            //             .clone()
+            //             .find(|p| matches!(p.as_node_tag(), Some("cond")))
+            //             .unwrap()
+            //             .into_inner(),
+            //     )?,
+            //     then_br: build_ast_stmts(
+            //         inner
+            //             .clone()
+            //             .find(|p| matches!(p.as_node_tag(), Some("body")))
+            //             .unwrap()
+            //             .into_inner(),
+            //     )?,
+            //     elif_brs: inner
+            //         .clone()
+            //         .filter_map(|elif| {
+            //             if elif.as_rule() != Rule::sinonSiBr {
+            //                 return None;
+            //             };
+            //             let mut inner_elif = elif.into_inner();
+            //             let cond = parse_expr(
+            //                 inner_elif
+            //                     .find(|p| matches!(p.as_node_tag(), Some("cond")))
+            //                     .unwrap()
+            //                     .into_inner(),
+            //             );
+            //             let body = build_ast_stmts(inner_elif.last().unwrap().into_inner());
+            //             let Ok(cond) = cond else {
+            //                 return Some(Err(cond.err().unwrap()));
+            //             };
+            //             let Ok(body) = body else {
+            //                 return Some(Err(body.err().unwrap()));
+            //             };
+            //             Some(Ok((cond, body)))
+            //         })
+            //         .collect::<Result<_, _>>()?,
+            //     else_br: inner
+            //         .clone()
+            //         .find(|p| p.as_rule() == Rule::sinonBr)
+            //         .map(|br| build_ast_stmts(br.into_inner()))
+            //         .invert()?,
+            // }
         }
         Rule::PourStmt => {
             let inner = pair.into_inner();

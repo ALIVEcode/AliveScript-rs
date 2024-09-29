@@ -1,9 +1,9 @@
-use unindent::Unindent;
 use dyn_fmt::AsStrFormatExt;
+use unindent::Unindent;
 
 use crate::{
     as_cast, as_fonction, as_mod,
-    as_obj::{ASDict, ASErreurType, ASObj, ASPaire, ASType},
+    as_obj::{ASDict, ASErreur, ASErreurType, ASObj, ASPaire, ASType},
     as_var, call_methode,
     data::Data,
     union_of,
@@ -18,10 +18,14 @@ as_mod! {
         }
     },
     as_fonction! {
-        Erreur(nom: ASType::Texte, msg: ASType::Texte => ASObj::texte("")) -> ASType::Erreur; {
+        Erreur[runner](nom: ASType::Texte, msg: ASType::Texte => ASObj::texte("")) -> ASType::Erreur; {
             as_cast!(ASObj::ASTexte(ref msg) = msg);
             as_cast!(ASObj::ASTexte(ref nom) = nom);
-            Err(ASErreurType::new_erreur(Some(nom.clone()), msg.clone()))
+            Ok(Some(ASObj::ASErreur(
+                Box::new(ASErreur::new(
+                    ASErreurType::new_erreur(Some(nom.clone()), msg.clone()), 0, runner.current_file().cloned()
+                ))
+            )))
         }
     },
     as_fonction! {

@@ -59,8 +59,9 @@ FnBody = {
 finFn = @{ "fin" ~ WHITESPACE+ ~ "fonction" }
 
 SiStmt = {
-    "si" ~ (#cond = Expr) ~ "alors"? ~ eos+ ~ thenBr ~ sinonSiBr* ~ sinonBr? ~ finSi
+    "si" ~ (#cond = Expr) ~ siInner // "alors"? ~ eos+ ~ thenBr ~ sinonSiBr* ~ sinonBr? ~ finSi
 }
+
 thenBr = {
     (!(sinonSiKw | "sinon") ~ stmtBloc ~ eos+)*
 }
@@ -70,10 +71,23 @@ finSi = @{ "fin" ~ WHITESPACE+ ~ "si" }
 sinonSiKw = @{ "sinon" ~ WHITESPACE+ ~ "si" }
 
 sinonSiBr = {
-    sinonSiKw ~ (#cond = Expr) ~ "alors"? ~ eos ~ thenBr
+    sinonSiKw ~ (#cond = Expr) ~ siInner // "alors"? ~ eos+ ~ thenBr
 }
 
-sinonBr = { "sinon" ~ eos+ ~ (stmtBloc ~ eos+)* }
+sinonBr = {
+    "sinon" ~ sinonInner // ~ eos+ ~ (stmtBloc ~ eos+)*
+}
+
+StmtBloc = { stmtBloc }
+siInner = _{
+    "alors" ~ (#body = StmtBloc) ~ (eos+ ~ (sinonSiBr | sinonBr))?
+  | "alors"? ~ eos+ ~ (#body = thenBr) ~ (sinonSiBr | sinonBr | finSi)
+}
+
+sinonInner = _{
+    stmtBloc
+  | eos+ ~ (stmtBloc ~ eos+)* ~ finSi
+}
 
 PourStmt      = {
     "pour" ~ (#vars = declVar) ~ "dans" ~ (#iter = PourIter) ~ "faire"? ~ eos+ ~ StmtBody? ~ finPour
@@ -235,8 +249,7 @@ List = { "[" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE*
 Dict = { "{" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE* ~ "}" }
 
 Callable = {
-    Ident
-  | "(" ~ NEWLINE* ~ Expr ~ NEWLINE* ~ ")"
+    (Ident | "(" ~ NEWLINE* ~ Expr ~ NEWLINE* ~ ")") ~ (AccessProp)*
 }
 
 FnCall = { Callable ~ FunctionArgs }

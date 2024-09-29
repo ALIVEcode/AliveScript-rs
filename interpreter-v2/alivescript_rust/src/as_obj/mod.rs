@@ -119,6 +119,7 @@ impl ASObj {
             A::ASClasse(..) => ASType::Classe,
             A::ASClasseInst(inst) => ASType::Objet(inst.classe_parent().name().clone()),
             A::ASTypeObj(..) => ASType::Type,
+            A::ASErreur(..) => ASType::Erreur,
             as_type => todo!("Type inconnue {:?}", as_type),
         }
     }

@@ -263,6 +263,10 @@ impl<'a> Runner<'a> {
         }
     }
 
+    pub fn current_file(&self) -> Option<&String> {
+        self.current_file.as_ref()
+    }
+
     fn should_early_exit(&self) -> bool {
         self.early_exit.is_some()
     }
@@ -1220,6 +1224,9 @@ impl Visitor for Runner<'_> {
     fn visit_stmt_expr(&mut self, stmt: &Stmt) {
         if let Stmt::Expr(expr) = stmt {
             expr.accept(self);
+            if self.error_thrown() {
+                return;
+            }
             self.stmt_result = self.expr_results.pop();
         }
     }
