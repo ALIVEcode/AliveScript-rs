@@ -161,13 +161,262 @@ SubStmt: Box<Stmt> = {
     "sortir" => Box::new(Stmt::Sortir),
 };
 
-pub StmtExpr: Box<Expr> = {
-  <func:ident> <arg:Expr> => 
-      Box::new(Expr::FnCall{
-          func: Box::new(Expr::Ident(func)),
-          args: vec![arg],
-      }),
+//Cmd: Box<Stmt> = {
+//  <func:Term> <args:(<CmdFirstTerm> ("," <Comma<Expr>>)?)?> => Box::new(Stmt::Expr(Box::new(Expr::FnCall{<>}))),
+//};
+
+CmdFirstTerm: Box<Expr> = {
+  Lit => Box::new(<>),
+
+  "faire" "eos" <body:Script> "fin" => Box::new(Expr::Faire(<>)),
+
+  <func:CmdFirstTerm> <args:CommaCollection<"(", ")", Expr>> => Box::new(Expr::FnCall{<>}),
+
+  <ident:ident> => Box::new(Expr::Ident(<>)),
+
+  <obj:CmdFirstTerm> "." <prop:ident> => Box::new(Expr::AccessProp{<>}),
+
+  <obj:CmdFirstTerm> "[" <slice:Expr> "]" => Box::new(Expr::Slice{<>}),
+
+  <obj:CmdFirstTerm> "[" <first:Expr> "," <slice:Comma<Expr>> "]" => {
+      let mut slice_final = vec![first.clone()];
+      slice_final.extend(slice.into_iter());
+      Box::new(Expr::Slice{obj, slice: Box::new(Expr::List(slice_final)) })
+  },
 }
+
+CmdExpr: Box<Expr> = {
+  #[precedence(level="1")]
+  CmdFirstTerm,
+
+  #[precedence(level="2")]
+  <lhs:CmdExpr> "exp" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Exp,
+      rhs
+    })
+  },
+  <lhs:CmdExpr> "%" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Mod,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "*" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Mul,
+      rhs
+    })
+  },
+  <lhs:CmdExpr> "/" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Div,
+      rhs
+    })
+  },
+  <lhs:CmdExpr> "//" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::DivInt,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "+" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Add,
+      rhs
+    })
+  },
+  <lhs:CmdExpr> "-" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Sub,
+      rhs
+    })
+  },
+
+  <start:CmdExpr> ".." <end:Expr> <step:("bond" <Expr>)?> => {
+    Box::new(Expr::Range {
+      start,
+      end,
+      step,
+      is_incl: false,
+    })
+  },
+
+  <start:CmdExpr> "..=" <end:Expr> <step:("bond" <Expr>)?> => {
+    Box::new(Expr::Range {
+      start,
+      end,
+      step,
+      is_incl: true,
+    })
+  },
+
+  <lhs:CmdExpr> "++" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Extend,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "<<" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::ShiftLeft,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> ">>" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::ShiftRight,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "&" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::BitwiseAnd,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "|" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::BitwiseOr,
+      rhs
+    })
+  },
+
+  "pas" <expr:Expr> => {
+    Box::new(Expr::UnaryOp {
+      expr,
+      op: UnaryOpcode::Pas,
+    })
+  },
+
+  "non" <expr:Expr> => {
+    Box::new(Expr::UnaryOp {
+      expr,
+      op: UnaryOpcode::Pas,
+    })
+  },
+
+  <lhs:CmdExpr> "==" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Eq,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "!=" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::NotEq,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "dans" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Dans,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "pas" "dans" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::PasDans,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "<" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Lth,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> ">" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Gth,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "<=" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Leq,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> ">=" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Geq,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "et" <rhs:Expr> => {
+    Box::new(Expr::BinLogic {
+      lhs,
+      op: BinLogiccode::Et,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "ou" <rhs:Expr> => {
+    Box::new(Expr::BinLogic {
+      lhs,
+      op: BinLogiccode::Ou,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "??" <rhs:Expr> => {
+    Box::new(Expr::BinLogic {
+      lhs,
+      op: BinLogiccode::NonNul,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "xor" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::BitwiseXor,
+      rhs
+    })
+  },
+
+  <cond:CmdExpr> "?" <then_expr:Expr> ":" <else_expr:Expr> => {
+    Box::new(Expr::Ternary { <> })
+  },
+
+  "fonction" <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> ":" <body:Expr> => 
+    Box::new(Expr::DefFn(DefFn::new(None, None, params, return_type, vec![Box::new(Stmt::Retourner(vec![body]))]))),
+};
 
 pub Expr: Box<Expr> = {
   #[precedence(level="1")]
@@ -412,6 +661,7 @@ pub Expr: Box<Expr> = {
   "fonction" <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> ":" <body:Expr> => 
     Box::new(Expr::DefFn(DefFn::new(None, None, params, return_type, vec![Box::new(Stmt::Retourner(vec![body]))]))),
 };
+
 
 pub Term: Box<Expr> = {
   Lit => Box::new(<>),

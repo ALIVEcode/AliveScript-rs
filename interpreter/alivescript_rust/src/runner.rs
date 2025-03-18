@@ -3,7 +3,7 @@ use lalrpop_util::ParseError;
 use std::{cell::RefCell, ops::IndexMut, path::Path, rc::Rc};
 
 use crate::{
-    as_modules::ASModuleBuiltin,
+    as_modules::{load_dynlib, ASModuleBuiltin},
     as_obj::{
         ASClasse, ASClasseField, ASClasseInst, ASDict, ASEnv, ASErreur, ASErreurType, ASFnParam,
         ASFonc, ASMethode, ASObj, ASResult, ASScope, ASType, ASVar,
@@ -17,9 +17,10 @@ use crate::{
     data::{Data, Response},
     get_err_line,
     io::InterpretorIO,
-    run_script_with_runner,
     visitor::{Visitable, Visitor},
 };
+#[cfg(not(feature = "no-ast"))]
+use crate::run_script_with_runner;
 
 #[cfg(feature = "py")]
 use crate::as_py::run_python_script;
@@ -40,6 +41,7 @@ enum EarlyExit {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum ModuleType {
     AliveScript,
+    AliveScriptExtension,
     Python,
 }
 
@@ -274,7 +276,7 @@ impl<'a> Runner<'a> {
         Some(params_fonc)
     }
 
-    pub(crate) fn call_obj(&mut self, func: ASObj, args: Vec<ASObj>) -> Option<ASObj> {
+    pub fn call_obj(&mut self, func: ASObj, args: Vec<ASObj>) -> Option<ASObj> {
         let to_call = Expr::FnCall {
             func: Expr::literal(func),
             args: args.into_iter().map(|arg| Expr::literal(arg)).collect(),
@@ -286,6 +288,8 @@ impl<'a> Runner<'a> {
         self.pop_value()
     }
 
+    
+    #[cfg(not(feature = "no-ast"))]
     pub(crate) fn run_script(
         &mut self,
         script: String,
@@ -322,6 +326,15 @@ impl<'a> Runner<'a> {
         self.type_results = type_results;
         self.stmt_result = None;
         self.env.pop_scope()
+    }
+
+    #[cfg(feature = "no-ast")]
+    pub(crate) fn run_script(
+        &mut self,
+        script: String,
+        path: Option<String>,
+    ) -> Option<Rc<RefCell<ASScope>>> {
+        None
     }
 
     pub fn to_bool(&mut self, obj: &ASObj) -> ASResult<bool> {
@@ -1341,6 +1354,7 @@ impl Visitor for Runner<'_> {
                 let p = Path::new(module);
                 let module_type = match p.extension() {
                     Some(ext) if ext == "as" => ModuleType::AliveScript,
+                    Some(ext) if ext == "asx" => ModuleType::AliveScriptExtension,
                     Some(ext) if ext == "py" => ModuleType::Python,
                     _ => {
                         throw_err!(
@@ -1349,12 +1363,28 @@ impl Visitor for Runner<'_> {
                         );
                     }
                 };
+
                 let module_name = p.file_stem().map(|s| s.to_str().unwrap().to_owned());
                 if module_name.is_none() {
                     throw_err!(
                         self,
                         ASErreurType::new_erreur_module_invalide(module.clone())
                     );
+                }
+
+                if matches!(module_type, ModuleType::AliveScriptExtension) {
+                    let Some(mod_scope) = load_dynlib(module.clone()) else {
+                        todo!();
+                    };
+
+                    ASModuleBuiltin::load_from_scope(
+                        mod_scope,
+                        module_name.unwrap().to_owned(),
+                        alias,
+                        vars,
+                        &mut self.env,
+                    );
+                    return;
                 }
 
                 let mut module = module.clone();
@@ -1386,6 +1416,7 @@ impl Visitor for Runner<'_> {
                 let mod_scope = Rc::clone(&match module_type {
                     ModuleType::AliveScript => self.run_script(script, Some(module)).unwrap(),
                     ModuleType::Python => run_python_script(script).unwrap(),
+                    ModuleType::AliveScriptExtension => unreachable!(),
                 });
 
                 ASModuleBuiltin::load_from_scope(
@@ -1478,7 +1509,8 @@ impl Visitor for Runner<'_> {
                     }
                     (ASDict(d), obj) => {
                         let old_value = d.borrow().get(&obj).unwrap().val().clone();
-                        d.borrow_mut().insert(obj, Runner::<'_>::do_op(old_value, op, value));
+                        d.borrow_mut()
+                            .insert(obj, Runner::<'_>::do_op(old_value, op, value));
                     }
                     _ => todo!(),
                 }

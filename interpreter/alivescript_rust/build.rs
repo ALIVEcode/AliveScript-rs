@@ -1,5 +1,6 @@
 use lalrpop;
 
+#[cfg(not(feature = "no-ast"))]
 fn main() {
     let out_dir = std::env::var("OUT_DIR").unwrap();
     std::fs::create_dir_all(format!("{}/stdlib", out_dir)).unwrap();
@@ -13,4 +14,8 @@ fn main() {
         }
     }
     lalrpop::Configuration::new().process_dir("./src/").unwrap();
+}
+
+#[cfg(feature = "no-ast")]
+fn main() {
 }

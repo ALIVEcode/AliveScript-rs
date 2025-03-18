@@ -1,15 +1,18 @@
 #![allow(dead_code, unused_variables)]
 
-mod as_modules;
-mod visitor;
+pub mod as_modules;
+pub mod visitor;
 #[cfg(feature = "py")]
 mod as_py;
 mod as_obj_utils;
 
-pub(crate) mod as_obj;
-pub(crate) mod ast;
-pub(crate) mod lexer;
-pub(crate) mod token;
+pub mod as_obj;
+pub mod ast;
+
+#[cfg(not(feature = "no-ast"))]
+pub mod lexer;
+#[cfg(not(feature = "no-ast"))]
+pub mod token;
 
 pub mod data;
 pub mod io;
@@ -18,12 +21,18 @@ pub mod runner;
 use crate::data::Data;
 use crate::io::InterpretorIO;
 use crate::runner::Runner;
+
+#[cfg(not(feature = "no-ast"))]
 use crate::lexer::LexicalError;
+#[cfg(not(feature = "no-ast"))]
 use lalrpop_util::lalrpop_mod;
+#[cfg(not(feature = "no-ast"))]
 use lalrpop_util::ParseError;
 
+#[cfg(not(feature = "no-ast"))]
 lalrpop_mod!(pub alivescript, "/src/alivescript.rs");
 
+#[cfg(not(feature = "no-ast"))]
 use crate::{lexer::Lexer, visitor::Visitor};
 
 pub fn get_err_line(script: &String, start: usize, end: usize) -> (String, usize) {
@@ -37,6 +46,7 @@ pub fn get_err_line(script: &String, start: usize, end: usize) -> (String, usize
     (script[line_start..=line_end].trim().to_owned(), line_num)
 }
 
+#[cfg(not(feature = "no-ast"))]
 pub fn run_script<'a, IO: InterpretorIO + 'a>(script: &String, interpretor_io: &mut IO) {
     let lexer = Lexer::new(&script[..]);
     let result_stmts = alivescript::ScriptParser::new().parse(lexer);
@@ -66,6 +76,7 @@ pub fn run_script<'a, IO: InterpretorIO + 'a>(script: &String, interpretor_io: &
     };
 }
 
+#[cfg(not(feature = "no-ast"))]
 pub fn run_script_from_file<'a, IO: InterpretorIO + 'a>(script: &String, interpretor_io: &mut IO, script_file: String) {
     let lexer = Lexer::new(&script[..]);
     let result_stmts = alivescript::ScriptParser::new().parse(lexer);
@@ -94,6 +105,8 @@ pub fn run_script_from_file<'a, IO: InterpretorIO + 'a>(script: &String, interpr
         }
     };
 }
+
+#[cfg(not(feature = "no-ast"))]
 pub fn run_script_with_runner<'a>(
     script: &String,
     runner: &mut Runner<'a>,

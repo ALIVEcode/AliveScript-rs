@@ -1,9 +1,6 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc, str::FromStr};
 
-use crate::{
-    as_obj::{ASErreurType, ASObj, ASVar},
-    lexer::LexicalError,
-};
+use crate::as_obj::{ASErreurType, ASObj, ASVar};
 
 use super::ASEnv;
 
@@ -194,9 +191,7 @@ impl ASType {
 
             (Tout, other) | (other, Tout) => other != &Rien && other != &Nul,
 
-            (Lit(o1), Lit(o2)) => {
-                o1 == o2
-            }
+            (Lit(o1), Lit(o2)) => o1 == o2,
 
             (Optional(t), other) | (other, Optional(t)) => {
                 other == &Nul || ASType::type_match(t.as_ref(), other)
@@ -299,7 +294,7 @@ impl From<Option<ASType>> for ASType {
 }
 
 impl FromStr for ASType {
-    type Err = LexicalError;
+    type Err = ASErreurType;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {

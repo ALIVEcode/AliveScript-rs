@@ -7,7 +7,7 @@ use std::{
 use crate::as_obj::{ASErreurType, ASObj, ASResult, ASType};
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ASScope(HashMap<String, (ASVar, ASObj)>);
+pub struct ASScope(pub(crate) HashMap<String, (ASVar, ASObj)>);
 
 impl ASScope {
     pub fn new() -> Self {

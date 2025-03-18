@@ -1,4 +1,5 @@
 mod as_builtin;
+mod as_game;
 mod as_inspecte;
 mod as_liste;
 mod as_math;
@@ -6,7 +7,6 @@ mod as_temps;
 mod as_tests;
 mod as_texte;
 mod as_voiture;
-mod as_game;
 mod fonction_macro;
 
 use once_cell::sync::Lazy;
@@ -25,8 +25,6 @@ use self::as_temps::TEMPS_MOD;
 use self::as_tests::TEST_MOD;
 use self::as_texte::TEXTE_MOD;
 use self::as_voiture::VOITURE_MOD;
-use self::as_game::GAME_MOD;
-
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub enum ASModuleBuiltin {
@@ -257,4 +255,25 @@ impl TryFrom<&str> for ASModuleBuiltin {
             // _ => Err(ASErreurType::new_erreur_module_invalide(mod_name.into())),
         }
     }
+}
+
+#[cfg(feature = "dynlib")]
+pub fn load_dynlib(path: String) -> Option<Rc<RefCell<ASScope>>> {
+    use libloading::{Library, Symbol};
+
+    unsafe {
+        let lib = Library::new(path).ok()?;
+        let func: Symbol<unsafe extern "C" fn() -> *mut ASScope> = lib.get(b"load_aslib").ok()?;
+
+        let scope = &mut *func();
+
+        dbg!(&scope.0.keys().collect::<Vec<_>>());
+
+        Some(Rc::new(RefCell::new(scope.clone())))
+    }
+}
+
+#[cfg(not(feature = "dynlib"))]
+pub fn load_dynlib(path: String) -> Option<Rc<RefCell<ASScope>>> {
+    None
 }

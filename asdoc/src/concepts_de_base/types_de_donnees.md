@@ -17,15 +17,16 @@ Les types de données _primitifs_ représentent les valeurs de base qui composen
 AliveScript. Ils sont au compte de 7: `nul`, `entier`, `décimal`, `texte`,
 `booléen`, `fonction` et `structure`.
 
-| Type de données     | Caractéristiques                                                                        | Exemple                          |
-| ------------------- | --------------------------------------------------------------------------------------- | -------------------------------- |
-| `nul`               | La seule valeur de ce type est la valeur `nul`. Représente souvent l'absence de valeurs | `nul`                            |
-| `entier`            | `-2^63` &leq; x < `2^63`                                                                | `-1`, `34324`, `0`, `-10212`     |
-| `décimal`/`decimal` | Nombre flottant double précision IEEE-754                                               | `23.2`, `-0.1212`, `9823.2223`   |
-| `texte`             | Chaîne de caractères UTF-8                                                              | `""`, `"école"`, `"bonjour! 😃"` |
-| `booléen`/`booleen` | Valeurs représentant vrai ou faux                                                       | `vrai`, `faux`                   |
-| `fonction`          | Valeurs encapsulant un comportement et pouvant être appelées                            | Voir [définition de Fonctions]() |
-| `structure`         | Type englobant toutes les structures                                                    | Voir [les Structures]()          |
+| Type de données     | Caractéristiques                                                                        | Exemple                                        |
+| ------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `nul`               | La seule valeur de ce type est la valeur `nul`. Représente souvent l'absence de valeurs | `nul`                                          |
+| `entier`            | `-2^63` &leq; x < `2^63`                                                                | `-1`, `34324`, `0`, `-10212`                   |
+| `décimal`/`decimal` | Nombre flottant double précision IEEE-754                                               | `23.2`, `-0.1212`, `9823.2223`                 |
+| `texte`             | Chaîne de caractères UTF-8                                                              | `""`, `"école"`, `"bonjour! 😃"`               |
+| `booléen`/`booleen` | Valeurs représentant vrai ou faux                                                       | `vrai`, `faux`                                 |
+| `fonction`          | Valeurs encapsulant un comportement et pouvant être appelées                            | Voir [définition de Fonctions](./fonctions.md) |
+
+<!-- | `structure`         | Type englobant toutes les structures                                                    | Voir [les Structures]()          | -->
 
 ## Structures de données primitives
 
@@ -37,3 +38,24 @@ même le langage. Il y en a 3: `liste`, `paire` et `dict`.
 | `liste`         | Une liste d'éléments, hétérogène et de taille dynamique        | `[1, "a", vrai]`, `[]`, `["allo", [2, [3], x]]`                                     |
 | `paire`         | Une association entre un élément `clef` et un élément `valeur` | `"couleur": "rouge"`, `"age": 28`, `[1, 2]: [3, 4]`                                 |
 | `dict`          | Un ensemble de `paire`s qui respecte l'ordre d'insertion       | `{"nom": "Mathis", "age": 21}`, `{}`, `{"infos": {"couleur": "rouge", "prix": 23}}` |
+
+## Types prédéfinis:
+
+- `tout`: Comme son nom l'indique, ce type englobe tous les autres types
+
+- `booleen`: `vrai` **ET** `faux`
+
+- `nombre`:
+
+  - `entier`: nombre entier entre **-2147483648** et **2147483647**
+  - `decimal`: nombre décimal de forme:
+    - <code>_entier_._entier_</code>
+
+- `iterable`:
+
+  - `texte`: <code>"_texte_"</code> **OU** <code>'_texte_'</code>
+  - `liste`: <code>\[_valeur1_, _valeur2_, _etc._\]</code>
+
+- `fonctionType`: le type des `fonction`
+- `nulType`: le type de la valeur `nul`
+- `rien`: aussi le type de la valeur `nul`, utilisé pour spécifier qu'une fonction ne retourne rien
