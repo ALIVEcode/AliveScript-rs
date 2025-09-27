@@ -1,0 +1,1047 @@
+use crate::ast::{
+    Stmt,
+    DefFn,
+    DefMethod,
+    Expr,
+    Paire,
+    Type,
+    BinOpcode,
+    DeclVar,
+    AssignVar,
+    BinCompcode,
+    TypeBinOpcode,
+    UnaryOpcode,
+    BinLogiccode,
+    FnParam,
+    ClasseField,
+    ClasseFieldVis,
+    LireVar,
+};
+use crate::as_obj::ASObj;
+use crate::token::Token;
+use crate::lexer::LexicalError;
+
+grammar;
+
+pub Script: Vec<Box<Stmt>> = <("eos"* <Stmt>)*> "eos"*;
+
+pub Stmt: Box<Stmt> = {
+    <SubStmt> "eos",
+
+    "utiliser" <module:ident> "eos" => 
+        Box::new(Stmt::Utiliser { module, alias: None, vars: None, is_path: false } ),
+    "utiliser" <module:ident> <alias:ModuleIdent?> <vars:CommaCollection<"{", "}", ident>> "eos" => 
+        Box::new(Stmt::Utiliser { module, alias, vars: Some(vars), is_path: false } ),
+    "utiliser" <module:ident> <alias:ModuleIdent?> "{" "*" "}" "eos" => 
+        Box::new(Stmt::Utiliser { module, alias, vars: Some(vec![String::from("*")]), is_path: false }),
+
+    "utiliser" <alias:ident?> <module:"text"> "eos" => 
+        Box::new(Stmt::Utiliser { module, alias, vars: None, is_path: true } ),
+    "utiliser" <alias:ModuleIdent?> <vars:CommaCollection<"{", "}", ident>> <module:"text"> "eos" => 
+        Box::new(Stmt::Utiliser { module, alias, vars: Some(vars), is_path: true } ),
+    "utiliser" <alias:ModuleIdent?> "{" "*" "}" <module:"text"> "eos" => 
+        Box::new(Stmt::Utiliser { module, alias, vars: Some(vec![String::from("*")]), is_path: true }),
+    
+    "type" <var:TypeTerm> "assign" <val:Type> => Box::new(Stmt::TypeDecl {<>}),
+
+    "si" <cond:Expr> "alors"? "eos" <then_br:Script> 
+         <elif_brs:("sinon" "si" <Expr> "alors"? "eos" <Script>)*>
+         <else_br:("sinon" "eos" <Script>)?> "fin" "si" "eos" => 
+         Box::new(Stmt::Si { <> }),
+
+    "repeter" <n:Expr?> "eos" <body:Script> "fin" "repeter" "eos" => 
+        Box::new(Stmt::Repeter { <> }),
+
+    "tant que" <cond:Expr> "faire"? "eos" <body:Script> "fin" "tant que" "eos" => 
+        Box::new(Stmt::TantQue { <> }),
+
+    "pour" "chaque"? <var:DeclVar> DansOrAssign <iterable:Expr> "faire"? "eos" <body:Script> "fin" "pour" "eos" =>
+        Box::new(Stmt::Pour { <> }),
+
+    "pour" "chaque"? <var:DeclIdent> DansOrAssign <iterable:Expr> "faire"? "eos" <body:Script> "fin" "pour" "eos" =>
+        Box::new(Stmt::Pour { <> }),
+
+    <docs:(<"DOCS"> "eos"*)?> "fonction" <name:ident> <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> "eos"
+        <body:Script> "fin" "fonction" "eos" => Box::new(Stmt::DefFn(DefFn::new(docs, Some(name), params, return_type, body))),
+
+    <docs:(<"DOCS"> "eos"*)?> "classe" <name:ident> "eos" 
+        <fields:(<ClasseFieldDecl> "eos"*)*> 
+        <init:(<ClasseInit> "eos"*)?> 
+        <methods:(<ClasseMethode> "eos"*)*> 
+        "fin" "classe" "eos" => 
+            Box::new(Stmt::DefClasse { <> }),
+
+    <then_stmt:SubStmt> "si" <cond:Expr> "eos" => 
+      Box::new(Stmt::CondStmt { <> }),
+};
+
+#[inline]
+DansOrAssign = {
+    "dans",
+    "assign",
+}
+
+#[inline]
+ClasseFieldDecl: ClasseField = {
+    <statique:"statique"?> "var"? <var_name:ident> <static_type:StaticType> <default_value:("assign" <Expr>)?> "eos" =>
+        ClasseField { 
+            name: var_name.into(),
+            vis: ClasseFieldVis::Publique,
+            static_type,
+            default_value,
+            is_const: false,
+            is_static: statique.is_some(),
+        },
+
+    <statique:"statique"?> "const" <var_name:ident> <static_type:StaticType> <default_value:("assign" <Expr>)?> "eos" =>
+        ClasseField { 
+            name: var_name.into(),
+            vis: ClasseFieldVis::Publique,
+            static_type,
+            default_value,
+            is_const: true,
+            is_static: statique.is_some(),
+        },
+};
+
+#[inline]
+ClasseInit: DefFn = {
+    "init" <params:CommaCollection<"(", ")", FnParam>> "eos"
+        <body:Script> "fin" "init" "eos" => 
+            DefFn::new(None, Some(String::new()), params, Some(Box::new(Type::Name("rien".to_owned()))), body),
+};
+
+#[inline]
+ClasseMethode: DefMethod = {
+    <docs:(<"DOCS"> "eos"*)?> "methode" <name:ident> <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> "eos"
+        <body:Script> "fin" "methode" "eos" => DefMethod::new(docs, Some(name), params, return_type, body, false),
+
+    <docs:(<"DOCS"> "eos"*)?> "methode" "statique" <name:ident> <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> "eos"
+        <body:Script> "fin" "methode" "eos" => DefMethod::new(docs, Some(name), params, return_type, body, true),
+};
+
+// Expr => Box::new(Stmt::Expr(<>)),
+//<f:Term> <exprs:Comma<Expr>> => {
+//    if exprs.is_empty() && !matches!(*f, Expr::Ident(..)) {
+//        return Box::new(Stmt::Expr(f));
+//    }
+//    
+//    Box::new(Stmt::Expr(Box::new(Expr::FnCall{func: f, args: exprs})))
+//},
+
+SubStmt: Box<Stmt> = {
+    Expr => Box::new(Stmt::Expr(<>)),
+
+    <var:DeclVar> "assign" <val:Expr> => Box::new(Stmt::Decl { <> }),
+
+    <var:AssignVarSimple> "assign" <val:Expr> => Box::new(Stmt::Assign { <> }),
+    <var:AssignVarSimple> <op:BinOpcodeAssign> <val:Expr> => Box::new(Stmt::OpAssign { <> }),
+
+    "afficher" <arg:Comma<Expr>> => Box::new(Stmt::Afficher(arg)),
+
+
+    "lire" <factory:(<Term> "dans")?> <var:DeclVarSimple> <prompt:("," <Expr>)?> => 
+        Box::new(Stmt::Lire {
+                    factory,
+                    var: LireVar::Decl(var),
+                    prompt: prompt,
+                }),
+
+    "lire" <factory:(<Term> "dans")?> <var:AssignVarSimple> <prompt:("," <Expr>)?> => 
+        Box::new(Stmt::Lire {
+                    factory,
+                    var: LireVar::Assign(var),
+                    prompt: prompt,
+                }),
+
+    "retourner" <Comma<Expr>> => Box::new(Stmt::Retourner(<>)),
+
+    "continuer" => Box::new(Stmt::Continuer),
+
+    "sortir" => Box::new(Stmt::Sortir),
+};
+
+//Cmd: Box<Stmt> = {
+//  <func:Term> <args:(<CmdFirstTerm> ("," <Comma<Expr>>)?)?> => Box::new(Stmt::Expr(Box::new(Expr::FnCall{<>}))),
+//};
+
+CmdFirstTerm: Box<Expr> = {
+  Lit => Box::new(<>),
+
+  "faire" "eos" <body:Script> "fin" => Box::new(Expr::Faire(<>)),
+
+  <func:CmdFirstTerm> <args:CommaCollection<"(", ")", Expr>> => Box::new(Expr::FnCall{<>}),
+
+  <ident:ident> => Box::new(Expr::Ident(<>)),
+
+  <obj:CmdFirstTerm> "." <prop:ident> => Box::new(Expr::AccessProp{<>}),
+
+  <obj:CmdFirstTerm> "[" <slice:Expr> "]" => Box::new(Expr::Slice{<>}),
+
+  <obj:CmdFirstTerm> "[" <first:Expr> "," <slice:Comma<Expr>> "]" => {
+      let mut slice_final = vec![first.clone()];
+      slice_final.extend(slice.into_iter());
+      Box::new(Expr::Slice{obj, slice: Box::new(Expr::List(slice_final)) })
+  },
+}
+
+CmdExpr: Box<Expr> = {
+  #[precedence(level="1")]
+  CmdFirstTerm,
+
+  #[precedence(level="2")]
+  <lhs:CmdExpr> "exp" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Exp,
+      rhs
+    })
+  },
+  <lhs:CmdExpr> "%" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Mod,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "*" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Mul,
+      rhs
+    })
+  },
+  <lhs:CmdExpr> "/" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Div,
+      rhs
+    })
+  },
+  <lhs:CmdExpr> "//" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::DivInt,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "+" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Add,
+      rhs
+    })
+  },
+  <lhs:CmdExpr> "-" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Sub,
+      rhs
+    })
+  },
+
+  <start:CmdExpr> ".." <end:Expr> <step:("bond" <Expr>)?> => {
+    Box::new(Expr::Range {
+      start,
+      end,
+      step,
+      is_incl: false,
+    })
+  },
+
+  <start:CmdExpr> "..=" <end:Expr> <step:("bond" <Expr>)?> => {
+    Box::new(Expr::Range {
+      start,
+      end,
+      step,
+      is_incl: true,
+    })
+  },
+
+  <lhs:CmdExpr> "++" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Extend,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "<<" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::ShiftLeft,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> ">>" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::ShiftRight,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "&" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::BitwiseAnd,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "|" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::BitwiseOr,
+      rhs
+    })
+  },
+
+  "pas" <expr:Expr> => {
+    Box::new(Expr::UnaryOp {
+      expr,
+      op: UnaryOpcode::Pas,
+    })
+  },
+
+  "non" <expr:Expr> => {
+    Box::new(Expr::UnaryOp {
+      expr,
+      op: UnaryOpcode::Pas,
+    })
+  },
+
+  <lhs:CmdExpr> "==" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Eq,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "!=" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::NotEq,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "dans" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Dans,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "pas" "dans" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::PasDans,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "<" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Lth,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> ">" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Gth,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "<=" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Leq,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> ">=" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Geq,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "et" <rhs:Expr> => {
+    Box::new(Expr::BinLogic {
+      lhs,
+      op: BinLogiccode::Et,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "ou" <rhs:Expr> => {
+    Box::new(Expr::BinLogic {
+      lhs,
+      op: BinLogiccode::Ou,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "??" <rhs:Expr> => {
+    Box::new(Expr::BinLogic {
+      lhs,
+      op: BinLogiccode::NonNul,
+      rhs
+    })
+  },
+
+  <lhs:CmdExpr> "xor" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::BitwiseXor,
+      rhs
+    })
+  },
+
+  <cond:CmdExpr> "?" <then_expr:Expr> ":" <else_expr:Expr> => {
+    Box::new(Expr::Ternary { <> })
+  },
+
+  "fonction" <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> ":" <body:Expr> => 
+    Box::new(Expr::DefFn(DefFn::new(None, None, params, return_type, vec![Box::new(Stmt::Retourner(vec![body]))]))),
+};
+
+pub Expr: Box<Expr> = {
+  #[precedence(level="1")]
+  Term,
+
+  #[precedence(level="2")]
+  #[assoc(side="left")]
+  <lhs:Expr> "exp" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Exp,
+      rhs
+    })
+  },
+  <lhs:Expr> "%" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Mod,
+      rhs
+    })
+  },
+
+  #[precedence(level="3")]
+  #[assoc(side="left")]
+  <lhs:Expr> "*" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Mul,
+      rhs
+    })
+  },
+  <lhs:Expr> "/" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Div,
+      rhs
+    })
+  },
+  <lhs:Expr> "//" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::DivInt,
+      rhs
+    })
+  },
+
+  #[precedence(level="4")]
+  #[assoc(side="left")]
+  <lhs:Expr> "+" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Add,
+      rhs
+    })
+  },
+  <lhs:Expr> "-" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Sub,
+      rhs
+    })
+  },
+
+  #[precedence(level="5")]
+  #[assoc(side="left")]
+  <start:Expr> ".." <end:Expr> <step:("bond" <Expr>)?> => {
+    Box::new(Expr::Range {
+      start,
+      end,
+      step,
+      is_incl: false,
+    })
+  },
+  <start:Expr> "..=" <end:Expr> <step:("bond" <Expr>)?> => {
+    Box::new(Expr::Range {
+      start,
+      end,
+      step,
+      is_incl: true,
+    })
+  },
+
+  #[precedence(level="6")]
+  #[assoc(side="left")]
+  <lhs:Expr> "++" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::Extend,
+      rhs
+    })
+  },
+
+  <lhs:Expr> "<<" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::ShiftLeft,
+      rhs
+    })
+  },
+
+  <lhs:Expr> ">>" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::ShiftRight,
+      rhs
+    })
+  },
+
+  #[precedence(level="7")]
+  #[assoc(side="left")]
+  <lhs:Expr> "&" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::BitwiseAnd,
+      rhs
+    })
+  },
+
+  <lhs:Expr> "|" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::BitwiseOr,
+      rhs
+    })
+  },
+
+  #[precedence(level="8")]
+  "pas" <expr:Expr> => {
+    Box::new(Expr::UnaryOp {
+      expr,
+      op: UnaryOpcode::Pas,
+    })
+  },
+
+  "non" <expr:Expr> => {
+    Box::new(Expr::UnaryOp {
+      expr,
+      op: UnaryOpcode::Pas,
+    })
+  },
+
+  #[precedence(level="9")]
+  #[assoc(side="left")]
+  <lhs:Expr> "==" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Eq,
+      rhs
+    })
+  },
+  <lhs:Expr> "!=" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::NotEq,
+      rhs
+    })
+  },
+  <lhs:Expr> "dans" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Dans,
+      rhs
+    })
+  },
+  <lhs:Expr> "pas" "dans" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::PasDans,
+      rhs
+    })
+  },
+  <lhs:Expr> "<" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Lth,
+      rhs
+    })
+  },
+  <lhs:Expr> ">" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Gth,
+      rhs
+    })
+  },
+  <lhs:Expr> "<=" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Leq,
+      rhs
+    })
+  },
+  <lhs:Expr> ">=" <rhs:Expr> => {
+    Box::new(Expr::BinComp {
+      lhs,
+      op: BinCompcode::Geq,
+      rhs
+    })
+  },
+
+  #[precedence(level="10")]
+  #[assoc(side="left")]
+  <lhs:Expr> "et" <rhs:Expr> => {
+    Box::new(Expr::BinLogic {
+      lhs,
+      op: BinLogiccode::Et,
+      rhs
+    })
+  },
+
+  <lhs:Expr> "ou" <rhs:Expr> => {
+    Box::new(Expr::BinLogic {
+      lhs,
+      op: BinLogiccode::Ou,
+      rhs
+    })
+  },
+
+  <lhs:Expr> "??" <rhs:Expr> => {
+    Box::new(Expr::BinLogic {
+      lhs,
+      op: BinLogiccode::NonNul,
+      rhs
+    })
+  },
+
+  <lhs:Expr> "xor" <rhs:Expr> => {
+    Box::new(Expr::BinOp {
+      lhs,
+      op: BinOpcode::BitwiseXor,
+      rhs
+    })
+  },
+
+  #[precedence(level="11")]
+  #[assoc(side="left")]
+  <cond:Expr> "?" <then_expr:Expr> ":" <else_expr:Expr> => {
+    Box::new(Expr::Ternary { <> })
+  },
+
+  #[precedence(level="12")]
+  "fonction" <params:CommaCollection<"(", ")", FnParam>> <return_type:("->" <Type>)?> ":" <body:Expr> => 
+    Box::new(Expr::DefFn(DefFn::new(None, None, params, return_type, vec![Box::new(Stmt::Retourner(vec![body]))]))),
+};
+
+
+pub Term: Box<Expr> = {
+  Lit => Box::new(<>),
+
+  "faire" "eos" <body:Script> "fin" => Box::new(Expr::Faire(<>)),
+
+  <func:Term> <args:CommaCollection<"(", ")", Expr>> => Box::new(Expr::FnCall{<>}),
+
+  //<docs:(<"DOCS"> "eos"*)?> "fonction" <name:ident> "(" <params:Comma<FnParam>> ")" <return_type:("->" <Type>)?> "eos"
+  //    <body:Script> "fin" "fonction" "eos" => Box::new(Expr::DefFn(DefFn::new(docs, Some(name), params, return_type, body))),
+
+  <ident:ident> => Box::new(Expr::Ident(<>)),
+
+  AccessProp,
+
+  Slice,
+
+  Collection,
+
+  TermExpr,
+};
+
+
+//#[inline]
+ident: String = {
+    "ident",
+    "bond" => String::from("bond"),
+    "chaque" => String::from("chaque"),
+    //"type" => String::from("type"),
+    //"alias" => String::from("alias"),
+    //"statique" => String::from("statique"),
+};
+
+AccessProp: Box<Expr> = 
+    <obj:Term> "." <prop:ident> => Box::new(Expr::AccessProp{<>});
+
+#[inline]
+TermExpr: Box<Expr> = "(" "eos"* <Expr> "eos"* ")";
+
+Collection: Box<Expr> = {
+  CommaCollection<"[", "]", Expr> => Box::new(Expr::List(<>)),
+
+  CommaCollection<"{", "}", DictContent> => Box::new(Expr::Dict(<>)),
+}
+
+DictContent: Paire = {
+    Paire,
+    <ident:ident> => Paire {
+            clef: Box::new(Expr::Lit(ASObj::ASTexte(ident.clone()))),
+            val: Box::new(Expr::Ident(ident)),
+        },
+};
+
+Paire: Paire = {
+    <clef:ident> ":" <val:Expr> =>
+        Paire{ 
+            clef: Box::new(Expr::Lit(ASObj::ASTexte(clef))),
+            val,
+        },
+
+    <clef:Lit> ":" <val:Expr> => Paire{ clef: Box::new(clef), val },
+
+    <clef:Collection> ":" <val:Expr> => Paire{ <> },
+
+    <clef:TermExpr> ":" <val:Expr> => Paire{ <> },
+}
+
+#[inline]
+Slice: Box<Expr> = {
+
+  <obj:Term> "[" <slice:Expr> "]" => Box::new(Expr::Slice{<>}),
+
+  <obj:Term> "[" <first:Expr> "," <slice:Comma<Expr>> "]" => {
+      let mut slice_final = vec![first.clone()];
+      slice_final.extend(slice.into_iter());
+      Box::new(Expr::Slice{obj, slice: Box::new(Expr::List(slice_final)) })
+  },
+}
+
+DeclVarSimple: DeclVar = {
+    "var" <name:ident> <static_type:StaticType> =>
+        DeclVar::Var { 
+            name,
+            static_type,
+            is_const: false,
+        },
+
+    "const" <var_name:ident> <static_type:StaticType> =>
+        DeclVar::Var { 
+            name: var_name.into(),
+            static_type,
+            is_const: true,
+        },
+}
+
+DeclVar: DeclVar = {
+    "var" <DeclIdent>,
+
+    "const" <vars:CommaOne<(ident StaticType)>> => {
+        if vars.len() == 1 {
+            DeclVar::Var {
+                name: vars[0].0.clone(),
+                static_type: vars[0].1.clone(),
+                is_const: false,
+            }
+        } else {
+            DeclVar::ListUnpack(vars.into_iter().map(|(name, static_type)| {
+                DeclVar::Var {
+                    name,
+                    static_type,
+                    is_const: false,
+                }
+            }).collect())
+        }
+    },
+};
+
+DeclIdent: DeclVar = {
+    <vars:CommaOne<(ident StaticType)>> => {
+        if vars.len() == 1 {
+            DeclVar::Var {
+                name: vars[0].0.clone(),
+                static_type: vars[0].1.clone(),
+                is_const: false,
+            }
+        } else {
+            DeclVar::ListUnpack(vars.into_iter().map(|(name, static_type)| {
+                DeclVar::Var {
+                    name,
+                    static_type,
+                    is_const: false,
+                }
+            }).collect())
+        }
+    },
+};
+
+#[inline]
+AssignVarSimple: AssignVar = {
+    <name:ident> <static_type:StaticType> =>
+        AssignVar::Var { 
+            name,
+            static_type,
+        },
+
+    <expr:Slice> => {
+        match *expr {
+            Expr::Slice { obj, slice } => AssignVar::Slice {
+                obj,
+                slice,
+            },
+            _ => unreachable!(),
+        }
+    },
+
+    <expr:AccessProp> => {
+        match *expr {
+            Expr::AccessProp { obj, prop } => AssignVar::AccessProp {
+                obj,
+                prop,
+            },
+            _ => unreachable!(),
+        }
+    },
+};
+
+#[inline]
+AssignVar: AssignVar = {
+    <vars:CommaOne<AssignVarSimple>> => {
+        if vars.len() == 1 {
+            vars.into_iter().next().unwrap()
+        } else {
+            AssignVar::ListUnpack(vars)
+        }
+    },
+};
+
+Lit: Expr = {
+  "bool" => Expr::Lit(ASObj::ASBooleen(<>)),
+
+  "int" => Expr::Lit(ASObj::ASEntier(<>)),
+
+  "float" => Expr::Lit(ASObj::ASDecimal(<>)),
+
+  "text" => Expr::Lit(ASObj::ASTexte(<>)),
+
+  "nul" => Expr::Lit(ASObj::ASNul),
+};
+
+FnParam: FnParam = {
+    <name:ident> <static_type:StaticType> <default_value:("assign" <Expr>)?> 
+        => FnParam { <> },
+};
+
+#[inline]
+StaticType: Option<Box<Type>> = (":" <Type>)?;
+
+Type: Box<Type> = {
+  #[precedence(level="1")]
+  TypeTerm,
+  <TypeTerm> "?" => Box::new(Type::Opt(<>)),
+  CommaCollection<"[", "]", Type> => Box::new(Type::Array(<>)),
+
+  #[precedence(level="2")]
+  #[assoc(side="left")]
+  <lhs:Type> "|" <rhs:Type> => 
+    Box::new(Type::BinOp {
+        lhs,
+        op: TypeBinOpcode::Union,
+        rhs,
+    }),
+};
+
+TypeTerm: Box<Type> = {
+    <name:ident> <generic:CommaCollection<"<", ">", Type>?> => Box::new(Type::Name(name)),
+    <val:Lit> => {
+        match val {
+            Expr::Lit(v) if v == ASObj::ASNul => Box::new(Type::Name("nul".into())),
+            Expr::Lit(v) => Box::new(Type::Lit(v)),
+            _ => panic!("Not a literal, {:?}", val),
+        }
+    },
+    "fonction" => Box::new(Type::Name("fonction".into())),
+    "classe" => Box::new(Type::Name("classe".into())),
+};
+
+BinOpcodeAssign: BinOpcode = {
+    "+=" => BinOpcode::Add,
+    "-=" => BinOpcode::Sub,
+    "*=" => BinOpcode::Mul,
+    "/=" => BinOpcode::Div,
+    "//=" => BinOpcode::DivInt,
+    "%=" => BinOpcode::Mod,
+    "exp=" => BinOpcode::Exp,
+    "++=" => BinOpcode::Extend,
+    "&=" => BinOpcode::BitwiseAnd,
+    "<<=" => BinOpcode::ShiftLeft,
+    ">>=" => BinOpcode::ShiftRight,
+}
+
+ModuleIdent: String = {
+    <ident> ".",
+    "alias" <ident>,
+}
+
+// Macros
+
+Comma<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+CommaOne<T>: Vec<T> = {
+    <f: T> <mut v:("," <T>)*> => {
+        v.insert(0, f);
+        v
+    }
+};
+
+CommaCollection<Open, Close, T>: Vec<T> = {
+    Open <mut v:("eos"* <T> ",")*> <e:("eos"* <T>)?> "eos"* Close => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+extern {
+    type Location = usize;
+    type Error = LexicalError;
+
+
+    enum Token {
+        "utiliser" => Token::KwUtiliser,
+        "alias" => Token::KwAlias,
+
+        "var" => Token::KwVar,
+        "const" => Token::KwConst,
+
+        "type" => Token::KwType,
+
+        "afficher" => Token::KwAfficher,
+        "lire" => Token::KwLire,
+        
+        "fin" => Token::KwFin,
+        "si" => Token::KwSi,
+        "sinon" => Token::KwSinon,
+        "alors" => Token::KwAlors,
+
+        "repeter" => Token::KwRepeter,
+        "tant que" => Token::KwTantQue,
+        "pour" => Token::KwPour,
+        "chaque" => Token::KwChaque,
+        "faire" => Token::KwFaire,
+        "dans" => Token::KwDans,
+
+        "DOCS" => Token::ASDocs(<String>),
+
+        "fonction" => Token::KwFonction,
+        "retourner" => Token::KwRetourner,
+        "continuer" => Token::KwContinuer,
+        "sortir" => Token::KwSortir,
+
+        "classe" => Token::KwClasse,
+        "init" => Token::KwInit,
+        "methode" => Token::KwMethode,
+        "statique" => Token::KwStatique,
+
+        "ident" => Token::Ident(<String>),
+        "int" => Token::Int(<i64>),
+        "float" => Token::Float(<f64>),
+        "text" => Token::Text(<String>),
+        "bool" => Token::Bool(<bool>),
+        "nul" => Token::Nul,
+
+        "==" => Token::CompEq,
+        "!=" => Token::CompNotEq,
+        "<" => Token::CompLth,
+        ">" => Token::CompGth,
+        "<=" => Token::CompLeq,
+        ">=" => Token::CompGeq,
+
+        "pas" => Token::KwPas,
+        "non" => Token::KwNon,
+        "et" => Token::KwEt,
+        "ou" => Token::KwOu,
+        "xor" => Token::KwXor,
+
+        ".." => Token::RangeExcl,
+        "..=" => Token::RangeIncl,
+        "bond" => Token::KwBond,
+
+        "(" => Token::LParen,
+        ")" => Token::RParen,
+        "[" => Token::LBracket,
+        "]" => Token::RBracket,
+        "{" => Token::LCurly,
+        "}" => Token::RCurly,
+
+        "assign" => Token::Assign,
+        "->" => Token::RightArrow,
+        "eos" => Token::EoS,
+
+        ":" => Token::Colon,
+        "," => Token::Comma,
+        "." => Token::Dot,
+
+        "?" => Token::QuestionMark,
+        "??" => Token::DoubleQuestionMark,
+
+        "+" => Token::OpAdd,
+        "-" => Token::OpMinus,
+        "*" => Token::Star,
+        "/" => Token::OpDiv,
+        "//" => Token::OpDivInt,
+        "%" => Token::OpMod,
+        "exp" => Token::OpExp,
+        "|" => Token::OpPipe,
+        "++" => Token::OpExtend,
+        "&" => Token::OpBitwiseAnd,
+        "<<" => Token::OpShiftLeft,
+        ">>" => Token::OpShiftRight,
+
+        "++=" => Token::OpExtendAssign,
+        "+=" => Token::OpAddAssign,
+        "-=" => Token::OpMinusAssign,
+        "*=" => Token::OpTimesAssign,
+        "/=" => Token::OpDivAssign,
+        "//=" => Token::OpDivIntAssign,
+        "%=" => Token::OpModAssign,
+        "exp=" => Token::OpExpAssign,
+        "&=" => Token::OpBitwiseAndAssign,
+        "<<=" => Token::OpShiftLeftAssign,
+        ">>=" => Token::OpShiftRightAssign,
+      }
+}
