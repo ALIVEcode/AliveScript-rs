@@ -39,7 +39,7 @@ macro_rules! w_lit {
 
 #[derive(Debug, new)]
 pub enum ASObj {
-    // A placeholder value for representing the absence of values
+    /// A placeholder value for representing the absence of values
     ASNoValue,
 
     ASEntier(i64),

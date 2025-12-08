@@ -121,7 +121,7 @@ impl ASErreurType {
             ASErreurType::ErreurFichierIntrouvable { .. } => "ErreurFichierIntrouvable",
             ASErreurType::ErreurModuleInvalide { .. } => "ErreurModuleInvalide",
             ASErreurType::ErreurNomType { .. } => "ErreurNomType",
-            ASErreurType::ErreurSyntaxe { raison } => "ErreurSyntaxe",
+            ASErreurType::ErreurSyntaxe { .. } => "ErreurSyntaxe",
             ASErreurType::Erreur { .. } => "Erreur",
         }
     }

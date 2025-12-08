@@ -18,6 +18,10 @@ pub mod io;
 pub mod runner;
 pub mod utils;
 
+mod compiler;
+
+use std::rc::Rc;
+
 use as_obj::ASErreur;
 use ast::{Expr, Stmt};
 use parser::build_ast_stmts;
@@ -25,6 +29,8 @@ use pest::pratt_parser::PrattParser;
 use pest::Parser;
 use pest_derive::Parser;
 
+use crate::compiler::vm::VM;
+use crate::compiler::Compiler;
 use crate::data::Data;
 use crate::io::InterpretorIO;
 use crate::runner::Runner;
@@ -81,7 +87,11 @@ pub fn run_script_from_file<'a, IO: InterpretorIO + 'a>(
             visitor.visit_body(&stmts);
         }
         Err(err) => interpretor_io.send(Data::Erreur {
-            texte: format!("ErreurSyntaxe: {}\n{:#?}", err.to_string(), err.parse_attempts()),
+            texte: format!(
+                "ErreurSyntaxe: {}\n{:#?}",
+                err.to_string(),
+                err.parse_attempts()
+            ),
             ligne: 0,
         }),
     };
@@ -111,4 +121,37 @@ mod test {
 
     #[test]
     fn texte() {}
+}
+
+pub fn compile_script_from_file<'a, IO: InterpretorIO + 'a>(
+    script: &String,
+    interpretor_io: &mut IO,
+    script_file: String,
+) {
+    let debug = script.starts_with("#debug!");
+    let result_stmts = AlivescriptParser::parse(Rule::script, script);
+    if debug {
+        println!("{:#?}", result_stmts);
+    }
+
+    match result_stmts {
+        Ok(stmts) => {
+            // let mut visitor = Runner::new_with_file(interpretor_io, script_file);
+            let compiler = Compiler::new();
+            let stmts = build_ast_stmts(stmts).unwrap();
+            let closure = compiler.compile_debug(&stmts);
+            let mut vm = VM::new();
+            let result = vm.run(Rc::new(closure)).unwrap();
+            println!("{:#?}", vm.stack);
+            println!("{}", result);
+        }
+        Err(err) => interpretor_io.send(Data::Erreur {
+            texte: format!(
+                "ErreurSyntaxe: {}\n{:#?}",
+                err.to_string(),
+                err.parse_attempts()
+            ),
+            ligne: 0,
+        }),
+    };
 }

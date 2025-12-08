@@ -4,9 +4,7 @@
 use std::{cell::RefCell, env, io::Write, rc::Rc};
 
 use alivescript_rust::{
-    data::{Data, Response},
-    io::InterpretorIO,
-    run_script_from_file, run_script_with_runner,
+    compile_script_from_file, data::{Data, Response}, io::InterpretorIO, run_script_from_file, run_script_with_runner
 };
 
 const ALIVESCRIPT_VERSION: &'static str = "0.10.0";
@@ -84,6 +82,12 @@ fn main() -> std::io::Result<()> {
     if let Some(script_file) = first_arg {
         if script_file == "--version" {
             println!("{}", ALIVESCRIPT_VERSION);
+            return Ok(());
+        } else if script_file == "-c" {
+            let script_file = args.next().expect("File arg missing after -c");
+            let mut io = IO {};
+            let script = std::fs::read_to_string(&script_file).unwrap();
+            compile_script_from_file(&script, &mut io, script_file);
             return Ok(());
         }
         let mut io = IO {};

@@ -3,7 +3,7 @@ const a = fonction(x) -> entier: faire
     b(x)
 fin
 
-const b = fonction(y) -> entier 
+const b = fonction(y) -> entier
     retourner y
 fin fonction
 

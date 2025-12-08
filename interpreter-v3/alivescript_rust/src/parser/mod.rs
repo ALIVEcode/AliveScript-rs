@@ -54,7 +54,7 @@ lazy_static::lazy_static! {
                 Op::infix(Rule::DivInt, Left) |
                 Op::infix(Rule::Modulo, Left))
             .op(Op::prefix(Rule::Neg) | Op::prefix(Rule::Pos))
-            .op(Op::infix(Rule::Pow, Left))
+            .op(Op::infix(Rule::Pow, Right))
     };
 }
 

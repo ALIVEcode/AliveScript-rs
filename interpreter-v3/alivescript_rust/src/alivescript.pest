@@ -42,9 +42,9 @@ subStmt = _{
   | Expr
 }
 
-// CommandStmt = {
-// Ident ~ (Expr ~ ",")* ~ Expr
-// }
+CommandStmt = {
+    Ident ~ (Expr ~ ",")* ~ Expr
+}
 
 PubStmt = {
     Pub ~ (UtiliserStmt | DeclStmt | FnDef)
@@ -60,7 +60,7 @@ FnDef  =  {
     Docs? ~ eos* ~ "fonction" ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ FnBody
 }
 FnBody =  {
-    (":" ~ Expr | eos ~ StmtBody ~ finFn)
+    (":" ~ Expr | eos ~ StmtBody? ~ finFn)
 }
 finFn  = @{ "fin" ~ WHITESPACE+ ~ "fonction" }
 
@@ -70,6 +70,7 @@ ClasseDef           =  {
 ClasseBody          =  {
     (ClasseFields ~ eos+)* ~ ClasseInit? ~ finClasse
 }
+finClasse           = @{ "fin" ~ WHITESPACE+ ~ "classe" }
 ClasseFields        =  {
     ClasseStatiqueField
   | ClasseField
@@ -81,9 +82,11 @@ ClasseField         =  {
     (Const ~ Ident | Var? ~ Ident) ~ (":" ~ TypeExpr)? ~ (Assign ~ Expr)?
 }
 ClasseInit          =  {
-    "init" ~ (#params = FnParams)
+    "init" ~ (#params = FnParams) ~ eos ~ StmtBody? ~ finInit
 }
-finClasse           = @{ "fin" ~ WHITESPACE+ ~ "classe" }
+finInit             = @{ "fin" ~ WHITESPACE+ ~ "init" }
+ClasseMethode       =  { ("methode" | "méthode") }
+finMethode          = @{ "fin" ~ WHITESPACE+ ~ ("methode" | "méthode") }
 
 Pub = @{ "pub" }
 
