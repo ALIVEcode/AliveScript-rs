@@ -10,10 +10,9 @@ x = debut
 fin
 
 
-fonction add()
-  retourner x
+fonction plus_x(y)
+  retourner x + y
 fin fonction
 
-x = 12
 
-retourner add()
+retourner plus_x(22)

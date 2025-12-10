@@ -319,7 +319,7 @@ typePostfix = _{ "?" }
 
 Bool    = @{ "vrai" | "faux" }
 Text    = @{ PUSH("\"" | "'") ~ ("\\" ~ PEEK | !PEEK ~ ANY)* ~ POP }
-Ident   = @{ LETTER ~ (LETTER | ASCII_DIGIT)* }
+Ident   = @{ (LETTER | "_") ~ (LETTER | ASCII_DIGIT | "_")* }
 Integer = @{ "-"? ~ ASCII_DIGIT+ }
 Decimal = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
 Null    = @{ "nul" }
