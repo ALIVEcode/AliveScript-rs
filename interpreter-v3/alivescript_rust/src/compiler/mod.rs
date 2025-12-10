@@ -8,7 +8,7 @@ use crate::{
     ast::{AssignVar, BinOpcode, DeclVar, DefFn, Expr, Stmt, Type},
     compiler::{
         bytecode::{Instructions, Opcode},
-        obj::{Closure, Function, Upvalue, Value},
+        obj::{Closure, Function, Upvalue, UpvalueSpec, Value},
     },
     visitor::{Visitable, Visitor},
 };
@@ -47,7 +47,7 @@ pub struct Compiler<'a> {
     pub scope_depth: usize,
 
     // Captured variables
-    pub upvalues: Vec<Upvalue>,
+    pub upvalues: Vec<UpvalueSpec>,
 
     // Errors
     pub had_error: bool,
@@ -71,9 +71,9 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn new_with_parent(parent: Rc<RefCell<Compiler<'a>>>) -> Self {
+    fn new_closure(name: Option<String>, parent: Rc<RefCell<Compiler<'a>>>) -> Self {
         Self {
-            function: Rc::new(RefCell::new(Function::new_anonymous())),
+            function: Rc::new(RefCell::new(Function::new(name))),
             code: Instructions::new(),
             parent: Some(parent),
             locals: vec![],
@@ -95,12 +95,7 @@ impl<'a> Compiler<'a> {
 
         let x = Closure {
             function: Rc::new(rc_self.borrow().function.borrow().clone()),
-            upvalues: rc_self
-                .borrow()
-                .upvalues
-                .iter()
-                .map(|up| Rc::new(RefCell::new(up.clone())))
-                .collect(),
+            upvalues: vec![],
         };
         x
     }
@@ -117,12 +112,7 @@ impl<'a> Compiler<'a> {
 
         let x = Closure {
             function: Rc::new(rc_self.borrow().function.borrow().clone()),
-            upvalues: rc_self
-                .borrow()
-                .upvalues
-                .iter()
-                .map(|up| Rc::new(RefCell::new(up.clone())))
-                .collect(),
+            upvalues: vec![],
         };
         x
     }
@@ -130,6 +120,8 @@ impl<'a> Compiler<'a> {
     fn finish(&mut self) {
         let code = self.code.inner().clone();
         self.function.borrow_mut().code = code;
+        self.function.borrow_mut().upvalue_specs = self.upvalues.clone();
+        self.function.borrow_mut().upvalue_count = self.upvalues.len();
     }
 
     fn get_or_add_const(&mut self, obj: Value) -> usize {
@@ -197,6 +189,64 @@ impl<'a> Compiler<'a> {
         let last = self.locals.last_mut().unwrap();
         last.depth = self.scope_depth as i32;
     }
+    // Helper to record an upvalue and return its index
+    fn add_upvalue(&mut self, is_local: bool, index: usize) -> usize {
+        let spec = if is_local {
+            UpvalueSpec::Local(index)
+        } else {
+            UpvalueSpec::Upvalue(index)
+        };
+
+        // Check if we already have this exact upvalue recorded
+        if let Some(i) = self.upvalues.iter().position(|u| *u == spec) {
+            return i;
+        }
+
+        self.upvalues.push(spec);
+        self.upvalues.len() - 1
+    }
+
+    fn resolve_upval(&mut self, name: &str) -> Result<Option<usize>, ASErreurType> {
+        // 1. Check if we have a parent compiler
+        let parent_rc = match &self.parent {
+            Some(p) => Rc::clone(p),
+            None => return Ok(None), // Reached the top-level script, not an upvalue
+        };
+
+        // We need mutable access to the parent's state (locals/upvalues)
+        let mut parent = parent_rc.borrow_mut();
+
+        // 2. Try to resolve as a LOCAL in the PARENT
+        if let Some(local_idx) = parent.resolve_local(name)? {
+            // FOUND: It's a local in the parent (Direct Capture)
+
+            // Mark the local in the parent as captured.
+            parent.mark_captured(local_idx);
+
+            // Record it as a new upvalue in THIS compiler.
+            // We capture the stack slot index (local_idx) from the parent's frame.
+            let upval_idx = self.add_upvalue(true, local_idx);
+
+            // Return the index of the newly created upvalue in *this* function's upvalues array.
+            return Ok(Some(upval_idx));
+        }
+
+        // 3. Try to resolve as an UPVALUE in the PARENT (Indirect Capture)
+        // Note: This is a recursive call!
+        if let Some(upval_idx_in_parent) = parent.resolve_upval(name)? {
+            // FOUND: It's already an upvalue in the parent's closure (Inherited Upvalue)
+
+            // Record it as a new upvalue in THIS compiler.
+            // We capture the upvalue index (upval_idx_in_parent) from the parent's upvalue array.
+            let upval_idx = self.add_upvalue(false, upval_idx_in_parent);
+
+            // Return the index of the newly created upvalue in *this* function's upvalues array.
+            return Ok(Some(upval_idx));
+        }
+
+        // 4. Not found in the entire ancestry.
+        Ok(None)
+    }
 
     fn resolve_local(&mut self, name: &str) -> Result<Option<usize>, ASErreurType> {
         for (i, local) in self.locals.iter().enumerate().rev() {
@@ -213,11 +263,10 @@ impl<'a> Compiler<'a> {
         Ok(None)
     }
 
-    fn resolve_upval(&mut self, name: &str) {
-        match &self.parent {
-            Some(p) => todo!(),
-            None => todo!(),
-        }
+    fn resolve_var(&mut self, name: &str) -> Result<Option<usize>, ASErreurType> {
+        let local_var = self.resolve_local(name)?;
+
+        Ok(None)
     }
 
     fn mark_captured(&mut self, index: usize) {
@@ -261,15 +310,22 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
     fn visit_expr_ident(&mut self, expr: &Expr) {
         unpack!(Expr::Ident(ident) = expr);
 
-        let idx = self.borrow_mut().resolve_local(ident).unwrap();
-        match idx {
-            Some(idx) => {
-                self.borrow_mut().code.emit_get_local(idx as u8);
-            }
+        let mut compiler = self.borrow_mut();
 
-            // its an upvalue or a global variable
-            None => todo!(),
+        // 1. Try to resolve as a LOCAL
+        if let Ok(Some(local_idx)) = compiler.resolve_local(ident) {
+            compiler.code.emit_get_local(local_idx as u8);
+            return;
         }
+
+        // 2. Try to resolve as an UPVALUE
+        if let Ok(Some(upval_idx)) = compiler.resolve_upval(ident) {
+            compiler.code.emit_get_upvalue(upval_idx as u8);
+            return;
+        }
+
+        // 3. Must be a GLOBAL (or an error)
+        panic!("Global variable access not implemented: {}", ident);
     }
 
     fn visit_expr_accessprop(&mut self, expr: &Expr) {
@@ -281,7 +337,14 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
     }
 
     fn visit_expr_fncall(&mut self, expr: &Expr) {
-        todo!()
+        unpack!(Expr::FnCall { func, args } = expr);
+
+        func.accept(self);
+
+        args.iter().for_each(|arg| arg.accept(self));
+
+        self.borrow_mut().code.emit_call(args.len() as u8);
+
     }
 
     fn visit_expr_callrust(&mut self, expr: &Expr) {
@@ -391,9 +454,11 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
 
         val.accept(self);
 
-        self.borrow_mut().mark_initialized();
+        let mut compiler = self.borrow_mut();
 
-        self.borrow_mut().code.emit_set_local(local_idx);
+        compiler.mark_initialized();
+
+        compiler.code.emit_set_local(local_idx);
     }
 
     fn visit_stmt_assign(&mut self, stmt: &Stmt) {
@@ -403,15 +468,25 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
 
         val.accept(self);
 
-        let local_idx = self.borrow_mut().resolve_local(name).unwrap();
-        match local_idx {
-            Some(local_idx) => {
-                self.borrow_mut().code.emit_set_local(local_idx as u8);
-            }
+        let mut compiler = self.borrow_mut();
 
-            // its an upvalue or a global variable
-            None => todo!(),
+        // 1. Try to resolve as a LOCAL
+        if let Ok(Some(local_idx)) = compiler.resolve_local(name) {
+            compiler.code.emit_set_local(local_idx as u8);
+            return;
         }
+
+        // 2. Try to resolve as an UPVALUE
+        if let Ok(Some(upval_idx)) = compiler.resolve_upval(name) {
+            compiler.code.emit_set_upvalue(upval_idx as u8);
+            return;
+        }
+
+        // 3. It defines a new local variable
+        let local_idx = compiler.declare_local(name);
+
+        compiler.mark_initialized();
+        compiler.code.emit_set_local(local_idx);
     }
 
     fn visit_stmt_opassign(&mut self, stmt: &Stmt) {
@@ -475,7 +550,7 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
         let local_idx = self.borrow_mut().declare_local(name.as_ref().unwrap());
 
         let closure = {
-            let c = Compiler::new_with_parent(Rc::clone(self));
+            let c = Compiler::new_closure(name.clone(), Rc::clone(self));
             c.compile(body)
         };
 

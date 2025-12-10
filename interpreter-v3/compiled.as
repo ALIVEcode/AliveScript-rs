@@ -11,7 +11,9 @@ fin
 
 
 fonction add()
-  retourner 12
+  retourner x
 fin fonction
 
-retourner add
+x = 12
+
+retourner add()

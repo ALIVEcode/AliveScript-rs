@@ -73,48 +73,52 @@ pub struct Instructions {
     opcodes: Vec<Opcode>,
 }
 
-impl Debug for Instructions {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut instructions = vec![];
-        let mut iter = self.insts.iter();
+pub fn instructions_to_string(insts: &[u8]) -> String {
+    let mut instructions = vec![];
+    let mut iter = insts.iter();
 
-        while let Some(byte) = iter.next() {
-            let Ok(op) = Opcode::try_from(*byte) else {
-                panic!("Invalid opcode {}", byte);
-            };
+    while let Some(byte) = iter.next() {
+        let Ok(op) = Opcode::try_from(*byte) else {
+            panic!("Invalid opcode {}", byte);
+        };
 
-            let mut inst_str = vec![];
+        let mut inst_str = vec![];
 
-            inst_str.push(String::from(op.name()));
+        inst_str.push(String::from(op.name()));
 
-            match op {
-                Opcode::Constant | Opcode::SetLocal | Opcode::GetLocal => {
-                    let Some(idx) = iter.next() else {
-                        panic!("Missing arg for {}", op.name());
-                    };
+        match op {
+            Opcode::Constant | Opcode::SetLocal | Opcode::GetLocal => {
+                let Some(idx) = iter.next() else {
+                    panic!("Missing arg for {}", op.name());
+                };
 
-                    inst_str.push(idx.to_string());
-                }
-
-                Opcode::BinOp => {
-                    let Some(op) = iter.next() else {
-                        panic!("Missing arg for {}", op.name());
-                    };
-
-                    let binop = BinOpcode::try_from(*op).expect(&format!("Invalid binop: {}", op));
-
-                    inst_str.push(op.to_string());
-                    inst_str.push(format!("({:?})", binop));
-                }
-                _ => {}
+                inst_str.push(idx.to_string());
             }
 
-            instructions.push(inst_str);
+            Opcode::BinOp => {
+                let Some(op) = iter.next() else {
+                    panic!("Missing arg for {}", op.name());
+                };
+
+                let binop = BinOpcode::try_from(*op).expect(&format!("Invalid binop: {}", op));
+
+                inst_str.push(op.to_string());
+                inst_str.push(format!("({:?})", binop));
+            }
+            _ => {}
         }
 
-        let instructions = format_table(&instructions);
+        instructions.push(inst_str);
+    }
 
-        write!(f, "Instructions([\n\t{}\n])", instructions.join("\n\t"))
+    let instructions = format_table(&instructions);
+
+    format!("[\n\t{}\n]", instructions.join("\n\t"))
+}
+
+impl Debug for Instructions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Instructions({})", instructions_to_string(&self.insts))
     }
 }
 

@@ -31,6 +31,16 @@ pub struct Function {
 }
 
 impl Function {
+    pub fn new(name: Option<String>) -> Self {
+        Self {
+            name,
+            code: vec![],
+            constants: vec![],
+            upvalue_count: 0,
+            upvalue_specs: vec![],
+        }
+    }
+
     pub fn new_anonymous() -> Self {
         Self {
             name: None,
@@ -66,6 +76,7 @@ impl Upvalue {
             UpvalueLocation::Closed(cell) => cell.borrow().clone(),
         }
     }
+
     pub fn set(&mut self, vm: &mut VM, v: Value) {
         match &mut self.location {
             UpvalueLocation::Open(idx) => vm.stack[*idx] = v,
@@ -92,4 +103,17 @@ pub struct CallFrame {
 pub enum UpvalueSpec {
     Local(usize),   // refers to local slot index in the parent function
     Upvalue(usize), // refers to parent's upvalue number (chain)
+}
+
+impl UpvalueSpec {
+    pub fn is_local(&self) -> bool {
+        matches!(self, Self::Local(..))
+    }
+
+    pub fn index(&self) -> usize {
+        match self {
+            UpvalueSpec::Local(index) => *index,
+            UpvalueSpec::Upvalue(index) => *index,
+        }
+    }
 }

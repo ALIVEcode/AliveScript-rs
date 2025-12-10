@@ -204,7 +204,31 @@ impl VM {
                     }
                     self.stack[idx] = val;
                 }
-                Opcode::Call => todo!(),
+                Opcode::Call => {
+                    let nbargs = fnc.code[frame.ip] as usize;
+                    frame.ip += 1;
+
+                    let mut args = Vec::with_capacity(nbargs);
+
+                    for _ in 0..nbargs {
+                        args.push(self.stack.pop().expect("Missing arg in call"));
+                    }
+
+                    let func = self.stack.pop().expect("Missing func in call");
+
+                    match func {
+                        Value::ASObj(asobj) => {
+                            return Err(format!("Cannot call value of type: {}", asobj.get_type()));
+                        }
+                        Value::Closure(closure) => {
+                            self.frames.push(CallFrame {
+                                closure: Rc::clone(&closure),
+                                ip: 0,
+                                base: 0,
+                            });
+                        }
+                    }
+                }
                 Opcode::Return => {
                     let ret = self.pop().unwrap_or(ASObj::ASNul.into());
 
