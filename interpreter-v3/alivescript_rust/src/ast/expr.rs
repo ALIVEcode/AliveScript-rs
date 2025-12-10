@@ -1,5 +1,7 @@
 use std::rc::Rc;
 
+use num_enum::TryFromPrimitive;
+
 use crate::{
     as_obj::{ASErreurType, ASObj},
     ast::{DefFn, Stmt},
@@ -124,7 +126,8 @@ pub enum UnaryOpcode {
     Positive,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, TryFromPrimitive)]
+#[repr(u8)]
 pub enum BinOpcode {
     Mul,
     Div,

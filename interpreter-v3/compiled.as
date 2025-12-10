@@ -9,4 +9,9 @@ x = debut
   x + t2
 fin
 
-retourner x
+
+fonction add()
+  retourner 12
+fin fonction
+
+retourner add

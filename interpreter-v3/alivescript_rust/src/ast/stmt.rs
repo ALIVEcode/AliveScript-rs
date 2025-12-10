@@ -147,13 +147,13 @@ impl Stmt {
 
 #[derive(Clone, Debug, new, Getters, PartialEq)]
 pub struct DefFn {
-    docs: Option<String>,
-    name: Option<String>,
-    params: Vec<FnParam>,
-    return_type: Option<Box<Type>>,
-    body: Vec<Box<Stmt>>,
+    pub docs: Option<String>,
+    pub name: Option<String>,
+    pub params: Vec<FnParam>,
+    pub return_type: Option<Box<Type>>,
+    pub body: Vec<Box<Stmt>>,
     #[new(value = "false")]
-    public: bool,
+    pub public: bool,
 }
 
 #[derive(Debug, PartialEq, Clone, new, Getters)]

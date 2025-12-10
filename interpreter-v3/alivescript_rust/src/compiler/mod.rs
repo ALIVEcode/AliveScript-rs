@@ -5,10 +5,10 @@ use std::{
 
 use crate::{
     as_obj::{ASErreur, ASErreurType, ASObj},
-    ast::{AssignVar, BinOpcode, DeclVar, Expr, Stmt, Type},
+    ast::{AssignVar, BinOpcode, DeclVar, DefFn, Expr, Stmt, Type},
     compiler::{
         bytecode::{Instructions, Opcode},
-        obj::{Closure, Function, Upvalue},
+        obj::{Closure, Function, Upvalue, Value},
     },
     visitor::{Visitable, Visitor},
 };
@@ -16,6 +16,7 @@ use crate::{
 mod bitmasks;
 mod bytecode;
 mod obj;
+mod utils;
 pub mod vm;
 
 macro_rules! unpack {
@@ -39,7 +40,7 @@ pub struct Compiler<'a> {
     pub code: Instructions,
 
     // Compiler nesting
-    pub parent: Option<&'a mut Compiler<'a>>,
+    pub parent: Option<Rc<RefCell<Compiler<'a>>>>,
 
     // Scope & locals
     pub locals: Vec<Local>,
@@ -70,40 +71,60 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    pub fn compile(mut self, stmts: &Vec<Box<Stmt>>) -> Closure {
-        self.visit_body(stmts);
-
-        self.code.emit_return();
-
-        self.finish();
-
-        Closure {
-            function: Rc::new(self.function.borrow().clone()),
-            upvalues: self
-                .upvalues
-                .into_iter()
-                .map(|up| Rc::new(RefCell::new(up)))
-                .collect(),
+    fn new_with_parent(parent: Rc<RefCell<Compiler<'a>>>) -> Self {
+        Self {
+            function: Rc::new(RefCell::new(Function::new_anonymous())),
+            code: Instructions::new(),
+            parent: Some(parent),
+            locals: vec![],
+            scope_depth: 0,
+            upvalues: vec![],
+            had_error: false,
+            panic_mode: false,
+            jump_stack: vec![],
         }
     }
 
-    pub fn compile_debug(mut self, stmts: &Vec<Box<Stmt>>) -> Closure {
-        self.visit_body(stmts);
+    pub fn compile(self, stmts: &Vec<Box<Stmt>>) -> Closure {
+        let mut rc_self = Rc::new(RefCell::new(self));
+        rc_self.visit_body(stmts);
 
-        self.code.emit_return();
+        rc_self.borrow_mut().code.emit_return();
 
-        self.finish();
+        rc_self.borrow_mut().finish();
 
-        println!("{:#?}", self);
-
-        Closure {
-            function: Rc::new(self.function.borrow().clone()),
-            upvalues: self
+        let x = Closure {
+            function: Rc::new(rc_self.borrow().function.borrow().clone()),
+            upvalues: rc_self
+                .borrow()
                 .upvalues
-                .into_iter()
-                .map(|up| Rc::new(RefCell::new(up)))
+                .iter()
+                .map(|up| Rc::new(RefCell::new(up.clone())))
                 .collect(),
-        }
+        };
+        x
+    }
+
+    pub fn compile_debug(self, stmts: &Vec<Box<Stmt>>) -> Closure {
+        let mut rc_self = Rc::new(RefCell::new(self));
+        rc_self.visit_body(stmts);
+
+        rc_self.borrow_mut().code.emit_return();
+
+        rc_self.borrow_mut().finish();
+
+        println!("{:#?}", rc_self.borrow());
+
+        let x = Closure {
+            function: Rc::new(rc_self.borrow().function.borrow().clone()),
+            upvalues: rc_self
+                .borrow()
+                .upvalues
+                .iter()
+                .map(|up| Rc::new(RefCell::new(up.clone())))
+                .collect(),
+        };
+        x
     }
 
     fn finish(&mut self) {
@@ -111,21 +132,21 @@ impl<'a> Compiler<'a> {
         self.function.borrow_mut().code = code;
     }
 
-    fn get_or_add_const(&mut self, obj: &ASObj) -> usize {
+    fn get_or_add_const(&mut self, obj: Value) -> usize {
         let idx = self
             .function
             .borrow()
             .constants
             .iter()
             .enumerate()
-            .find(|(i, o)| *o == obj)
+            .find(|(i, o)| **o == obj)
             .map(|(i, o)| i);
         if let Some(idx) = idx {
             return idx;
         }
 
         let mut f = self.function.borrow_mut();
-        f.constants.push(obj.clone());
+        f.constants.push(obj);
         f.constants.len() - 1
     }
 
@@ -163,12 +184,13 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn declare_local(&mut self, name: &str) {
+    fn declare_local(&mut self, name: &str) -> u8 {
         self.locals.push(Local {
             name: name.to_string(),
             depth: -1, // not initialized yet
             is_captured: false,
         });
+        self.locals.len() as u8 - 1
     }
 
     fn mark_initialized(&mut self) {
@@ -191,12 +213,19 @@ impl<'a> Compiler<'a> {
         Ok(None)
     }
 
+    fn resolve_upval(&mut self, name: &str) {
+        match &self.parent {
+            Some(p) => todo!(),
+            None => todo!(),
+        }
+    }
+
     fn mark_captured(&mut self, index: usize) {
         self.locals[index].is_captured = true;
     }
 }
 
-impl<'a> Visitor for Compiler<'a> {
+impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
     fn visit_body(&mut self, stmts: &Vec<Box<Stmt>>) {
         for stmt in stmts {
             stmt.accept(self);
@@ -214,9 +243,11 @@ impl<'a> Visitor for Compiler<'a> {
     fn visit_expr_lit(&mut self, expr: &Expr) {
         unpack!(Expr::Lit(obj) = expr);
 
-        let idx = self.get_or_add_const(obj);
+        let idx = self
+            .borrow_mut()
+            .get_or_add_const(Value::ASObj(obj.clone()));
 
-        self.code.emit_const(idx as u8);
+        self.borrow_mut().code.emit_const(idx as u8);
     }
 
     fn visit_expr_list(&mut self, expr: &Expr) {
@@ -230,10 +261,10 @@ impl<'a> Visitor for Compiler<'a> {
     fn visit_expr_ident(&mut self, expr: &Expr) {
         unpack!(Expr::Ident(ident) = expr);
 
-        let idx = self.resolve_local(ident).unwrap();
+        let idx = self.borrow_mut().resolve_local(ident).unwrap();
         match idx {
             Some(idx) => {
-                self.code.emit_get_local(idx as u8);
+                self.borrow_mut().code.emit_get_local(idx as u8);
             }
 
             // its an upvalue or a global variable
@@ -266,7 +297,7 @@ impl<'a> Visitor for Compiler<'a> {
         lhs.accept(self);
         rhs.accept(self);
 
-        self.code.emit_binop(*op);
+        self.borrow_mut().code.emit_binop(*op);
     }
 
     fn visit_expr_bincomp(&mut self, expr: &Expr) {
@@ -292,29 +323,31 @@ impl<'a> Visitor for Compiler<'a> {
     fn visit_expr_debut(&mut self, expr: &Expr) {
         unpack!(Expr::Debut(stmts) = expr);
 
-        self.begin_scope();
+        self.borrow_mut().begin_scope();
 
         self.visit_body(stmts);
 
+        let mut comp = self.borrow_mut();
+
         // we prevent the cleanup of the last value because we want to return
         // it as the value of this expression
-        self.code.pop_if_op_is(Opcode::Pop);
+        comp.code.pop_if_op_is(Opcode::Pop);
 
-        let nb_locals = self.nb_local_scope_vars();
+        let nb_locals = comp.nb_local_scope_vars();
 
         // if we have local variables, they will get cleaned up with a series
-        // of push. To save our value, we put it in the first local variable 
+        // of push. To save our value, we put it in the first local variable
         // of this block and we cleanup everything except that value.
         if nb_locals > 0 {
-            self.code
-                .emit_set_local((self.locals.len() - nb_locals) as u8);
+            let first_local = (comp.locals.len() - nb_locals) as u8;
+            comp.code.emit_set_local(first_local);
         }
 
-        self.end_scope();
+        comp.end_scope();
 
         // we prevent the cleanup of the last variable, because that stack slot
         // now holds the value of this expression
-        self.code.pop_if_op_is(Opcode::Pop);
+        comp.code.pop_if_op_is(Opcode::Pop);
     }
 
     fn visit_expr_essayer(&mut self, expr: &Expr) {
@@ -327,7 +360,7 @@ impl<'a> Visitor for Compiler<'a> {
         expr.accept(self);
 
         // we discard the value produced by the expression
-        self.code.emit_pop();
+        self.borrow_mut().code.emit_pop();
     }
 
     fn visit_stmt_afficher(&mut self, stmt: &Stmt) {
@@ -354,14 +387,13 @@ impl<'a> Visitor for Compiler<'a> {
             } = var
         );
 
-        self.declare_local(name);
+        let local_idx = self.borrow_mut().declare_local(name);
 
         val.accept(self);
 
-        self.mark_initialized();
+        self.borrow_mut().mark_initialized();
 
-        let local_idx = self.locals.len() as u8 - 1;
-        self.code.emit_set_local(local_idx);
+        self.borrow_mut().code.emit_set_local(local_idx);
     }
 
     fn visit_stmt_assign(&mut self, stmt: &Stmt) {
@@ -371,10 +403,10 @@ impl<'a> Visitor for Compiler<'a> {
 
         val.accept(self);
 
-        let local_idx = self.resolve_local(name).unwrap();
+        let local_idx = self.borrow_mut().resolve_local(name).unwrap();
         match local_idx {
             Some(local_idx) => {
-                self.code.emit_set_local(local_idx as u8);
+                self.borrow_mut().code.emit_set_local(local_idx as u8);
             }
 
             // its an upvalue or a global variable
@@ -425,11 +457,36 @@ impl<'a> Visitor for Compiler<'a> {
             exprs[0].accept(self);
         }
 
-        self.code.emit_return();
+        self.borrow_mut().code.emit_return();
     }
 
     fn visit_stmt_deffn(&mut self, stmt: &Stmt) {
-        todo!()
+        unpack!(
+            Stmt::DefFn(DefFn {
+                docs,
+                name,
+                params,
+                return_type,
+                body,
+                public
+            }) = stmt
+        );
+
+        let local_idx = self.borrow_mut().declare_local(name.as_ref().unwrap());
+
+        let closure = {
+            let c = Compiler::new_with_parent(Rc::clone(self));
+            c.compile(body)
+        };
+
+        self.borrow_mut().mark_initialized();
+
+        let idx = self
+            .borrow_mut()
+            .get_or_add_const(Value::Closure(Rc::new(closure)));
+
+        self.borrow_mut().code.emit_closure(idx as u8);
+        self.borrow_mut().code.emit_set_local(local_idx as u8);
     }
 
     fn visit_stmt_defclasse(&mut self, stmt: &Stmt) {

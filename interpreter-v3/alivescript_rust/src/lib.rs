@@ -143,7 +143,7 @@ pub fn compile_script_from_file<'a, IO: InterpretorIO + 'a>(
             let mut vm = VM::new();
             let result = vm.run(Rc::new(closure)).unwrap();
             println!("{:#?}", vm.stack);
-            println!("{}", result);
+            println!("{:?}", result);
         }
         Err(err) => interpretor_io.send(Data::Erreur {
             texte: format!(

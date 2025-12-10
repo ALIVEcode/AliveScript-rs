@@ -3,7 +3,10 @@ use std::fmt::Debug;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use thiserror::Error;
 
-use crate::{ast::BinOpcode, compiler::bitmasks::BitArray};
+use crate::{
+    ast::BinOpcode,
+    compiler::{bitmasks::BitArray, utils::format_table},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
 #[repr(u8)]
@@ -16,22 +19,13 @@ pub enum Opcode {
     SetLocal,
     Call,
 
+    Jump,
+    JumpIfFalse,
+
     Return,
     Pop,
 
-    Mul,
-    Div,
-    DivInt,
-    Add,
-    Sub,
-    Exp,
-    Mod,
-    Extend,
-    BitwiseOr,
-    BitwiseAnd,
-    BitwiseXor,
-    ShiftLeft,
-    ShiftRight,
+    BinOp,
 }
 
 impl Opcode {
@@ -46,19 +40,9 @@ impl Opcode {
             Opcode::Call => "CALL",
             Opcode::Return => "RETURN",
             Opcode::Pop => "POP",
-            Opcode::Add => "ADD",
-            Opcode::Mul => "MUL",
-            Opcode::Div => "DIV",
-            Opcode::DivInt => "IDIV",
-            Opcode::Sub => "SUB",
-            Opcode::Exp => "EXP",
-            Opcode::Mod => "MOD",
-            Opcode::Extend => "EXTEND",
-            Opcode::BitwiseOr => "BOR",
-            Opcode::BitwiseAnd => "BAND",
-            Opcode::BitwiseXor => "BXOR",
-            Opcode::ShiftLeft => "SHL",
-            Opcode::ShiftRight => "SHR",
+            Opcode::BinOp => "BINOP",
+            Opcode::Jump => "JUMP",
+            Opcode::JumpIfFalse => "JUMP_IF_FALSE",
         }
     }
 
@@ -68,26 +52,17 @@ impl Opcode {
             | Opcode::GetUpvalue
             | Opcode::SetUpvalue
             | Opcode::GetLocal
-            | Opcode::SetLocal => 1,
+            | Opcode::SetLocal => 2,
+
+            Opcode::Jump | Opcode::JumpIfFalse => 2,
 
             Opcode::Closure => todo!(),
             Opcode::Call => todo!(),
             Opcode::Return => todo!(),
 
-            Opcode::Pop
-            | Opcode::Mul
-            | Opcode::Div
-            | Opcode::DivInt
-            | Opcode::Add
-            | Opcode::Sub
-            | Opcode::Exp
-            | Opcode::Mod
-            | Opcode::Extend
-            | Opcode::BitwiseOr
-            | Opcode::BitwiseAnd
-            | Opcode::BitwiseXor
-            | Opcode::ShiftLeft
-            | Opcode::ShiftRight => 0,
+            Opcode::BinOp => 1,
+
+            Opcode::Pop => 0,
         }
     }
 }
@@ -108,7 +83,9 @@ impl Debug for Instructions {
                 panic!("Invalid opcode {}", byte);
             };
 
-            let mut inst_str = String::from(op.name());
+            let mut inst_str = vec![];
+
+            inst_str.push(String::from(op.name()));
 
             match op {
                 Opcode::Constant | Opcode::SetLocal | Opcode::GetLocal => {
@@ -116,13 +93,26 @@ impl Debug for Instructions {
                         panic!("Missing arg for {}", op.name());
                     };
 
-                    inst_str += &format!(" {}", idx);
+                    inst_str.push(idx.to_string());
+                }
+
+                Opcode::BinOp => {
+                    let Some(op) = iter.next() else {
+                        panic!("Missing arg for {}", op.name());
+                    };
+
+                    let binop = BinOpcode::try_from(*op).expect(&format!("Invalid binop: {}", op));
+
+                    inst_str.push(op.to_string());
+                    inst_str.push(format!("({:?})", binop));
                 }
                 _ => {}
             }
 
             instructions.push(inst_str);
         }
+
+        let instructions = format_table(&instructions);
 
         write!(f, "Instructions([\n\t{}\n])", instructions.join("\n\t"))
     }
@@ -216,13 +206,9 @@ impl Instructions {
     }
 
     pub fn emit_binop(&mut self, op: BinOpcode) {
-        // they are in the same order in their respective enum to make this
-        // implementation trivial
-
-        let base = Opcode::Mul as u8;
-        let op = op as u8;
-
-        self.emit_opcode(Opcode::try_from(base + op).unwrap());
+        self.emit_opcode(Opcode::BinOp);
+        // The BinOpcode u8 value represent the operation done
+        self.emit_byte(op as u8);
     }
 }
 
