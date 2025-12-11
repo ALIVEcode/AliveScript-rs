@@ -127,7 +127,7 @@ pub enum UnaryOpcode {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy, TryFromPrimitive)]
-#[repr(u8)]
+#[repr(u16)]
 pub enum BinOpcode {
     Mul,
     Div,
@@ -145,7 +145,7 @@ pub enum BinOpcode {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy, TryFromPrimitive)]
-#[repr(u8)]
+#[repr(u16)]
 pub enum BinCompcode {
     Eq,
     NotEq,

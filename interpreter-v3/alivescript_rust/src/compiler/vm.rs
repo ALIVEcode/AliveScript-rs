@@ -5,7 +5,7 @@ use crate::{
     as_obj::{ASEnv, ASObj, ASType},
     ast::{BinCompcode, BinOpcode, CallRust},
     compiler::{
-        bytecode::Opcode,
+        bytecode::{Opcode, JUMP_OFFSET},
         module::BUILTIN_MOD,
         obj::{
             CallFrame, Closure, NativeFunction, RcClosure, RcUpvalue, Upvalue, UpvalueLocation,
@@ -372,17 +372,21 @@ impl VM {
                 }
                 Opcode::Jump => {
                     let dist = fnc.code[frame.ip];
-                    frame.ip += dist as usize + 1;
+                    let dist = dist as i16 - JUMP_OFFSET;
+                    frame.ip = (frame.ip as i16 + dist + 1) as usize;
                 }
                 Opcode::JumpIfFalse => {
                     let dist = fnc.code[frame.ip];
+                    let dist = dist as i16 - JUMP_OFFSET;
                     frame.ip += 1;
+
+                    let ip = frame.ip;
 
                     let val = self.pop().expect("A value");
 
                     if let Value::ASObj(v) = val {
                         if !v.to_bool() {
-                            self.get_frame().unwrap().ip += dist as usize;
+                            self.get_frame().unwrap().ip = (ip as i16 + dist) as usize;
                         }
                     }
                 }

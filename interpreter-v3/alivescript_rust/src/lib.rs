@@ -18,6 +18,8 @@ pub mod io;
 pub mod runner;
 pub mod utils;
 
+pub mod bench;
+
 mod compiler;
 
 use std::rc::Rc;
@@ -142,8 +144,8 @@ pub fn compile_script_from_file<'a, IO: InterpretorIO + 'a>(
             let closure = compiler.compile_debug(&stmts);
             let mut vm = VM::new();
             let result = vm.run(Rc::new(closure)).unwrap();
-            println!("{:#?}", vm.stack);
-            println!("{:?}", result);
+            // println!("{:#?}", vm.stack);
+            // println!("{:?}", result);
         }
         Err(err) => interpretor_io.send(Data::Erreur {
             texte: format!(

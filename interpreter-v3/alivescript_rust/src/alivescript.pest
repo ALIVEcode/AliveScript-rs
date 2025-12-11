@@ -137,12 +137,13 @@ RepeterStmt =  {
 finRepeter  = @{ "fin" ~ WHITESPACE+ ~ "repeter" }
 
 TantQueStmt =  {
-    "tant" ~ "que" ~ Expr ~ "faire"? ~ eos+ ~ StmtBody? ~ finTantQue
+    tantQue ~ (#cond = Expr) ~ "faire"? ~ eos+ ~ StmtBody? ~ finTantQue
 }
-finTantQue  = @{ "fin" ~ WHITESPACE+ ~ "tant" ~ WHITESPACE+ ~ "que" }
+tantQue     = @{ "tant" ~ WHITESPACE+ ~ "que" ~ !IdentChar }
+finTantQue  = @{ "fin" ~ WHITESPACE+ ~ "tant" ~ WHITESPACE+ ~ "que" ~ !IdentChar }
 
-ContinuerStmt = { "continuer" }
-SortirStmt    = { "sortir" }
+ContinuerStmt = @{ "continuer" ~ !IdentChar }
+SortirStmt    = @{ "sortir" ~ !IdentChar }
 
 PourIter = {
     ListExpr
@@ -162,8 +163,8 @@ DeclStmt = {
   | (Const ~ assignVar)
 }
 
-Const = { "const" }
-Var   = { "var" }
+Const = @{ "const" ~ !IdentChar }
+Var   = @{ "var" ~ !IdentChar }
 
 AssignStmt = { assignVar }
 

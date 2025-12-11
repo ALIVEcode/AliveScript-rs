@@ -58,7 +58,7 @@ impl Display for Value {
 #[derive(Clone, PartialEq)]
 pub struct Function {
     pub name: Option<String>,
-    pub code: Vec<u8>,         // bytecode
+    pub code: Vec<u16>,         // bytecode
     pub constants: Vec<Value>, // constant pool
     pub upvalue_count: usize,
     pub upvalue_specs: Vec<UpvalueSpec>, // from compiler: local? index?

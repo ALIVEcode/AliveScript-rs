@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
-#[repr(u8)]
+#[repr(u16)]
 pub enum Opcode {
     Constant,
     Closure,
@@ -52,7 +52,7 @@ impl Opcode {
         }
     }
 
-    pub const fn nargs(&self) -> u8 {
+    pub const fn nargs(&self) -> u16 {
         match self {
             Opcode::Constant
             | Opcode::GetUpvalue
@@ -77,11 +77,11 @@ impl Opcode {
 
 #[derive(Clone)]
 pub struct Instructions {
-    insts: Vec<u8>,
+    insts: Vec<u16>,
     opcodes: Vec<Opcode>,
 }
 
-pub fn instructions_to_string(insts: &[u8]) -> Vec<String> {
+pub fn instructions_to_string(insts: &[u16]) -> Vec<String> {
     let mut instructions = vec![];
     let mut iter = insts.iter();
 
@@ -117,7 +117,7 @@ pub fn instructions_to_string(insts: &[u8]) -> Vec<String> {
                     panic!("Missing arg for {}", op.name());
                 };
 
-                inst_str.push(idx.to_string());
+                inst_str.push((*idx as i16 - JUMP_OFFSET).to_string());
                 // inst_str.push(format!("(to {})", op_i + idx));
             }
 
@@ -175,15 +175,15 @@ impl Instructions {
         }
     }
 
-    pub fn inner(&self) -> &Vec<u8> {
+    pub fn inner(&self) -> &Vec<u16> {
         &self.insts
     }
 
-    pub fn raw_patch(&mut self, idx: usize, val: u8) {
+    pub fn raw_patch(&mut self, idx: usize, val: u16) {
         self.insts[idx] = val
     }
 
-    fn emit_byte(&mut self, b: u8) {
+    fn emit_byte(&mut self, b: u16) {
         self.insts.push(b.into());
     }
 
@@ -215,47 +215,47 @@ impl Instructions {
         self.opcodes.last().is_some_and(|lo| *lo == op)
     }
 
-    pub fn emit_const(&mut self, idx: u8) {
+    pub fn emit_const(&mut self, idx: u16) {
         self.emit_opcode(Opcode::Constant);
         self.emit_byte(idx);
     }
 
-    pub fn emit_closure(&mut self, const_idx: u8) {
+    pub fn emit_closure(&mut self, const_idx: u16) {
         self.emit_opcode(Opcode::Closure);
         self.emit_byte(const_idx);
     }
 
-    pub fn emit_get_upvalue(&mut self, idx: u8) {
+    pub fn emit_get_upvalue(&mut self, idx: u16) {
         self.emit_opcode(Opcode::GetUpvalue);
         self.emit_byte(idx);
     }
 
-    pub fn emit_set_upvalue(&mut self, idx: u8) {
+    pub fn emit_set_upvalue(&mut self, idx: u16) {
         self.emit_opcode(Opcode::SetUpvalue);
         self.emit_byte(idx);
     }
 
-    pub fn emit_get_local(&mut self, slot: u8) {
+    pub fn emit_get_local(&mut self, slot: u16) {
         self.emit_opcode(Opcode::GetLocal);
         self.emit_byte(slot);
     }
 
-    pub fn emit_set_local(&mut self, slot: u8) {
+    pub fn emit_set_local(&mut self, slot: u16) {
         self.emit_opcode(Opcode::SetLocal);
         self.emit_byte(slot);
     }
 
-    pub fn emit_get_global(&mut self, const_name_slot: u8) {
+    pub fn emit_get_global(&mut self, const_name_slot: u16) {
         self.emit_opcode(Opcode::GetGlobal);
         self.emit_byte(const_name_slot);
     }
 
-    pub fn emit_set_global(&mut self, const_name_slot: u8) {
+    pub fn emit_set_global(&mut self, const_name_slot: u16) {
         self.emit_opcode(Opcode::SetGlobal);
         self.emit_byte(const_name_slot);
     }
 
-    pub fn emit_call(&mut self, nargs: u8) {
+    pub fn emit_call(&mut self, nargs: u16) {
         self.emit_opcode(Opcode::Call);
         self.emit_byte(nargs);
     }
@@ -270,29 +270,31 @@ impl Instructions {
 
     pub fn emit_binop(&mut self, op: BinOpcode) {
         self.emit_opcode(Opcode::BinOp);
-        // The BinOpcode u8 value represent the operation done
-        self.emit_byte(op as u8);
+        // The BinOpcode u16 value represent the operation done
+        self.emit_byte(op as u16);
     }
 
     pub fn emit_bincomp(&mut self, op: BinCompcode) {
         self.emit_opcode(Opcode::BinComp);
-        // The BinOpcode u8 value represent the operation done
-        self.emit_byte(op as u8);
+        // The BinOpcode u16 value represent the operation done
+        self.emit_byte(op as u16);
     }
 
-    pub fn emit_jump(&mut self, target: u8) {
+    pub fn emit_jump(&mut self, target: i16) {
         self.emit_opcode(Opcode::Jump);
-        self.emit_byte(target);
+        self.emit_byte((target + JUMP_OFFSET) as u16);
     }
 
-    pub fn emit_jump_if_false(&mut self, target: u8) {
+    pub fn emit_jump_if_false(&mut self, target: i16) {
         self.emit_opcode(Opcode::JumpIfFalse);
-        self.emit_byte(target);
+        self.emit_byte((target + JUMP_OFFSET) as u16);
     }
 }
+
+pub const JUMP_OFFSET: i16 = (1 << 8) - 1;
 
 #[derive(Debug, Error)]
 pub enum InstructionError {
     #[error("Invalid opcode: {0}")]
-    InvalidOpcode(u8),
+    InvalidOpcode(u16),
 }

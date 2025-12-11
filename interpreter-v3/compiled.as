@@ -24,9 +24,9 @@ fonction apply(f, arg)
   retourner f(arg)
 fin fonction
 
-var x = apply(plus_1, plus_1(plus_1(plus_1(2))))
+x = apply(plus_1, plus_1(plus_1(plus_1(2))))
 
-si x == 5 
+si x == 5 alors
   afficher "wow"
 sinon si x == 9
   afficher "not"
@@ -34,9 +34,14 @@ sinon si faux
   y = 2
   afficher y
 sinon 
-afficher "sinoN"
+  afficher "sinoN"
 fin si
 
 afficher "end"
+
+tant que x > 0
+  x = x - 1
+  afficher x
+fin tant que
 
 

@@ -7,7 +7,7 @@ use crate::{
     as_obj::{ASErreur, ASErreurType, ASObj},
     ast::{AssignVar, BinOpcode, DeclVar, DefFn, Expr, Stmt, Type},
     compiler::{
-        bytecode::{Instructions, Opcode},
+        bytecode::{Instructions, Opcode, JUMP_OFFSET},
         obj::{Closure, Function, Upvalue, UpvalueSpec, Value},
     },
     visitor::{Visitable, Visitor},
@@ -16,7 +16,8 @@ use crate::{
 mod bitmasks;
 mod bytecode;
 mod module;
-mod obj;
+mod parser;
+pub mod obj;
 mod utils;
 pub mod vm;
 
@@ -177,13 +178,13 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn declare_local(&mut self, name: &str) -> u8 {
+    fn declare_local(&mut self, name: &str) -> u16 {
         self.locals.push(Local {
             name: name.to_string(),
             depth: -1, // not initialized yet
             is_captured: false,
         });
-        self.locals.len() as u8 - 1
+        self.locals.len() as u16 - 1
     }
 
     fn mark_initialized(&mut self) {
@@ -218,7 +219,7 @@ impl<'a> Compiler<'a> {
         let mut parent = parent_rc.borrow_mut();
 
         // 2. Try to resolve as a LOCAL in the PARENT
-        if let Some(local_idx) = parent.resolve_local(name)? {
+        if let Some(local_idx) = parent.resolve_local(name, true)? {
             // FOUND: It's a local in the parent (Direct Capture)
 
             // Mark the local in the parent as captured.
@@ -249,10 +250,10 @@ impl<'a> Compiler<'a> {
         Ok(None)
     }
 
-    fn resolve_local(&mut self, name: &str) -> Result<Option<usize>, ASErreurType> {
+    fn resolve_local(&mut self, name: &str, allow_uninit: bool) -> Result<Option<usize>, ASErreurType> {
         for (i, local) in self.locals.iter().enumerate().rev() {
             if local.name == name {
-                if local.depth == -1 {
+                if local.depth == -1 && !allow_uninit{
                     Err(ASErreurType::new_erreur(
                         Some("ErreurAccesVariableLocale".into()),
                         "Impossible de lire une variable dans son propre initialiseur.".into(),
@@ -264,12 +265,6 @@ impl<'a> Compiler<'a> {
         Ok(None)
     }
 
-    fn resolve_var(&mut self, name: &str) -> Result<Option<usize>, ASErreurType> {
-        let local_var = self.resolve_local(name)?;
-
-        Ok(None)
-    }
-
     fn mark_captured(&mut self, index: usize) {
         self.locals[index].is_captured = true;
     }
@@ -277,7 +272,8 @@ impl<'a> Compiler<'a> {
     fn patch_jump(&mut self, jmp_stack_idx: usize) {
         let val = self.code.inner().len() - 1;
         let jump_idx = self.jump_stack[jmp_stack_idx];
-        self.code.raw_patch(jump_idx, (val - jump_idx) as u8);
+        self.code
+            .raw_patch(jump_idx, ((val - jump_idx) as i16 + JUMP_OFFSET) as u16);
     }
 
     fn push_cond_jump(&mut self) -> usize {
@@ -317,7 +313,7 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
             .borrow_mut()
             .get_or_add_const(Value::ASObj(obj.clone()));
 
-        self.borrow_mut().code.emit_const(idx as u8);
+        self.borrow_mut().code.emit_const(idx as u16);
     }
 
     fn visit_expr_list(&mut self, expr: &Expr) {
@@ -334,21 +330,21 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
         let mut compiler = self.borrow_mut();
 
         // 1. Try to resolve as a LOCAL
-        if let Ok(Some(local_idx)) = compiler.resolve_local(ident) {
-            compiler.code.emit_get_local(local_idx as u8);
+        if let Ok(Some(local_idx)) = compiler.resolve_local(ident, false) {
+            compiler.code.emit_get_local(local_idx as u16);
             return;
         }
 
         // 2. Try to resolve as an UPVALUE
         if let Ok(Some(upval_idx)) = compiler.resolve_upval(ident) {
-            compiler.code.emit_get_upvalue(upval_idx as u8);
+            compiler.code.emit_get_upvalue(upval_idx as u16);
             return;
         }
 
         // 3. Load a GLOBAL by setting the variable name as a string constant
         // and emiting a LoadGlobal
         let glob_name_idx = compiler.get_or_add_const(Value::ASObj(ASObj::ASTexte(ident.clone())));
-        compiler.code.emit_get_global(glob_name_idx as u8);
+        compiler.code.emit_get_global(glob_name_idx as u16);
     }
 
     fn visit_expr_accessprop(&mut self, expr: &Expr) {
@@ -366,7 +362,7 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
 
         args.iter().for_each(|arg| arg.accept(self));
 
-        self.borrow_mut().code.emit_call(args.len() as u8);
+        self.borrow_mut().code.emit_call(args.len() as u16);
     }
 
     fn visit_expr_callrust(&mut self, expr: &Expr) {
@@ -430,7 +426,7 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
             .borrow_mut()
             .get_or_add_const(Value::Closure(Rc::new(closure)));
 
-        self.borrow_mut().code.emit_closure(idx as u8);
+        self.borrow_mut().code.emit_closure(idx as u16);
     }
 
     fn visit_expr_debut(&mut self, expr: &Expr) {
@@ -452,7 +448,7 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
         // of push. To save our value, we put it in the first local variable
         // of this block and we cleanup everything except that value.
         if nb_locals > 0 {
-            let first_local = (comp.locals.len() - nb_locals) as u8;
+            let first_local = (comp.locals.len() - nb_locals) as u16;
             comp.code.emit_set_local(first_local);
         }
 
@@ -521,14 +517,14 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
         let mut compiler = self.borrow_mut();
 
         // 1. Try to resolve as a LOCAL
-        if let Ok(Some(local_idx)) = compiler.resolve_local(name) {
-            compiler.code.emit_set_local(local_idx as u8);
+        if let Ok(Some(local_idx)) = compiler.resolve_local(name, false) {
+            compiler.code.emit_set_local(local_idx as u16);
             return;
         }
 
         // 2. Try to resolve as an UPVALUE
         if let Ok(Some(upval_idx)) = compiler.resolve_upval(name) {
-            compiler.code.emit_set_upvalue(upval_idx as u8);
+            compiler.code.emit_set_upvalue(upval_idx as u16);
             return;
         }
 
@@ -589,7 +585,21 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
     }
 
     fn visit_stmt_tantque(&mut self, stmt: &Stmt) {
-        todo!()
+        unpack!(Stmt::TantQue { cond, body } = stmt);
+
+        let before_cond = self.borrow().code.inner().len();
+
+        cond.accept(self);
+        let if_not_cond_jmp = self.borrow_mut().push_cond_jump();
+
+        self.visit_body(body);
+
+        let now = self.borrow().code.inner().len();
+        self.borrow_mut()
+            .code
+            .emit_jump(before_cond as i16 - now as i16 - 2); // - 2 here to account for this
+                                                             // instruction and its argument
+        self.borrow_mut().patch_jump(if_not_cond_jmp);
     }
 
     fn visit_stmt_continuer(&mut self, stmt: &Stmt) {
@@ -643,8 +653,8 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
             .borrow_mut()
             .get_or_add_const(Value::Closure(Rc::new(closure)));
 
-        self.borrow_mut().code.emit_closure(idx as u8);
-        self.borrow_mut().code.emit_set_local(local_idx as u8);
+        self.borrow_mut().code.emit_closure(idx as u16);
+        self.borrow_mut().code.emit_set_local(local_idx as u16);
     }
 
     fn visit_stmt_defclasse(&mut self, stmt: &Stmt) {
