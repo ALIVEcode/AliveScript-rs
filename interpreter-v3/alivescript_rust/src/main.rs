@@ -4,7 +4,7 @@
 use std::{cell::RefCell, env, io::Write, rc::Rc};
 
 use alivescript_rust::{
-    bench::main_benchmark, compile_script_from_file, data::{Data, Response}, io::InterpretorIO, run_script_from_file, run_script_with_runner
+    bench::main_benchmark, compile_script_from_file, compile_script_from_file2, data::{Data, Response}, io::InterpretorIO, run_script_from_file, run_script_with_runner
 };
 
 const ALIVESCRIPT_VERSION: &'static str = "0.10.0";
@@ -87,7 +87,7 @@ fn main() -> std::io::Result<()> {
             let script_file = args.next().expect("File arg missing after -c");
             let mut io = IO {};
             let script = std::fs::read_to_string(&script_file).unwrap();
-            compile_script_from_file(&script, &mut io, script_file);
+            compile_script_from_file2(&script, &mut io, script_file);
             return Ok(());
         } else if script_file == "bench" {
             main_benchmark();

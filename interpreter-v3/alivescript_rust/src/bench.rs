@@ -59,7 +59,7 @@ impl InterpretorIO for IO {
 /// This needs to be implemented to call your specific VM logic.
 fn execute_alive_script_a(source_code: &str) {
     // 1. Compile the source code
-    let compiler = Compiler::new();
+    let compiler = Compiler::new(source_code);
     let result_stmts = AlivescriptParser::parse(Rule::script, source_code).unwrap();
     let stmts = build_ast_stmts(result_stmts).unwrap();
     let closure = compiler.compile(&stmts);
@@ -71,7 +71,6 @@ fn execute_alive_script_a(source_code: &str) {
 
 fn execute_alive_script_b(source_code: &str) {
     // 1. Compile the source code
-    let compiler = Compiler::new();
     let result_stmts = AlivescriptParser::parse(Rule::script, source_code).unwrap();
     let mut io = IO {};
     let mut visitor = Runner::new(&mut io);

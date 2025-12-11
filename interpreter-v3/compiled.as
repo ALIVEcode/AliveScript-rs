@@ -34,7 +34,7 @@ sinon si faux
   y = 2
   afficher y
 sinon 
-  afficher "sinoN"
+  afficher("sinoN " + x)
 fin si
 
 afficher "end"

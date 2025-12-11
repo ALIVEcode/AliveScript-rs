@@ -14,7 +14,7 @@ use pest::{
 };
 
 lazy_static::lazy_static! {
-    static ref PRATT_EXPR_PARSER: PrattParser<Rule> = {
+    pub static ref PRATT_EXPR_PARSER: PrattParser<Rule> = {
         use pest::pratt_parser::{Assoc::*, Op};
 
         // Precedence is defined lowest to highest
@@ -59,7 +59,7 @@ lazy_static::lazy_static! {
 }
 
 lazy_static::lazy_static! {
-    static ref PRATT_TYPE_PARSER: PrattParser<Rule> = {
+    pub static ref PRATT_TYPE_PARSER: PrattParser<Rule> = {
         use pest::pratt_parser::{Assoc::*, Op};
 
         // Precedence is defined lowest to highest

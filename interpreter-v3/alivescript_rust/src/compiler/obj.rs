@@ -58,30 +58,35 @@ impl Display for Value {
 #[derive(Clone, PartialEq)]
 pub struct Function {
     pub name: Option<String>,
-    pub code: Vec<u16>,         // bytecode
+    pub code: Vec<u16>,        // bytecode
     pub constants: Vec<Value>, // constant pool
     pub upvalue_count: usize,
     pub upvalue_specs: Vec<UpvalueSpec>, // from compiler: local? index?
+
+    pub nb_params: usize,
 }
 
 impl Function {
-    pub fn new(name: Option<String>) -> Self {
+    pub fn new(name: Option<String>, nb_params: usize) -> Self {
         Self {
             name,
             code: vec![],
             constants: vec![],
             upvalue_count: 0,
             upvalue_specs: vec![],
+            nb_params: nb_params,
         }
     }
 
-    pub fn new_anonymous() -> Self {
+    pub fn new_anonymous(nb_params: usize) -> Self {
         Self {
             name: None,
             code: vec![],
             constants: vec![],
             upvalue_count: 0,
             upvalue_specs: vec![],
+
+            nb_params,
         }
     }
 }
