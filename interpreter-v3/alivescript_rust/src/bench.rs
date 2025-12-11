@@ -112,10 +112,10 @@ fn run_benchmark(source_code: &str, impl_name: &str, func: fn(&str)) -> Vec<Dura
 // --- ANALYSIS ---
 
 /// Simple manual calculation of average and median.
-fn analyze_results(times: &mut [Duration], impl_name: &str) {
+fn analyze_results(times: &mut [Duration], impl_name: &str) -> Option<Duration> {
     if times.is_empty() {
         println!("{}: No runs recorded.", impl_name);
-        return;
+        return None;
     }
 
     // Sort for Median calculation
@@ -139,6 +139,54 @@ fn analyze_results(times: &mut [Duration], impl_name: &str) {
     println!("  -> Total Runs:   {}", times.len());
     println!("  -> Average Time: {:.2?}", average);
     println!("  -> Median Time:  {:.2?}", median);
+
+    Some(median)
+}
+
+/// Compares the results of two implementations based on their median times.
+fn compare_results(median_a: Duration, median_b: Duration) {
+    println!("\n==============================================");
+    println!("🚀 Comparative Benchmark Analysis");
+    println!("==============================================");
+
+    // Calculate ratio B/A
+    let time_a_ns = median_a.as_nanos() as f64;
+    let time_b_ns = median_b.as_nanos() as f64;
+
+    if time_a_ns == 0.0 || time_b_ns == 0.0 {
+        println!("Cannot perform comparison: One or both median times are zero.");
+        return;
+    }
+
+    if time_b_ns < time_a_ns {
+        // Implementation B is faster (B < A)
+        let speedup_ratio = time_a_ns / time_b_ns;
+        let percentage_gain = (speedup_ratio - 1.0) * 100.0;
+
+        println!("🟢 IMPL B is FASTER!");
+        println!("  -> B is {:.2}x faster than A.", speedup_ratio);
+        println!(
+            "  -> B represents a {:.1}% performance gain.",
+            percentage_gain
+        );
+    } else {
+        // Implementation A is faster or they are roughly equal (B >= A)
+        let slowdown_ratio = time_b_ns / time_a_ns;
+
+        if slowdown_ratio > 1.05 {
+            // A 5% threshold for "slower"
+            let percentage_loss = (slowdown_ratio - 1.0) * 100.0;
+            println!("🔴 IMPL B is SLOWER.");
+            println!("  -> B is {:.2}x slower than A.", slowdown_ratio);
+            println!(
+                "  -> B represents a {:.1}% performance loss.",
+                percentage_loss
+            );
+        } else {
+            println!("🟡 Performance is roughly EQUAL (within 5% margin).");
+        }
+    }
+    println!("==============================================");
 }
 
 pub fn main_benchmark() {
@@ -159,7 +207,7 @@ pub fn main_benchmark() {
         "Implementation A (Current VM)",
         execute_alive_script_a,
     );
-    analyze_results(&mut times_a, "Implementation A");
+    let median_a = analyze_results(&mut times_a, "Implementation A").unwrap();
 
     // --- Run and Analyze Impl B ---
     // NOTE: If Implementation B is a different function/method (e.g., a JIT or a Register VM),
@@ -172,8 +220,9 @@ pub fn main_benchmark() {
         "Implementation B (Hypothetical Optimized VM)",
         execute_alive_script_b,
     );
-    analyze_results(&mut times_b, "Implementation B");
+    let median_b = analyze_results(&mut times_b, "Implementation B").unwrap();
 
     // --- Final Comparison ---
     // You can compare average times here to summarize the performance gain/loss.
+    compare_results(median_a, median_b);
 }
