@@ -382,7 +382,7 @@ impl VM {
 
                     if let Value::ASObj(v) = val {
                         if !v.to_bool() {
-                            self.get_frame().unwrap().ip += dist as usize + 1;
+                            self.get_frame().unwrap().ip += dist as usize;
                         }
                     }
                 }

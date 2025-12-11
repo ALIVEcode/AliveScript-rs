@@ -276,9 +276,8 @@ impl<'a> Compiler<'a> {
 
     fn patch_jump(&mut self, jmp_stack_idx: usize) {
         let val = self.code.inner().len() - 1;
-        while let Some(jump_idx) = self.jump_stack.pop() {
-            self.code.raw_patch(jump_idx, (val - jump_idx) as u8);
-        }
+        let jump_idx = self.jump_stack[jmp_stack_idx];
+        self.code.raw_patch(jump_idx, (val - jump_idx) as u8);
     }
 
     fn push_cond_jump(&mut self) -> usize {

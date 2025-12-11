@@ -85,6 +85,7 @@ pub fn instructions_to_string(insts: &[u8]) -> Vec<String> {
     let mut instructions = vec![];
     let mut iter = insts.iter();
 
+    let mut op_i = 1;
     while let Some(byte) = iter.next() {
         let Ok(op) = Opcode::try_from(*byte) else {
             panic!("Invalid opcode {}", byte);
@@ -92,7 +93,7 @@ pub fn instructions_to_string(insts: &[u8]) -> Vec<String> {
 
         let mut inst_str = vec![];
 
-        inst_str.push(String::from(op.name()));
+        inst_str.push(format!("{}. {}", op_i, op.name()));
 
         match op {
             Opcode::Constant
@@ -103,14 +104,21 @@ pub fn instructions_to_string(insts: &[u8]) -> Vec<String> {
             | Opcode::GetGlobal
             | Opcode::SetGlobal
             | Opcode::Closure
-            | Opcode::Call
-            | Opcode::Jump
-            | Opcode::JumpIfFalse => {
+            | Opcode::Call => {
                 let Some(idx) = iter.next() else {
                     panic!("Missing arg for {}", op.name());
                 };
 
                 inst_str.push(idx.to_string());
+            }
+
+            Opcode::JumpIfFalse | Opcode::Jump => {
+                let Some(idx) = iter.next() else {
+                    panic!("Missing arg for {}", op.name());
+                };
+
+                inst_str.push(idx.to_string());
+                // inst_str.push(format!("(to {})", op_i + idx));
             }
 
             Opcode::BinOp => {
@@ -137,6 +145,8 @@ pub fn instructions_to_string(insts: &[u8]) -> Vec<String> {
         }
 
         instructions.push(inst_str);
+
+        op_i += 1;
     }
 
     let instructions = format_table(&instructions);

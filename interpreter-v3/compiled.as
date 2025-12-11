@@ -26,8 +26,15 @@ fin fonction
 
 var x = apply(plus_1, plus_1(plus_1(plus_1(2))))
 
-si x == 6 
+si x == 5 
   afficher "wow"
+sinon si x == 9
+  afficher "not"
+sinon si faux
+  y = 2
+  afficher y
+sinon 
+afficher "sinoN"
 fin si
 
 afficher "end"

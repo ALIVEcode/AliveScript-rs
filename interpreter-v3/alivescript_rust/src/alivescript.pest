@@ -122,8 +122,8 @@ siInner  = _{
 }
 
 sinonInner = _{
-    stmtBloc
-  | eos+ ~ (stmtBloc ~ eos+)* ~ finSi
+    (!eos ~ (#body = stmtBloc))
+  | (eos+ ~ (#body = StmtBody) ~ finSi)
 }
 
 PourStmt =  {

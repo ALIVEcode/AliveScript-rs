@@ -580,7 +580,12 @@ fn parse_if(pair: Pair<Rule>) -> Result<Stmt, PestError<Rule>> {
                 }
             }
             Rule::sinonBr => {
-                else_br = Some(build_ast_stmts(curr_br.into_inner())?);
+                let body = curr_br.into_inner().find_first_tagged("body").unwrap();
+                if body.as_rule() == Rule::StmtBody {
+                    else_br = Some(build_ast_stmts(body.into_inner())?);
+                } else {
+                    else_br = Some(vec![build_ast_stmt(body)?]);
+                }
                 break;
             }
             _ => {}
