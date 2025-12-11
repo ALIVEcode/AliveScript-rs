@@ -39,11 +39,16 @@ subStmt = _{
   | RetournerStmt
   | ContinuerStmt
   | SortirStmt
+  | CommandStmt
   | Expr
 }
 
-CommandStmt = {
+OldCommandStmt = {
     Ident ~ (Expr ~ ",")* ~ Expr
+}
+
+CommandStmt = {
+    Ident ~ (Lit | FnCall | DebutBloc | List | Dict | Ident | FnExpr)
 }
 
 PubStmt = {
@@ -176,8 +181,10 @@ DeclIdentList = {
     ("[" ~ ((declIdent | DeclIdentList) ~ ",")* ~ (declIdent | DeclIdentList)? ~ "]")
 }
 
-AfficherStmt  = { "afficher" ~ Expr }
-RetournerStmt = { "retourner" ~ (Expr ~ ",")* ~ Expr? }
+AfficherStmt  =  { afficher ~ Expr }
+RetournerStmt =  { retourner ~ (Expr ~ ",")* ~ Expr? }
+afficher      = @{ "pasdutoutafficher" ~ !IdentChar }
+retourner     = @{ "retourner" ~ !IdentChar }
 
 FnParams = {
     "(" ~ (FnParam ~ ",")* ~ FnParam? ~ ")"
@@ -317,9 +324,57 @@ typeInfix   = _{ Pipe }
 typePrefix  = _{ "@" }
 typePostfix = _{ "?" }
 
-Bool    = @{ "vrai" | "faux" }
-Text    = @{ PUSH("\"" | "'") ~ ("\\" ~ PEEK | !PEEK ~ ANY)* ~ POP }
-Ident   = @{ (LETTER | "_") ~ (LETTER | ASCII_DIGIT | "_")* }
-Integer = @{ "-"? ~ ASCII_DIGIT+ }
-Decimal = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
-Null    = @{ "nul" }
+Bool      = @{ "vrai" | "faux" }
+Text      = @{ PUSH("\"" | "'") ~ ("\\" ~ PEEK | !PEEK ~ ANY)* ~ POP }
+Ident     = @{ !(keyword ~ !IdentChar) ~ (LETTER | "_") ~ (LETTER | ASCII_DIGIT | "_")* }
+IdentChar = _{ LETTER | ASCII_DIGIT | "_" }
+Integer   = @{ "-"? ~ ASCII_DIGIT+ }
+Decimal   = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+Null      = @{ "nul" }
+
+keyword = @{
+    "utiliser"
+  | "alias"
+  | "type"
+  | "fonction"
+  | "classe"
+  | "statique"
+  | "init"
+  | "methode"
+  | "méthode" // Combined variants
+
+  | "pub"
+  | "si"
+  | "alors"
+  | "sinon"
+  | "pour"
+  | "chaque"
+  | "dans"
+  | "faire"
+  | "repeter"
+  | "tant"
+  | "que"
+  | "continuer"
+  | "sortir"
+  | "const"
+  | "var"
+  | "pasdutoutafficher"
+  | "retourner"
+  | "xor"
+  | "pas"
+  | "et"
+  | "ou"
+  | "non"
+  | "jusqu'à"
+  | "jusqu'a" // Combined variants
+
+  | "bond"
+  | "debut"
+  | "début" // Combined variants
+
+  | "fn"
+  | "essayer"
+  | "vrai"
+  | "faux"
+  | "nul"
+}

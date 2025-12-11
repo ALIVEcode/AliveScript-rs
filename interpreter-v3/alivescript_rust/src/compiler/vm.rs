@@ -1,12 +1,15 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
-    as_obj::ASObj,
-    ast::BinOpcode,
+    as_modules::ASModuleBuiltin,
+    as_obj::{ASEnv, ASObj, ASType},
+    ast::{BinCompcode, BinOpcode, CallRust},
     compiler::{
         bytecode::Opcode,
+        module::BUILTIN_MOD,
         obj::{
-            CallFrame, Closure, RcClosure, RcUpvalue, Upvalue, UpvalueLocation, UpvalueSpec, Value,
+            CallFrame, Closure, NativeFunction, RcClosure, RcUpvalue, Upvalue, UpvalueLocation,
+            UpvalueSpec, Value,
         },
     },
 };
@@ -15,14 +18,18 @@ pub struct VM {
     pub stack: Vec<Value>,
     frames: Vec<CallFrame>,
     open_upvalues: Vec<RcUpvalue>, // track upvalues that point to stack slots
+    global_table: HashMap<String, Value>,
 }
 
 impl VM {
     pub fn new() -> Self {
+        let builtin = BUILTIN_MOD.borrow().clone();
+
         Self {
             stack: Vec::new(),
             frames: Vec::new(),
             open_upvalues: Vec::new(),
+            global_table: builtin,
         }
     }
 
@@ -30,7 +37,7 @@ impl VM {
         self.stack.push(v);
     }
 
-    fn pop(&mut self) -> Option<Value> {
+    pub fn pop(&mut self) -> Option<Value> {
         self.stack.pop()
     }
 
@@ -204,27 +211,61 @@ impl VM {
                     }
                     self.stack[idx] = val;
                 }
+                Opcode::GetGlobal => {
+                    let slot = fnc.code[frame.ip] as usize;
+                    frame.ip += 1;
+
+                    let Value::ASObj(ASObj::ASTexte(ref name)) = fnc.constants[slot] else {
+                        panic!("Name of global variable must be a string");
+                    };
+                    let name = name.clone();
+
+                    let v = self
+                        .global_table
+                        .get(&name)
+                        .cloned()
+                        .ok_or_else(|| format!("Variable globale inconnue {:?}", name))?;
+
+                    self.push(v);
+                }
+                Opcode::SetGlobal => {
+                    let slot = fnc.code[frame.ip] as usize;
+                    frame.ip += 1;
+
+                    let Value::ASObj(ASObj::ASTexte(ref name)) = fnc.constants[slot] else {
+                        panic!("Name of global variable must be a string");
+                    };
+                    let name = name.clone();
+
+                    let val = self.pop().ok_or("Missing value in SET_LOCAL")?;
+
+                    self.global_table.insert(name, val);
+                }
                 Opcode::Call => {
                     let nbargs = fnc.code[frame.ip] as usize;
                     frame.ip += 1;
 
-                    let mut args = Vec::with_capacity(nbargs);
-
-                    for _ in 0..nbargs {
-                        args.push(self.stack.pop().expect("Missing arg in call"));
-                    }
-
-                    let func = self.stack.pop().expect("Missing func in call");
+                    // get the function
+                    let func = self.peek(nbargs);
 
                     match func {
+                        Value::NativeFunction(f) => {
+                            let result = (f.clone().func)(self).map_err(|e| e.to_string())?;
+                            for _ in 0..nbargs {
+                                self.pop();
+                            }
+                            self.push(result.unwrap_or(Value::ASObj(ASObj::ASNoValue)));
+                        }
                         Value::ASObj(asobj) => {
                             return Err(format!("Cannot call value of type: {}", asobj.get_type()));
                         }
                         Value::Closure(closure) => {
+                            // set the base as the first arg of the function
+                            let base = self.stack.len() - nbargs;
                             self.frames.push(CallFrame {
                                 closure: Rc::clone(&closure),
                                 ip: 0,
-                                base: 0,
+                                base,
                             });
                         }
                     }
@@ -236,11 +277,12 @@ impl VM {
                     self.close_upvalues(frame.base);
                     // remove stack entries above base (leave space where callee was)
                     self.stack.truncate(frame.base);
-                    self.push(ret);
 
                     if self.frames.is_empty() {
-                        return Ok(self.pop().unwrap_or(ASObj::ASNul.into()));
+                        return Ok(ret);
                     }
+
+                    self.stack[frame.base - 1] = ret;
                 }
                 Opcode::Pop => {
                     self.pop();
@@ -293,8 +335,57 @@ impl VM {
                         .into(),
                     );
                 }
-                Opcode::Jump => todo!(),
-                Opcode::JumpIfFalse => todo!(),
+                Opcode::BinComp => {
+                    let op = fnc.code[frame.ip];
+                    frame.ip += 1;
+
+                    let binop = BinCompcode::try_from(op).expect(&format!("Invalid binop: {}", op));
+
+                    let Value::ASObj(arg2) = self
+                        .pop()
+                        .ok_or_else(|| format!("Missing rhs in {:?}", op))?
+                    else {
+                        return Err("Cannot do arithmetics on closures".into());
+                    };
+                    let Value::ASObj(arg1) = self
+                        .pop()
+                        .ok_or_else(|| format!("Missing lhs in {:?}", op))?
+                    else {
+                        return Err("Cannot do arithmetics on closures".into());
+                    };
+
+                    self.push(
+                        ASObj::ASBooleen(match binop {
+                            BinCompcode::Eq => arg1 == arg2,
+                            BinCompcode::NotEq => arg1 != arg2,
+                            BinCompcode::Lth => arg1 < arg2,
+                            BinCompcode::Gth => arg1 > arg2,
+                            BinCompcode::Geq => arg1 >= arg2,
+                            BinCompcode::Leq => arg1 <= arg2,
+                            BinCompcode::Dans => arg2.contains(&arg1).map_err(|e| e.to_string())?,
+                            BinCompcode::PasDans => {
+                                !arg2.contains(&arg1).map_err(|e| e.to_string())?
+                            }
+                        })
+                        .into(),
+                    );
+                }
+                Opcode::Jump => {
+                    let dist = fnc.code[frame.ip];
+                    frame.ip += dist as usize + 1;
+                }
+                Opcode::JumpIfFalse => {
+                    let dist = fnc.code[frame.ip];
+                    frame.ip += 1;
+
+                    let val = self.pop().expect("A value");
+
+                    if let Value::ASObj(v) = val {
+                        if !v.to_bool() {
+                            self.get_frame().unwrap().ip += dist as usize + 1;
+                        }
+                    }
+                }
             }
         }
     }

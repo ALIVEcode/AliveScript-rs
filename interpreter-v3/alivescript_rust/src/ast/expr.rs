@@ -144,7 +144,8 @@ pub enum BinOpcode {
     ShiftRight,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, TryFromPrimitive)]
+#[repr(u8)]
 pub enum BinCompcode {
     Eq,
     NotEq,

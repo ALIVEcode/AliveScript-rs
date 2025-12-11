@@ -4,7 +4,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use thiserror::Error;
 
 use crate::{
-    ast::BinOpcode,
+    ast::{BinCompcode, BinOpcode},
     compiler::{bitmasks::BitArray, utils::format_table},
 };
 
@@ -17,6 +17,8 @@ pub enum Opcode {
     SetUpvalue,
     GetLocal,
     SetLocal,
+    GetGlobal,
+    SetGlobal,
     Call,
 
     Jump,
@@ -26,6 +28,7 @@ pub enum Opcode {
     Pop,
 
     BinOp,
+    BinComp,
 }
 
 impl Opcode {
@@ -37,10 +40,13 @@ impl Opcode {
             Opcode::SetUpvalue => "SET_UPVAL",
             Opcode::GetLocal => "GET_LOCAL",
             Opcode::SetLocal => "SET_LOCAL",
+            Opcode::GetGlobal => "GET_GLOBAL",
+            Opcode::SetGlobal => "SET_GLOBAL",
             Opcode::Call => "CALL",
             Opcode::Return => "RETURN",
             Opcode::Pop => "POP",
             Opcode::BinOp => "BINOP",
+            Opcode::BinComp => "BINCOMP",
             Opcode::Jump => "JUMP",
             Opcode::JumpIfFalse => "JUMP_IF_FALSE",
         }
@@ -52,15 +58,17 @@ impl Opcode {
             | Opcode::GetUpvalue
             | Opcode::SetUpvalue
             | Opcode::GetLocal
-            | Opcode::SetLocal => 2,
+            | Opcode::SetLocal
+            | Opcode::GetGlobal
+            | Opcode::SetGlobal => 1,
 
-            Opcode::Jump | Opcode::JumpIfFalse => 2,
+            Opcode::Jump | Opcode::JumpIfFalse => 1,
 
-            Opcode::Closure => todo!(),
-            Opcode::Call => todo!(),
+            Opcode::Closure => 1,
+            Opcode::Call => 1,
             Opcode::Return => todo!(),
 
-            Opcode::BinOp => 1,
+            Opcode::BinOp | Opcode::BinComp => 1,
 
             Opcode::Pop => 0,
         }
@@ -73,7 +81,7 @@ pub struct Instructions {
     opcodes: Vec<Opcode>,
 }
 
-pub fn instructions_to_string(insts: &[u8]) -> String {
+pub fn instructions_to_string(insts: &[u8]) -> Vec<String> {
     let mut instructions = vec![];
     let mut iter = insts.iter();
 
@@ -87,7 +95,17 @@ pub fn instructions_to_string(insts: &[u8]) -> String {
         inst_str.push(String::from(op.name()));
 
         match op {
-            Opcode::Constant | Opcode::SetLocal | Opcode::GetLocal => {
+            Opcode::Constant
+            | Opcode::SetLocal
+            | Opcode::GetLocal
+            | Opcode::GetUpvalue
+            | Opcode::SetUpvalue
+            | Opcode::GetGlobal
+            | Opcode::SetGlobal
+            | Opcode::Closure
+            | Opcode::Call
+            | Opcode::Jump
+            | Opcode::JumpIfFalse => {
                 let Some(idx) = iter.next() else {
                     panic!("Missing arg for {}", op.name());
                 };
@@ -105,6 +123,16 @@ pub fn instructions_to_string(insts: &[u8]) -> String {
                 inst_str.push(op.to_string());
                 inst_str.push(format!("({:?})", binop));
             }
+            Opcode::BinComp => {
+                let Some(op) = iter.next() else {
+                    panic!("Missing arg for {}", op.name());
+                };
+
+                let binop = BinCompcode::try_from(*op).expect(&format!("Invalid bin comp: {}", op));
+
+                inst_str.push(op.to_string());
+                inst_str.push(format!("({:?})", binop));
+            }
             _ => {}
         }
 
@@ -113,12 +141,19 @@ pub fn instructions_to_string(insts: &[u8]) -> String {
 
     let instructions = format_table(&instructions);
 
-    format!("[\n\t{}\n]", instructions.join("\n\t"))
+    instructions
 }
 
 impl Debug for Instructions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Instructions({})", instructions_to_string(&self.insts))
+        write!(
+            f,
+            "Instructions({})",
+            format!(
+                "[\n\t{}\n]",
+                instructions_to_string(&self.insts).join("\n\t")
+            )
+        )
     }
 }
 
@@ -132,6 +167,10 @@ impl Instructions {
 
     pub fn inner(&self) -> &Vec<u8> {
         &self.insts
+    }
+
+    pub fn raw_patch(&mut self, idx: usize, val: u8) {
+        self.insts[idx] = val
     }
 
     fn emit_byte(&mut self, b: u8) {
@@ -196,6 +235,16 @@ impl Instructions {
         self.emit_byte(slot);
     }
 
+    pub fn emit_get_global(&mut self, const_name_slot: u8) {
+        self.emit_opcode(Opcode::GetGlobal);
+        self.emit_byte(const_name_slot);
+    }
+
+    pub fn emit_set_global(&mut self, const_name_slot: u8) {
+        self.emit_opcode(Opcode::SetGlobal);
+        self.emit_byte(const_name_slot);
+    }
+
     pub fn emit_call(&mut self, nargs: u8) {
         self.emit_opcode(Opcode::Call);
         self.emit_byte(nargs);
@@ -213,6 +262,22 @@ impl Instructions {
         self.emit_opcode(Opcode::BinOp);
         // The BinOpcode u8 value represent the operation done
         self.emit_byte(op as u8);
+    }
+
+    pub fn emit_bincomp(&mut self, op: BinCompcode) {
+        self.emit_opcode(Opcode::BinComp);
+        // The BinOpcode u8 value represent the operation done
+        self.emit_byte(op as u8);
+    }
+
+    pub fn emit_jump(&mut self, target: u8) {
+        self.emit_opcode(Opcode::Jump);
+        self.emit_byte(target);
+    }
+
+    pub fn emit_jump_if_false(&mut self, target: u8) {
+        self.emit_opcode(Opcode::JumpIfFalse);
+        self.emit_byte(target);
     }
 }
 

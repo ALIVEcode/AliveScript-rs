@@ -204,7 +204,9 @@ fn parse_top_expr(primary: Pair<Rule>) -> Result<Box<Expr>, PestError<Rule>> {
     }
 }
 
-fn parse_expr(pairs: Pairs<Rule>) -> Result<Box<Expr>, PestError<Rule>> {
+fn parse_expr<'a>(
+    pairs: impl Iterator<Item = Pair<'a, Rule>>,
+) -> Result<Box<Expr>, PestError<Rule>> {
     PRATT_EXPR_PARSER
         .map_primary(parse_top_expr)
         .map_prefix(|prefix, rhs| {
@@ -595,7 +597,7 @@ fn parse_if(pair: Pair<Rule>) -> Result<Stmt, PestError<Rule>> {
 
 pub fn build_ast_stmt(pair: Pair<Rule>) -> Result<Box<Stmt>, PestError<Rule>> {
     Ok(Box::new(match pair.as_rule() {
-        Rule::AfficherStmt => Stmt::Afficher(vec![parse_expr(pair.into_inner())?]),
+        Rule::AfficherStmt => Stmt::Afficher(vec![parse_expr(pair.into_inner().skip(1))?]),
         Rule::UtiliserStmt => {
             let inner = pair.into_inner();
             let module_name = inner.clone().next().unwrap();
@@ -646,12 +648,7 @@ pub fn build_ast_stmt(pair: Pair<Rule>) -> Result<Box<Stmt>, PestError<Rule>> {
             let mut inner = pair.into_inner();
             Stmt::Expr(Box::new(Expr::FnCall {
                 func: parse_top_expr(inner.next().unwrap())?,
-                args: inner
-                    .next()
-                    .unwrap()
-                    .into_inner()
-                    .map(|arg| parse_expr(arg.into_inner()))
-                    .collect::<Result<Vec<_>, _>>()?,
+                args: vec![parse_top_expr(inner.next().unwrap())?],
             }))
         }
         Rule::PubStmt => {
@@ -766,6 +763,7 @@ pub fn build_ast_stmt(pair: Pair<Rule>) -> Result<Box<Stmt>, PestError<Rule>> {
         Rule::SortirStmt => Stmt::Sortir,
         Rule::RetournerStmt => Stmt::Retourner(
             pair.into_inner()
+                .skip(1)
                 .map(|expr| parse_expr(expr.into_inner()))
                 .collect::<Result<Vec<_>, _>>()?,
         ),

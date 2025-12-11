@@ -10,9 +10,26 @@ x = debut
 fin
 
 
-fonction plus_x(y)
-  retourner x + y
+fonction plus(x)
+  retourner fonction(y)
+    retourner x + y
+  fin fonction
 fin fonction
 
 
-retourner plus_x(22)
+var plus_1 = plus(1)
+
+
+fonction apply(f, arg)
+  retourner f(arg)
+fin fonction
+
+var x = apply(plus_1, plus_1(plus_1(plus_1(2))))
+
+si x == 6 
+  afficher "wow"
+fin si
+
+afficher "end"
+
+

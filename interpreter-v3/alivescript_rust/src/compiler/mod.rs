@@ -15,6 +15,7 @@ use crate::{
 
 mod bitmasks;
 mod bytecode;
+mod module;
 mod obj;
 mod utils;
 pub mod vm;
@@ -272,6 +273,27 @@ impl<'a> Compiler<'a> {
     fn mark_captured(&mut self, index: usize) {
         self.locals[index].is_captured = true;
     }
+
+    fn patch_jump(&mut self, jmp_stack_idx: usize) {
+        let val = self.code.inner().len() - 1;
+        while let Some(jump_idx) = self.jump_stack.pop() {
+            self.code.raw_patch(jump_idx, (val - jump_idx) as u8);
+        }
+    }
+
+    fn push_cond_jump(&mut self) -> usize {
+        let jump_idx = self.code.inner().len() + 1;
+        self.code.emit_jump_if_false(0);
+        self.jump_stack.push(jump_idx);
+        self.jump_stack.len() - 1
+    }
+
+    fn push_jump(&mut self) -> usize {
+        let jump_idx = self.code.inner().len() + 1;
+        self.code.emit_jump(0);
+        self.jump_stack.push(jump_idx);
+        self.jump_stack.len() - 1
+    }
 }
 
 impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
@@ -324,8 +346,10 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
             return;
         }
 
-        // 3. Must be a GLOBAL (or an error)
-        panic!("Global variable access not implemented: {}", ident);
+        // 3. Load a GLOBAL by setting the variable name as a string constant
+        // and emiting a LoadGlobal
+        let glob_name_idx = compiler.get_or_add_const(Value::ASObj(ASObj::ASTexte(ident.clone())));
+        compiler.code.emit_get_global(glob_name_idx as u8);
     }
 
     fn visit_expr_accessprop(&mut self, expr: &Expr) {
@@ -344,7 +368,6 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
         args.iter().for_each(|arg| arg.accept(self));
 
         self.borrow_mut().code.emit_call(args.len() as u8);
-
     }
 
     fn visit_expr_callrust(&mut self, expr: &Expr) {
@@ -364,7 +387,11 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
     }
 
     fn visit_expr_bincomp(&mut self, expr: &Expr) {
-        todo!()
+        unpack!(Expr::BinComp { lhs, op, rhs } = expr);
+        lhs.accept(self);
+        rhs.accept(self);
+
+        self.borrow_mut().code.emit_bincomp(*op);
     }
 
     fn visit_expr_binlogic(&mut self, expr: &Expr) {
@@ -380,7 +407,31 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
     }
 
     fn visit_expr_deffn(&mut self, expr: &Expr) {
-        todo!()
+        unpack!(
+            Expr::DefFn(DefFn {
+                docs,
+                name,
+                params,
+                return_type,
+                body,
+                public
+            }) = expr
+        );
+
+        let closure = {
+            let mut c = Compiler::new_closure(name.clone(), Rc::clone(self));
+            for param in params {
+                c.declare_local(&param.name);
+                c.mark_initialized();
+            }
+            c.compile(body)
+        };
+
+        let idx = self
+            .borrow_mut()
+            .get_or_add_const(Value::Closure(Rc::new(closure)));
+
+        self.borrow_mut().code.emit_closure(idx as u8);
     }
 
     fn visit_expr_debut(&mut self, expr: &Expr) {
@@ -494,7 +545,36 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
     }
 
     fn visit_stmt_si(&mut self, stmt: &Stmt) {
-        todo!()
+        unpack!(
+            Stmt::Si {
+                cond,
+                then_br,
+                elif_brs,
+                else_br
+            } = stmt
+        );
+
+        cond.accept(self);
+        let if_not_cond_jmp = self.borrow_mut().push_cond_jump();
+        self.visit_body(then_br);
+        let mut to_end_jmps = vec![self.borrow_mut().push_jump()];
+        self.borrow_mut().patch_jump(if_not_cond_jmp);
+
+        for (elif_cond, elif_br) in elif_brs {
+            elif_cond.accept(self);
+            let elif_not_cond_jmp = self.borrow_mut().push_cond_jump();
+            self.visit_body(elif_br);
+            to_end_jmps.push(self.borrow_mut().push_jump());
+            self.borrow_mut().patch_jump(elif_not_cond_jmp);
+        }
+
+        if let Some(else_br) = else_br {
+            self.visit_body(else_br);
+        }
+
+        for to_end_jmp in to_end_jmps {
+            self.borrow_mut().patch_jump(to_end_jmp);
+        }
     }
 
     fn visit_stmt_condstmt(&mut self, stmt: &Stmt) {
@@ -550,7 +630,11 @@ impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
         let local_idx = self.borrow_mut().declare_local(name.as_ref().unwrap());
 
         let closure = {
-            let c = Compiler::new_closure(name.clone(), Rc::clone(self));
+            let mut c = Compiler::new_closure(name.clone(), Rc::clone(self));
+            for param in params {
+                c.declare_local(&param.name);
+                c.mark_initialized();
+            }
             c.compile(body)
         };
 

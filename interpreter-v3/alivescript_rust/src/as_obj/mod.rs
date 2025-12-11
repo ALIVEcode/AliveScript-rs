@@ -414,7 +414,7 @@ impl Add for ASObj {
             (ASDecimal(x), ASEntier(y)) => ASDecimal(x + y as f64),
             (ASEntier(x), ASDecimal(y)) => ASDecimal(x as f64 + y),
             (ASDecimal(x), ASDecimal(y)) => ASDecimal(x + y),
-            _ => unimplemented!(),
+            (l, r) => unimplemented!("Add for {} and {}", l, r),
         }
     }
 }

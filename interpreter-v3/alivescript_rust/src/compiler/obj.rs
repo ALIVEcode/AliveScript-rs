@@ -1,8 +1,10 @@
 use std::cell::RefCell;
+use std::fmt::{Debug, Display};
 use std::rc::Rc;
 
-use crate::as_obj::ASObj;
-use crate::compiler::bytecode::Instructions;
+use crate::as_obj::{self, ASErreurType, ASObj, ASType};
+use crate::ast::CallRust;
+use crate::compiler::bytecode::{instructions_to_string, Instructions};
 use crate::compiler::vm::VM;
 
 pub type RcUpvalue = Rc<RefCell<Upvalue>>;
@@ -13,6 +15,17 @@ pub type RcFunction = Rc<Function>;
 pub enum Value {
     ASObj(ASObj),
     Closure(RcClosure),
+    NativeFunction(NativeFunction),
+}
+
+impl Value {
+    pub fn get_type(&self) -> ASType {
+        match self {
+            Value::ASObj(asobj) => asobj.get_type(),
+            Value::Closure(closure) => ASType::Fonction,
+            Value::NativeFunction(native_function) => ASType::Fonction,
+        }
+    }
 }
 
 impl From<ASObj> for Value {
@@ -21,7 +34,28 @@ impl From<ASObj> for Value {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let to_str = match self {
+            Value::ASObj(asobj) => asobj.to_string(),
+            Value::Closure(closure) => format!(
+                "fonction {}()",
+                closure
+                    .function
+                    .name
+                    .as_ref()
+                    .unwrap_or(&"anonyme".to_string())
+            ),
+            Value::NativeFunction(native_function) => {
+                format!("fonction native {}()", native_function.name)
+            }
+        };
+
+        write!(f, "{}", to_str)
+    }
+}
+
+#[derive(Clone, PartialEq)]
 pub struct Function {
     pub name: Option<String>,
     pub code: Vec<u8>,         // bytecode
@@ -49,6 +83,18 @@ impl Function {
             upvalue_count: 0,
             upvalue_specs: vec![],
         }
+    }
+}
+
+impl Debug for Function {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Function")
+            .field("name", &self.name)
+            .field("code", &instructions_to_string(&self.code))
+            .field("constants", &self.constants)
+            .field("upvalue_count", &self.upvalue_count)
+            .field("upvalue_specs", &self.upvalue_specs)
+            .finish()
     }
 }
 
@@ -115,5 +161,31 @@ impl UpvalueSpec {
             UpvalueSpec::Local(index) => *index,
             UpvalueSpec::Upvalue(index) => *index,
         }
+    }
+}
+
+pub struct NativeFunction {
+    pub func: Rc<dyn Fn(&mut VM) -> Result<Option<Value>, ASErreurType>>,
+    pub name: Rc<String>,
+    pub desc: Rc<Option<String>>,
+}
+
+impl Clone for NativeFunction {
+    fn clone(&self) -> Self {
+        Self {
+            func: Rc::clone(&self.func),
+            desc: Rc::clone(&self.desc),
+            name: Rc::clone(&self.name),
+        }
+    }
+}
+impl PartialEq for NativeFunction {
+    fn eq(&self, _: &Self) -> bool {
+        false
+    }
+}
+impl std::fmt::Debug for NativeFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("définition interne")
     }
 }
