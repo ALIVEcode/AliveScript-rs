@@ -159,8 +159,6 @@ impl<'a> Compiler<'a> {
 
         rc_self.borrow_mut().finish();
 
-        println!("{:#?}", rc_self.borrow());
-
         let x = Closure {
             function: Rc::new(rc_self.borrow().function.borrow().clone()),
             upvalues: vec![],
