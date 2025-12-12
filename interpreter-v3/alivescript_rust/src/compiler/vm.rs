@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     as_modules::ASModuleBuiltin,
-    as_obj::{ASEnv, ASObj, ASType},
+    as_obj::{ASEnv, ASType},
     ast::{BinCompcode, BinOpcode, CallRust},
     compiler::{
         bytecode::{Opcode, JUMP_OFFSET},
@@ -107,14 +107,14 @@ impl VM {
                     // poped in the reverse order
                     lst.reverse();
 
-                    self.push(Value::List(Rc::new(RefCell::new(lst))).into());
+                    self.push(Value::Liste(Rc::new(RefCell::new(lst))).into());
                 }
                 Opcode::GetItem => {
                     let slice = self.pop().unwrap();
                     let obj = self.pop().unwrap();
 
                     let result = match (obj, slice) {
-                        (Value::List(lst), Value::ASObj(ASObj::ASEntier(i))) => {
+                        (Value::Liste(lst), Value::Entier(i)) => {
                             let lst = lst.borrow();
                             let i = if i < 0 { lst.len() as i64 + i } else { i };
                             if i < 0 || i >= lst.len() as i64 {
@@ -122,10 +122,10 @@ impl VM {
                             }
                             lst[i as usize].clone()
                         }
-                        (Value::List(lst), Value::List(range)) => {
+                        (Value::Liste(lst), Value::Liste(range)) => {
                             let mut lst_final = Vec::with_capacity(range.borrow().len());
                             for obj in range.borrow().iter() {
-                                if let Value::ASObj(ASObj::ASEntier(i)) = obj {
+                                if let Value::Entier(i) = obj {
                                     let lst = lst.borrow();
                                     let i = if *i < 0 { lst.len() as i64 + *i } else { *i };
                                     if i < 0 || i >= lst.len() as i64 {
@@ -145,19 +145,19 @@ impl VM {
                                     // );
                                 }
                             }
-                            Value::List(Rc::new(RefCell::new(lst_final)))
+                            Value::Liste(Rc::new(RefCell::new(lst_final)))
                         }
-                        (Value::ASObj(ASObj::ASTexte(txt)), Value::ASObj(ASObj::ASEntier(i))) => {
+                        (Value::Texte(txt), Value::Entier(i)) => {
                             let i = if i < 0 { txt.len() as i64 + i } else { i };
                             if i < 0 || i >= txt.len() as i64 {
                                 // throw_err!(self, ASErreurType::new_erreur_index(i, txt.len()));
                             }
-                            Value::ASObj(ASObj::ASTexte(txt[i as usize..i as usize + 1].into()))
+                            Value::Texte(txt[i as usize..i as usize + 1].into())
                         }
-                        (Value::ASObj(ASObj::ASTexte(txt)), Value::List(range)) => {
+                        (Value::Texte(txt), Value::Liste(range)) => {
                             let mut txt_final = String::with_capacity(range.borrow().len());
                             for obj in range.borrow().iter() {
-                                if let Value::ASObj(ASObj::ASEntier(i)) = obj {
+                                if let Value::Entier(i) = obj {
                                     let i = if *i < 0 { txt.len() as i64 + *i } else { *i };
                                     if i < 0 || i >= txt.len() as i64 {
                                         // throw_err!(
@@ -176,18 +176,8 @@ impl VM {
                                     // );
                                 }
                             }
-                            Value::ASObj(ASObj::ASTexte(txt_final))
+                            Value::Texte(txt_final)
                         }
-                        // (ASObj::ASDict(dict), clef) => {
-                        //     let d = dict.borrow();
-                        //     let el = d.get(&clef);
-                        //     match el {
-                        //         Some(paire) => paire.val().clone(),
-                        //         None => {
-                        //             throw_err!(self, ASErreurType::new_erreur_clef(clef.clone()))
-                        //         }
-                        //     }
-                        // }
                         _ => todo!(),
                     };
 
@@ -286,18 +276,21 @@ impl VM {
                         .ok_or("set upvalue out of range")?
                         .clone();
 
-                    let val = self.pop().unwrap_or(Value::ASObj(ASObj::ASNul));
+                    let val = self.pop().unwrap_or(Value::Nul);
                     up_rc.borrow_mut().set(self, val);
                 }
                 Opcode::GetLocal => {
                     let slot = fnc.code[frame.ip] as usize;
                     frame.ip += 1;
+                    let ip = frame.ip;
                     let idx = frame.base + slot;
-                    let v = self
-                        .stack
-                        .get(idx)
-                        .cloned()
-                        .unwrap_or(ASObj::ASNoValue.into());
+
+                    let v = self.stack.get(idx).cloned().ok_or(format!(
+                        "Variable sans valeur (ip={}, idx={})",
+                        ip - 1,
+                        idx
+                    ))?;
+
                     self.push(v);
                 }
                 Opcode::SetLocal => {
@@ -308,7 +301,7 @@ impl VM {
                     let val = self.pop().ok_or("Missing value in SET_LOCAL")?;
                     if idx >= self.stack.len() {
                         // expand stack to fit local (for simplicity)
-                        self.stack.resize(idx + 1, ASObj::ASNoValue.into());
+                        self.stack.resize(idx + 1, Value::Nul);
                     }
                     self.stack[idx] = val;
                 }
@@ -316,7 +309,7 @@ impl VM {
                     let slot = fnc.code[frame.ip] as usize;
                     frame.ip += 1;
 
-                    let Value::ASObj(ASObj::ASTexte(ref name)) = fnc.constants[slot] else {
+                    let Value::Texte(ref name) = fnc.constants[slot] else {
                         panic!("Name of global variable must be a string");
                     };
                     let name = name.clone();
@@ -333,7 +326,7 @@ impl VM {
                     let slot = fnc.code[frame.ip] as usize;
                     frame.ip += 1;
 
-                    let Value::ASObj(ASObj::ASTexte(ref name)) = fnc.constants[slot] else {
+                    let Value::Texte(ref name) = fnc.constants[slot] else {
                         panic!("Name of global variable must be a string");
                     };
                     let name = name.clone();
@@ -355,7 +348,7 @@ impl VM {
                             for _ in 0..nbargs {
                                 self.pop();
                             }
-                            self.push(result.unwrap_or(Value::ASObj(ASObj::ASNoValue)));
+                            self.push(result.unwrap_or(Value::Nul));
                         }
                         Value::Closure(closure) => {
                             // set the base as the first arg of the function
@@ -366,13 +359,13 @@ impl VM {
                                 base,
                             });
                         }
-                        Value::ASObj(..) | Value::List(..) => {
+                        _ => {
                             return Err(format!("Cannot call value of type: {}", func.get_type()));
                         }
                     }
                 }
                 Opcode::Return => {
-                    let ret = self.pop().unwrap_or(ASObj::ASNul.into());
+                    let ret = self.pop().unwrap_or(Value::Nul);
 
                     let frame = self.frames.pop().ok_or("return with no frame")?;
                     self.close_upvalues(frame.base);
@@ -437,21 +430,16 @@ impl VM {
 
                     let binop = BinCompcode::try_from(op).expect(&format!("Invalid binop: {}", op));
 
-                    let Value::ASObj(arg2) = self
+                    let arg2 = self
                         .pop()
-                        .ok_or_else(|| format!("Missing rhs in {:?}", op))?
-                    else {
-                        return Err("Cannot do arithmetics on closures".into());
-                    };
-                    let Value::ASObj(arg1) = self
+                        .ok_or_else(|| format!("Missing rhs in {:?}", op))?;
+
+                    let arg1 = self
                         .pop()
-                        .ok_or_else(|| format!("Missing lhs in {:?}", op))?
-                    else {
-                        return Err("Cannot do arithmetics on closures".into());
-                    };
+                        .ok_or_else(|| format!("Missing lhs in {:?}", op))?;
 
                     self.push(
-                        ASObj::ASBooleen(match binop {
+                        Value::Booleen(match binop {
                             BinCompcode::Eq => arg1 == arg2,
                             BinCompcode::NotEq => arg1 != arg2,
                             BinCompcode::Lth => arg1 < arg2,
@@ -480,10 +468,8 @@ impl VM {
 
                     let val = self.pop().expect("A value");
 
-                    if let Value::ASObj(v) = val {
-                        if !v.to_bool() {
-                            self.get_frame().unwrap().ip = (ip as i16 + dist) as usize;
-                        }
+                    if !val.to_bool() {
+                        self.get_frame().unwrap().ip = (ip as i16 + dist) as usize;
                     }
                 }
             }

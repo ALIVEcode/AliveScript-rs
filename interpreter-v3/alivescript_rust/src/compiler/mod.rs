@@ -12,13 +12,14 @@ use pest::{
 };
 
 use crate::{
-    as_obj::{ASErreur, ASErreurType, ASObj, ASType},
+    as_obj::{ASErreur, ASErreurType, ASType},
     ast::{
         AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, DefFn, Expr, FnParam, Stmt, Type,
         UnaryOpcode,
     },
     compiler::{
         bytecode::{Instructions, Opcode, JUMP_OFFSET},
+        err::CompilationError,
         obj::{Closure, Function, Upvalue, UpvalueSpec, Value},
         parser::{PRATT_EXPR_PARSER, PRATT_TYPE_PARSER},
     },
@@ -29,6 +30,7 @@ use crate::{
 
 mod bitmasks;
 mod bytecode;
+mod err;
 mod module;
 pub mod obj;
 mod parser;
@@ -116,39 +118,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    pub fn compile(self, stmts: &Vec<Box<Stmt>>) -> Closure {
-        let mut rc_self = Rc::new(RefCell::new(self));
-        rc_self.visit_body(stmts);
-
-        rc_self.borrow_mut().code.emit_return();
-
-        rc_self.borrow_mut().finish();
-
-        let x = Closure {
-            function: Rc::new(rc_self.borrow().function.borrow().clone()),
-            upvalues: vec![],
-        };
-        x
-    }
-
-    pub fn compile_debug(self, stmts: &Vec<Box<Stmt>>) -> Closure {
-        let mut rc_self = Rc::new(RefCell::new(self));
-        rc_self.visit_body(stmts);
-
-        rc_self.borrow_mut().code.emit_return();
-
-        rc_self.borrow_mut().finish();
-
-        println!("{:#?}", rc_self.borrow());
-
-        let x = Closure {
-            function: Rc::new(rc_self.borrow().function.borrow().clone()),
-            upvalues: vec![],
-        };
-        x
-    }
-
-    pub fn parse_compile(self, pairs: Pairs<'a, Rule>) -> Result<Closure, PestError<Rule>> {
+    pub fn compile(self, pairs: Pairs<'a, Rule>) -> Result<Closure, CompilationError> {
         let mut rc_self = Rc::new(RefCell::new(self));
 
         rc_self.build_ast_stmts(pairs)?;
@@ -158,6 +128,27 @@ impl<'a> Compiler<'a> {
         rc_self.borrow_mut().code.emit_return();
 
         rc_self.borrow_mut().finish();
+
+        let x = Closure {
+            function: Rc::new(rc_self.borrow().function.borrow().clone()),
+            upvalues: vec![],
+        };
+
+        Ok(x)
+    }
+
+    pub fn compile_debug(self, pairs: Pairs<'a, Rule>) -> Result<Closure, CompilationError> {
+        let mut rc_self = Rc::new(RefCell::new(self));
+
+        rc_self.build_ast_stmts(pairs)?;
+
+        rc_self.borrow_mut().code.pop_if_op_is(Opcode::Pop);
+
+        rc_self.borrow_mut().code.emit_return();
+
+        rc_self.borrow_mut().finish();
+
+        println!("{:#?}", rc_self.borrow());
 
         let x = Closure {
             function: Rc::new(rc_self.borrow().function.borrow().clone()),
@@ -345,426 +336,15 @@ impl<'a> Compiler<'a> {
     }
 }
 
-impl<'a> Visitor for Rc<RefCell<Compiler<'a>>> {
-    fn visit_body(&mut self, stmts: &Vec<Box<Stmt>>) {
-        for stmt in stmts {
-            stmt.accept(self);
-        }
-    }
-
-    fn visit_generic_expr(&mut self, expr: &Expr) {
-        todo!()
-    }
-
-    fn visit_generic_stmt(&mut self, stmt: &Stmt) {
-        todo!()
-    }
-
-    fn visit_expr_lit(&mut self, expr: &Expr) {
-        unpack!(Expr::Lit(obj) = expr);
-
-        let idx = self
-            .borrow_mut()
-            .get_or_add_const(Value::ASObj(obj.clone()));
-
-        self.borrow_mut().code.emit_const(idx as u16);
-    }
-
-    fn visit_expr_list(&mut self, expr: &Expr) {
-        unpack!(Expr::List(exprs) = expr);
-    }
-
-    fn visit_expr_dict(&mut self, expr: &Expr) {
-        todo!()
-    }
-
-    fn visit_expr_ident(&mut self, expr: &Expr) {
-        unpack!(Expr::Ident(ident) = expr);
-
-        let mut compiler = self.borrow_mut();
-
-        // 1. Try to resolve as a LOCAL
-        if let Ok(Some(local_idx)) = compiler.resolve_local(ident, false) {
-            compiler.code.emit_get_local(local_idx as u16);
-            return;
-        }
-
-        // 2. Try to resolve as an UPVALUE
-        if let Ok(Some(upval_idx)) = compiler.resolve_upval(ident) {
-            compiler.code.emit_get_upvalue(upval_idx as u16);
-            return;
-        }
-
-        // 3. Load a GLOBAL by setting the variable name as a string constant
-        // and emiting a LoadGlobal
-        let glob_name_idx = compiler.get_or_add_const(Value::ASObj(ASObj::ASTexte(ident.clone())));
-        compiler.code.emit_get_global(glob_name_idx as u16);
-    }
-
-    fn visit_expr_accessprop(&mut self, expr: &Expr) {
-        todo!()
-    }
-
-    fn visit_expr_slice(&mut self, expr: &Expr) {
-        todo!()
-    }
-
-    fn visit_expr_fncall(&mut self, expr: &Expr) {
-        unpack!(Expr::FnCall { func, args } = expr);
-
-        func.accept(self);
-
-        args.iter().for_each(|arg| arg.accept(self));
-
-        self.borrow_mut().code.emit_call(args.len() as u16);
-    }
-
-    fn visit_expr_callrust(&mut self, expr: &Expr) {
-        todo!()
-    }
-
-    fn visit_expr_unaryop(&mut self, expr: &Expr) {
-        todo!()
-    }
-
-    fn visit_expr_binop(&mut self, expr: &Expr) {
-        unpack!(Expr::BinOp { lhs, op, rhs } = expr);
-        lhs.accept(self);
-        rhs.accept(self);
-
-        self.borrow_mut().code.emit_binop(*op);
-    }
-
-    fn visit_expr_bincomp(&mut self, expr: &Expr) {
-        unpack!(Expr::BinComp { lhs, op, rhs } = expr);
-        lhs.accept(self);
-        rhs.accept(self);
-
-        self.borrow_mut().code.emit_bincomp(*op);
-    }
-
-    fn visit_expr_binlogic(&mut self, expr: &Expr) {
-        todo!()
-    }
-
-    fn visit_expr_ternary(&mut self, expr: &Expr) {
-        todo!()
-    }
-
-    fn visit_expr_suite(&mut self, expr: &Expr) {
-        todo!()
-    }
-
-    fn visit_expr_deffn(&mut self, expr: &Expr) {
-        unpack!(
-            Expr::DefFn(DefFn {
-                docs,
-                name,
-                params,
-                return_type,
-                body,
-                public
-            }) = expr
-        );
-
-        let closure = {
-            let mut c = Compiler::new_closure(
-                "",
-                name.clone(),
-                Rc::clone(self),
-                params.len(),
-                ASType::Tout,
-            );
-            for param in params {
-                let idx = c.declare_local(&param.name, ASType::Tout, false);
-                c.mark_initialized(idx);
-            }
-            c.compile(body)
-        };
-
-        let idx = self
-            .borrow_mut()
-            .get_or_add_const(Value::Closure(Rc::new(closure)));
-
-        self.borrow_mut().code.emit_closure(idx as u16);
-    }
-
-    fn visit_expr_debut(&mut self, expr: &Expr) {
-        unpack!(Expr::Debut(stmts) = expr);
-
-        self.borrow_mut().begin_scope();
-
-        self.visit_body(stmts);
-
-        let mut comp = self.borrow_mut();
-
-        // we prevent the cleanup of the last value because we want to return
-        // it as the value of this expression
-        comp.code.pop_if_op_is(Opcode::Pop);
-
-        let nb_locals = comp.nb_local_scope_vars();
-
-        // if we have local variables, they will get cleaned up with a series
-        // of push. To save our value, we put it in the first local variable
-        // of this block and we cleanup everything except that value.
-        if nb_locals > 0 {
-            let first_local = (comp.locals.len() - nb_locals) as u16;
-            comp.code.emit_set_local(first_local);
-        }
-
-        comp.end_scope();
-
-        // we prevent the cleanup of the last variable, because that stack slot
-        // now holds the value of this expression
-        comp.code.pop_if_op_is(Opcode::Pop);
-    }
-
-    fn visit_expr_essayer(&mut self, expr: &Expr) {
-        todo!()
-    }
-
-    fn visit_stmt_expr(&mut self, stmt: &Stmt) {
-        unpack!(Stmt::Expr(expr) = stmt);
-
-        expr.accept(self);
-
-        // we discard the value produced by the expression
-        self.borrow_mut().code.emit_pop();
-    }
-
-    fn visit_stmt_afficher(&mut self, stmt: &Stmt) {
-        todo!()
-    }
-
-    fn visit_stmt_lire(&mut self, stmt: &Stmt) {
-        todo!()
-    }
-
-    fn visit_stmt_utiliser(&mut self, stmt: &Stmt) {
-        todo!()
-    }
-
-    fn visit_stmt_decl(&mut self, stmt: &Stmt) {
-        unpack!(Stmt::Decl { var, val } = stmt);
-
-        unpack!(
-            DeclVar::Var {
-                name,
-                static_type,
-                is_const,
-                public
-            } = var
-        );
-
-        let local_idx = self
-            .borrow_mut()
-            .declare_local(name, ASType::Tout, *is_const);
-
-        val.accept(self);
-
-        let mut compiler = self.borrow_mut();
-
-        compiler.mark_initialized(local_idx);
-
-        compiler.code.emit_set_local(local_idx);
-    }
-
-    fn visit_stmt_assign(&mut self, stmt: &Stmt) {
-        unpack!(Stmt::Assign { var, val } = stmt);
-
-        unpack!(AssignVar::Var { name, static_type } = var);
-
-        val.accept(self);
-
-        let mut compiler = self.borrow_mut();
-
-        // 1. Try to resolve as a LOCAL
-        if let Ok(Some(local_idx)) = compiler.resolve_local(name, false) {
-            compiler.code.emit_set_local(local_idx as u16);
-            return;
-        }
-
-        // 2. Try to resolve as an UPVALUE
-        if let Ok(Some(upval_idx)) = compiler.resolve_upval(name) {
-            compiler.code.emit_set_upvalue(upval_idx as u16);
-            return;
-        }
-
-        // 3. It defines a new local variable
-        let local_idx = compiler.declare_local(name, ASType::Tout, false);
-
-        compiler.mark_initialized(local_idx);
-        compiler.code.emit_set_local(local_idx);
-    }
-
-    fn visit_stmt_opassign(&mut self, stmt: &Stmt) {
-        todo!()
-    }
-
-    fn visit_stmt_si(&mut self, stmt: &Stmt) {
-        unpack!(
-            Stmt::Si {
-                cond,
-                then_br,
-                elif_brs,
-                else_br
-            } = stmt
-        );
-
-        cond.accept(self);
-        let if_not_cond_jmp = self.borrow_mut().push_cond_jump();
-        self.visit_body(then_br);
-        let mut to_end_jmps = vec![self.borrow_mut().push_jump()];
-        self.borrow_mut().patch_jump(if_not_cond_jmp);
-
-        for (elif_cond, elif_br) in elif_brs {
-            elif_cond.accept(self);
-            let elif_not_cond_jmp = self.borrow_mut().push_cond_jump();
-            self.visit_body(elif_br);
-            to_end_jmps.push(self.borrow_mut().push_jump());
-            self.borrow_mut().patch_jump(elif_not_cond_jmp);
-        }
-
-        if let Some(else_br) = else_br {
-            self.visit_body(else_br);
-        }
-
-        for to_end_jmp in to_end_jmps {
-            self.borrow_mut().patch_jump(to_end_jmp);
-        }
-    }
-
-    fn visit_stmt_condstmt(&mut self, stmt: &Stmt) {
-        todo!()
-    }
-
-    fn visit_stmt_repeter(&mut self, stmt: &Stmt) {
-        todo!()
-    }
-
-    fn visit_stmt_pour(&mut self, stmt: &Stmt) {
-        todo!()
-    }
-
-    fn visit_stmt_tantque(&mut self, stmt: &Stmt) {
-        unpack!(Stmt::TantQue { cond, body } = stmt);
-
-        let before_cond = self.borrow().code.inner().len();
-
-        cond.accept(self);
-        let if_not_cond_jmp = self.borrow_mut().push_cond_jump();
-
-        self.visit_body(body);
-
-        let now = self.borrow().code.inner().len();
-        self.borrow_mut()
-            .code
-            .emit_jump(before_cond as i16 - now as i16 - 2); // - 2 here to account for this
-                                                             // instruction and its argument
-        self.borrow_mut().patch_jump(if_not_cond_jmp);
-    }
-
-    fn visit_stmt_continuer(&mut self, stmt: &Stmt) {
-        todo!()
-    }
-
-    fn visit_stmt_sortir(&mut self, stmt: &Stmt) {
-        todo!()
-    }
-
-    fn visit_stmt_retourner(&mut self, stmt: &Stmt) {
-        unpack!(Stmt::Retourner(exprs) = stmt);
-
-        if exprs.len() > 1 {
-            // FIXME: find a way to avoid this expensive and actually
-            // useless .clone()
-            self.visit_expr_list(&Expr::List(exprs.clone()));
-        } else if exprs.len() == 1 {
-            exprs[0].accept(self);
-        }
-
-        self.borrow_mut().code.emit_return();
-    }
-
-    fn visit_stmt_deffn(&mut self, stmt: &Stmt) {
-        unpack!(
-            Stmt::DefFn(DefFn {
-                docs,
-                name,
-                params,
-                return_type,
-                body,
-                public
-            }) = stmt
-        );
-
-        let local_idx =
-            self.borrow_mut()
-                .declare_local(name.as_ref().unwrap(), ASType::Tout, false);
-
-        let closure = {
-            let mut c = Compiler::new_closure(
-                "",
-                name.clone(),
-                Rc::clone(self),
-                params.len(),
-                ASType::Tout,
-            );
-            for param in params {
-                let idx = c.declare_local(&param.name, ASType::Tout, false);
-                c.mark_initialized(idx);
-            }
-            c.compile(body)
-        };
-
-        self.borrow_mut().mark_initialized(local_idx);
-
-        let idx = self
-            .borrow_mut()
-            .get_or_add_const(Value::Closure(Rc::new(closure)));
-
-        self.borrow_mut().code.emit_closure(idx as u16);
-        self.borrow_mut().code.emit_set_local(local_idx as u16);
-    }
-
-    fn visit_stmt_defclasse(&mut self, stmt: &Stmt) {
-        todo!()
-    }
-
-    fn visit_stmt_type(&mut self, stmt: &Stmt) {
-        todo!()
-    }
-
-    fn visit_type_name(&mut self, t: &Type) {
-        todo!()
-    }
-
-    fn visit_type_lit(&mut self, t: &Type) {
-        todo!()
-    }
-
-    fn visit_type_binop(&mut self, t: &Type) {
-        todo!()
-    }
-
-    fn visit_type_array(&mut self, t: &Type) {
-        todo!()
-    }
-
-    fn visit_type_opt(&mut self, t: &Type) {
-        todo!()
-    }
-}
-
 trait Parser<'a> {
-    fn parse_top_expr(&mut self, primary: Pair<'a, Rule>) -> Result<(), PestError<Rule>>;
+    fn parse_top_expr(&mut self, primary: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
     fn parse_expr(
         &mut self,
         pairs: impl Iterator<Item = Pair<'a, Rule>>,
-    ) -> Result<(), PestError<Rule>>;
+    ) -> Result<(), CompilationError>;
 
-    fn parse_fn_params(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), PestError<Rule>>;
+    fn parse_fn_params(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError>;
 
     fn parse_assign_vars(
         &mut self,
@@ -773,23 +353,23 @@ trait Parser<'a> {
         public: Option<bool>,
     ) -> Result<(), PestError<Rule>>;
 
-    fn parse_assign(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), PestError<Rule>>;
+    fn parse_assign(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError>;
 
-    fn parse_declare(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), PestError<Rule>>;
+    fn parse_declare(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError>;
 
-    fn parse_lit(&mut self, pair: Pair<Rule>) -> Result<(), PestError<Rule>>;
+    fn parse_lit(&mut self, pair: Pair<Rule>) -> Result<(), CompilationError>;
 
-    fn parse_type(&mut self, pairs: Pairs<Rule>) -> Result<ASType, PestError<Rule>>;
+    fn parse_type(&mut self, pairs: Pairs<Rule>) -> Result<ASType, CompilationError>;
 
-    fn parse_if(&mut self, pair: Pair<'a, Rule>) -> Result<(), PestError<Rule>>;
+    fn parse_if(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
-    fn build_ast_stmt(&mut self, pair: Pair<'a, Rule>) -> Result<(), PestError<Rule>>;
+    fn build_ast_stmt(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
-    fn build_ast_stmts(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), PestError<Rule>>;
+    fn build_ast_stmts(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError>;
 }
 
 impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
-    fn parse_top_expr(&mut self, primary: Pair<'a, Rule>) -> Result<(), PestError<Rule>> {
+    fn parse_top_expr(&mut self, primary: Pair<'a, Rule>) -> Result<(), CompilationError> {
         match primary.as_rule() {
             Rule::List => {
                 let mut nb_el = 0;
@@ -829,8 +409,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
                 // 3. Load a GLOBAL by setting the variable name as a string constant
                 // and emiting a LoadGlobal
-                let glob_name_idx =
-                    compiler.get_or_add_const(Value::ASObj(ASObj::ASTexte(ident.to_string())));
+                let glob_name_idx = compiler.get_or_add_const(Value::Texte(ident.to_string()));
                 compiler.code.emit_get_global(glob_name_idx as u16);
             }
 
@@ -914,7 +493,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     Rc::try_unwrap(c)
                         .unwrap()
                         .into_inner()
-                        .parse_compile(inner_body)?
+                        .compile(inner_body)?
                 };
 
                 let idx = self
@@ -938,7 +517,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
     fn parse_expr(
         &mut self,
         pairs: impl Iterator<Item = Pair<'a, Rule>>,
-    ) -> Result<(), PestError<Rule>> {
+    ) -> Result<(), CompilationError> {
         PRATT_EXPR_PARSER
             .map_primary(|pair| Rc::clone(self).parse_top_expr(pair))
             .map_prefix(|prefix, rhs| {
@@ -954,7 +533,8 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                             negatives: vec![prefix.as_rule()],
                         },
                         prefix.as_span(),
-                    ))
+                    )
+                    .into())
                 }
             })
             .map_infix(|lhs, infix, rhs| {
@@ -981,11 +561,9 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     Rule::AccessProp => {
                         let prop = postfix.into_inner().next().unwrap();
                         if matches!(prop.as_node_tag(), Some("prop")) {
-                            let idx =
-                                self.borrow_mut()
-                                    .get_or_add_const(Value::ASObj(ASObj::ASTexte(
-                                        prop.as_str().to_string(),
-                                    )));
+                            let idx = self
+                                .borrow_mut()
+                                .get_or_add_const(Value::Texte(prop.as_str().to_string()));
                             self.borrow_mut().code.emit_get_attr(idx as u16);
                         } else {
                             Rc::clone(self).parse_expr(prop.into_inner())?;
@@ -1030,7 +608,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         Ok(())
     }
 
-    fn parse_fn_params(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), PestError<Rule>> {
+    fn parse_fn_params(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError> {
         let mut param_indexes = Vec::with_capacity(pairs.len());
 
         for pair in pairs {
@@ -1045,7 +623,8 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                         negatives: inner.map(|p| p.as_rule()).collect(),
                     },
                     span,
-                ));
+                )
+                .into());
             };
 
             let mut static_type = ASType::Tout;
@@ -1082,7 +661,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         todo!()
     }
 
-    fn parse_assign(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), PestError<Rule>> {
+    fn parse_assign(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError> {
         let mut name = None;
         let mut static_type = ASType::Tout;
         // let mut var_list = None;
@@ -1138,7 +717,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         Ok(())
     }
 
-    fn parse_declare(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), PestError<Rule>> {
+    fn parse_declare(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError> {
         let mut name = None;
         let mut static_type = ASType::Tout;
         let mut is_const = false;
@@ -1186,16 +765,16 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         Ok(())
     }
 
-    fn parse_lit(&mut self, pair: Pair<Rule>) -> Result<(), PestError<Rule>> {
+    fn parse_lit(&mut self, pair: Pair<Rule>) -> Result<(), CompilationError> {
         let obj = match pair.as_rule() {
-            Rule::Integer => ASObj::ASEntier(pair.as_str().parse::<i64>().unwrap()),
-            Rule::Decimal => ASObj::ASDecimal(pair.as_str().parse::<f64>().unwrap()),
-            Rule::Bool => ASObj::ASBooleen(pair.as_str() == "vrai"),
-            Rule::Null => ASObj::ASNul,
+            Rule::Integer => Value::Entier(pair.as_str().parse::<i64>().unwrap()),
+            Rule::Decimal => Value::Decimal(pair.as_str().parse::<f64>().unwrap()),
+            Rule::Bool => Value::Booleen(pair.as_str() == "vrai"),
+            Rule::Null => Value::Nul,
             Rule::Text => {
                 let slice = pair.as_str();
                 let s: String = slice[1..slice.len() - 1].parse().unwrap();
-                ASObj::ASTexte(
+                Value::Texte(
                     s.replace(r"\n", "\n")
                         .replace(r"\t", "\t")
                         .replace(r"\r", "\r")
@@ -1213,14 +792,14 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
         let mut compiler = self.borrow_mut();
 
-        let idx = compiler.get_or_add_const(Value::ASObj(obj));
+        let idx = compiler.get_or_add_const(obj);
 
         compiler.code.emit_const(idx as u16);
 
         Ok(())
     }
 
-    fn parse_type(&mut self, pairs: Pairs<Rule>) -> Result<ASType, PestError<Rule>> {
+    fn parse_type(&mut self, pairs: Pairs<Rule>) -> Result<ASType, CompilationError> {
         PRATT_TYPE_PARSER
             .map_primary(|primary| match primary.as_rule() {
                 Rule::TypeExpr => self.parse_type(primary.into_inner()),
@@ -1241,13 +820,14 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                         negatives: vec![rule],
                     },
                     primary.as_span(),
-                )),
+                )
+                .into()),
             })
             .map_infix(|lhs, infix, rhs| todo!())
             .parse(pairs)
     }
 
-    fn parse_if(&mut self, pair: Pair<'a, Rule>) -> Result<(), PestError<Rule>> {
+    fn parse_if(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError> {
         let inner = pair.clone().into_inner();
 
         // cond
@@ -1336,7 +916,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         Ok(())
     }
 
-    fn build_ast_stmt(&mut self, pair: Pair<'a, Rule>) -> Result<(), PestError<Rule>> {
+    fn build_ast_stmt(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError> {
         match pair.as_rule() {
             Rule::AfficherStmt => self.parse_expr(pair.into_inner().skip(1))?,
             Rule::UtiliserStmt => {
@@ -1449,7 +1029,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     Rc::try_unwrap(c)
                         .unwrap()
                         .into_inner()
-                        .parse_compile(inner_body)?
+                        .compile(inner_body)?
                 };
 
                 let idx = self
@@ -1535,7 +1115,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         Ok(())
     }
 
-    fn build_ast_stmts(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), PestError<Rule>> {
+    fn build_ast_stmts(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError> {
         for pair in pairs {
             if matches!(pair.as_rule(), Rule::EOI) {
                 continue;

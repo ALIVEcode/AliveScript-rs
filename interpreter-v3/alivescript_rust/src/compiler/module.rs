@@ -48,18 +48,18 @@ as_mod_native! {
     as_fonction_native! {
         afficherErr(msg: ASType::any()) -> ASType::Nul; {
             eprintln!("{}", msg);
-            Ok(Some(ASObj::ASNul.into()))
+            Ok(Some(Value::Nul))
         }
     },
     as_fonction_native! {
         afficher(msg: ASType::any()) -> ASType::Nul; {
             println!("{}", msg);
-            Ok(Some(ASObj::ASNul.into()))
+            Ok(Some(Value::Nul))
         }
     },
     as_fonction_native! {
         typeDe(obj: ASType::any()) -> ASType::Type; {
-            Ok(Some(ASObj::ASTypeObj(obj.get_type()).into()))
+            Ok(Some(Value::TypeObj(obj.get_type())))
         }
     },
     // as_fonction_native! {

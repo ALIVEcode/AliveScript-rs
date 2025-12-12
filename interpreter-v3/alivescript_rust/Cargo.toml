@@ -32,6 +32,7 @@ pest_derive = { version = "2.7.11", features = ["grammar-extras"] }
 lazy_static = "1.5.0"
 dyn-fmt = "0.4.3"
 num_enum = "0.7.5"
+clap = { version = "4.5.53", features = ["derive"] }
 
 # console = { version = "0.15.7", optional = true }
 #

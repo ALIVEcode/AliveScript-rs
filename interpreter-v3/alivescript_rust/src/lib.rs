@@ -22,6 +22,8 @@ pub mod bench;
 
 mod compiler;
 
+pub mod cli;
+
 use std::rc::Rc;
 
 use as_obj::ASErreur;
@@ -125,39 +127,6 @@ mod test {
     fn texte() {}
 }
 
-pub fn compile_script_from_file<'a, IO: InterpretorIO + 'a>(
-    script: &String,
-    interpretor_io: &mut IO,
-    script_file: String,
-) {
-    let debug = script.starts_with("#debug!");
-    let result_stmts = AlivescriptParser::parse(Rule::script, script);
-    if debug {
-        println!("{:#?}", result_stmts);
-    }
-
-    match result_stmts {
-        Ok(stmts) => {
-            // let mut visitor = Runner::new_with_file(interpretor_io, script_file);
-            let compiler = Compiler::new(script);
-            let stmts = build_ast_stmts(stmts).unwrap();
-            let closure = compiler.compile_debug(&stmts);
-            let mut vm = VM::new();
-            let result = vm.run(Rc::new(closure)).unwrap();
-            // println!("{:#?}", vm.stack);
-            // println!("{:?}", result);
-        }
-        Err(err) => interpretor_io.send(Data::Erreur {
-            texte: format!(
-                "ErreurSyntaxe: {}\n{:#?}",
-                err.to_string(),
-                err.parse_attempts()
-            ),
-            ligne: 0,
-        }),
-    };
-}
-
 pub fn compile_script_from_file2<'a, IO: InterpretorIO + 'a>(
     script: &String,
     interpretor_io: &mut IO,
@@ -173,7 +142,7 @@ pub fn compile_script_from_file2<'a, IO: InterpretorIO + 'a>(
         Ok(stmts) => {
             // let mut visitor = Runner::new_with_file(interpretor_io, script_file);
             let compiler = Compiler::new(script);
-            let closure = compiler.parse_compile(stmts).unwrap();
+            let closure = compiler.compile(stmts).unwrap();
             let mut vm = VM::new();
             let result = vm.run(Rc::new(closure)).unwrap();
             // println!("{:#?}", vm.stack);

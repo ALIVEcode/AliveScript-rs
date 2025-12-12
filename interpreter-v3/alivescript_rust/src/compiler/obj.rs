@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub};
 use std::rc::Rc;
 
-use crate::as_obj::{self, ASErreurType, ASObj, ASType};
+use crate::as_obj::{self, ASErreurType, ASType};
 use crate::ast::CallRust;
 use crate::compiler::bytecode::{instructions_to_string, Instructions};
 use crate::compiler::vm::VM;
@@ -14,65 +14,81 @@ pub type RcFunction = Rc<Function>;
 
 #[derive(Debug, Clone)]
 pub enum Value {
-    ASObj(ASObj),
+    Entier(i64),
+    Decimal(f64),
+    Booleen(bool),
+    Nul,
+    Texte(String),
     Closure(RcClosure),
     NativeFunction(NativeFunction),
-    List(Rc<RefCell<Vec<Value>>>),
+    Liste(Rc<RefCell<Vec<Value>>>),
+    TypeObj(ASType),
 }
 
 impl Value {
     pub fn get_type(&self) -> ASType {
+        use Value as V;
+
         match self {
-            Value::ASObj(asobj) => asobj.get_type(),
-            Value::Closure(closure) => ASType::Fonction,
-            Value::NativeFunction(native_function) => ASType::Fonction,
-            Value::List(list) => ASType::Liste,
+            V::Entier(..) => ASType::Entier,
+            V::Decimal(..) => ASType::Decimal,
+            V::Texte(..) => ASType::Texte,
+            V::Nul => ASType::Nul,
+            V::Booleen(..) => ASType::Booleen,
+            V::Liste(..) => ASType::Liste,
+            V::Closure(..) => ASType::Fonction,
+            V::NativeFunction(..) => ASType::Fonction,
+            as_type => todo!("Type inconnue {:?}", as_type),
+        }
+    }
+
+    pub fn to_bool(&self) -> bool {
+        use Value as V;
+
+        match self {
+            V::Entier(x) => *x != 0,
+            V::Decimal(x) => *x != 0f64,
+            V::Texte(s) => !s.is_empty(),
+            V::Booleen(b) => *b,
+            V::Nul => false,
+            V::Liste(l) => !l.borrow().is_empty(),
+            _ => true,
         }
     }
 
     pub fn div_int(&self, rhs: Self) -> Value {
-        use ASObj::*;
+        use Value as V;
 
-        let Value::ASObj(s) = self else {
-            unreachable!()
-        };
-        let Value::ASObj(r) = rhs else { unreachable!() };
-        match (s, r) {
-            (ASEntier(x), ASEntier(y)) => ASEntier(x / y),
-            (ASDecimal(x), ASEntier(y)) => ASEntier(*x as i64 / y),
-            (ASEntier(x), ASDecimal(y)) => ASEntier(x / y as i64),
-            (ASDecimal(x), ASDecimal(y)) => ASEntier(*x as i64 / y as i64),
+        match (self, rhs) {
+            (V::Entier(x), V::Entier(y)) => V::Entier(x / y),
+            (V::Decimal(x), V::Entier(y)) => V::Entier(*x as i64 / y),
+            (V::Entier(x), V::Decimal(y)) => V::Entier(x / y as i64),
+            (V::Decimal(x), V::Decimal(y)) => V::Entier(*x as i64 / y as i64),
             _ => unimplemented!(),
         }
-        .into()
     }
 
     pub fn pow(&self, rhs: Self) -> Value {
-        use ASObj::*;
+        use Value as V;
 
-        let Value::ASObj(s) = self else {
-            unreachable!()
-        };
-        let Value::ASObj(r) = rhs else { unreachable!() };
-        match (s, r) {
-            (ASEntier(x), ASEntier(y)) => ASEntier(x.pow(y as u32)),
-            (ASDecimal(x), ASEntier(y)) => ASDecimal(x.powi(y as i32)),
-            (ASEntier(x), ASDecimal(y)) => ASDecimal((*x as f64).powf(y)),
-            (ASDecimal(x), ASDecimal(y)) => ASDecimal(x.powf(y)),
+        match (self, rhs) {
+            (V::Entier(x), V::Entier(y)) => V::Entier(x.pow(y as u32)),
+            (V::Decimal(x), V::Entier(y)) => V::Decimal(x.powi(y as i32)),
+            (V::Entier(x), V::Decimal(y)) => V::Decimal((*x as f64).powf(y)),
+            (V::Decimal(x), V::Decimal(y)) => V::Decimal(x.powf(y)),
             _ => unimplemented!(),
         }
-        .into()
     }
 
     pub fn extend(&self, rhs: Self) -> Result<Value, ASErreurType> {
-        use ASObj::*;
+        use Value as V;
 
         match (self, rhs) {
-            (Value::ASObj(ASTexte(s)), rhs @ Value::ASObj(ASTexte(..))) => Ok(self.clone() + rhs),
-            (Value::List(l), Value::List(l2)) => {
+            (Value::Texte(s), rhs @ Value::Texte(..)) => Ok(self.clone() + rhs),
+            (Value::Liste(l), Value::Liste(l2)) => {
                 let mut l3 = l.borrow().clone();
                 l3.extend(l2.borrow().to_owned());
-                Ok(Value::List(Rc::new(RefCell::new(l3))))
+                Ok(Value::Liste(Rc::new(RefCell::new(l3))))
             }
 
             // (ASDict(d), ASDict(d2)) => {
@@ -95,11 +111,11 @@ impl Value {
     }
 
     pub fn contains(&self, rhs: &Self) -> Result<bool, ASErreurType> {
-        use ASObj::*;
+        use Value as V;
 
         match (self, rhs) {
-            (Value::ASObj(ASTexte(s)), Value::ASObj(ASTexte(sub_s))) => Ok(s.contains(sub_s)),
-            (Value::List(l), rhs) => Ok(l.borrow().contains(rhs)),
+            (Value::Texte(s), Value::Texte(sub_s)) => Ok(s.contains(sub_s)),
+            (Value::Liste(l), rhs) => Ok(l.borrow().contains(rhs)),
             // (ASDict(d), rhs) => Ok(d.borrow().contains(rhs)),
 
             // (ASTuple(_), _) => todo!("Tuple pas encore (et peut-être jamais) dans le langage"),
@@ -114,17 +130,16 @@ impl Value {
     }
 }
 
-impl From<ASObj> for Value {
-    fn from(value: ASObj) -> Self {
-        Self::ASObj(value)
-    }
-}
-
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let to_str = match self {
-            Value::ASObj(asobj) => asobj.to_string(),
-            Value::List(vals) => format!(
+            Value::Entier(i) => i.to_string(),
+            Value::Decimal(d) => d.to_string(),
+            Value::Texte(s) => s.clone(),
+            Value::Booleen(b) => if *b { "vrai" } else { "faux" }.into(),
+            Value::Nul => "nul".into(),
+            Value::TypeObj(t) => t.to_string(),
+            Value::Liste(vals) => format!(
                 "[{}]",
                 vals.borrow()
                     .iter()
@@ -291,23 +306,21 @@ impl std::fmt::Debug for NativeFunction {
 
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
-        use ASObj::*;
-
         match (self, other) {
-            (Value::ASObj(ASEntier(i)), Value::ASObj(ASDecimal(d)))
-            | (Value::ASObj(ASDecimal(d)), Value::ASObj(ASEntier(i))) => *d == *i as f64,
-            (Value::ASObj(ASEntier(i1)), Value::ASObj(ASEntier(i2))) => i1 == i2,
-            (Value::ASObj(ASTexte(t1)), Value::ASObj(ASTexte(t2))) => t1 == t2,
-            (Value::ASObj(ASBooleen(b1)), Value::ASObj(ASBooleen(b2))) => b1 == b2,
-            (Value::List(l1), Value::List(l2)) => {
+            (Value::Entier(i), Value::Decimal(d)) | (Value::Decimal(d), Value::Entier(i)) => {
+                *d == *i as f64
+            }
+            (Value::Entier(i1), Value::Entier(i2)) => i1 == i2,
+            (Value::Texte(t1), Value::Texte(t2)) => t1 == t2,
+            (Value::Booleen(b1), Value::Booleen(b2)) => b1 == b2,
+            (Value::Liste(l1), Value::Liste(l2)) => {
                 l1.borrow().as_ref() as &Vec<Value> == l2.borrow().as_ref() as &Vec<Value>
             }
             // (ASDict(d1), ASDict(d2)) => d1 == d2,
             // (ASFonc(f1), ASFonc(f2)) => f1 == f2,
             // (ASClasse(classe1), ASClasse(classe2)) => classe1 == classe2,
             // (ASClasseInst(inst1), ASClasseInst(inst2)) => inst1 == inst2,
-            (Value::ASObj(ASNul), Value::ASObj(ASNul)) => true,
-            (Value::ASObj(ASNoValue), Value::ASObj(ASNoValue)) => true,
+            (Value::Nul, Value::Nul) => true,
             _ => false,
         }
     }
@@ -317,24 +330,18 @@ impl Add for Value {
     type Output = Value;
 
     fn add(self, rhs: Self) -> Self::Output {
-        use ASObj::*;
-
         match (self, rhs) {
-            (Value::List(l), any) => Value::List({
+            (Value::Liste(l), any) => Value::Liste({
                 let mut l = l.borrow().clone();
                 l.push(any);
                 Rc::new(RefCell::new(l))
             }),
-            (Value::ASObj(ASTexte(s)), any) => ASTexte(format!("{}{}", s, any.to_string())).into(),
-            (any, Value::ASObj(ASTexte(s))) => ASTexte(format!("{}{}", any.to_string(), s)).into(),
-            (Value::ASObj(ASEntier(x)), Value::ASObj(ASEntier(y))) => ASEntier(x + y).into(),
-            (Value::ASObj(ASDecimal(x)), Value::ASObj(ASEntier(y))) => {
-                ASDecimal(x + y as f64).into()
-            }
-            (Value::ASObj(ASEntier(x)), Value::ASObj(ASDecimal(y))) => {
-                ASDecimal(x as f64 + y).into()
-            }
-            (Value::ASObj(ASDecimal(x)), Value::ASObj(ASDecimal(y))) => ASDecimal(x + y).into(),
+            (Value::Texte(s), any) => Value::Texte(format!("{}{}", s, any.to_string())),
+            (any, Value::Texte(s)) => Value::Texte(format!("{}{}", any.to_string(), s)),
+            (Value::Entier(x), Value::Entier(y)) => Value::Entier(x + y),
+            (Value::Decimal(x), Value::Entier(y)) => Value::Decimal(x + y as f64).into(),
+            (Value::Entier(x), Value::Decimal(y)) => Value::Decimal(x as f64 + y).into(),
+            (Value::Decimal(x), Value::Decimal(y)) => Value::Decimal(x + y).into(),
             (l, r) => unimplemented!("Add for {} and {}", l, r),
         }
     }
@@ -344,19 +351,14 @@ impl Sub for Value {
     type Output = Value;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        use ASObj::*;
-
         match (self, rhs) {
-            (Value::ASObj(ASTexte(s)), Value::ASObj(ASTexte(s2))) => {
-                ASTexte(s.replace(s2.as_str(), ""))
-            }
-            (Value::ASObj(ASEntier(x)), Value::ASObj(ASEntier(y))) => ASEntier(x - y),
-            (Value::ASObj(ASDecimal(x)), Value::ASObj(ASEntier(y))) => ASDecimal(x - y as f64),
-            (Value::ASObj(ASEntier(x)), Value::ASObj(ASDecimal(y))) => ASDecimal(x as f64 - y),
-            (Value::ASObj(ASDecimal(x)), Value::ASObj(ASDecimal(y))) => ASDecimal(x - y),
+            (Value::Texte(s), Value::Texte(s2)) => Value::Texte(s.replace(s2.as_str(), "")),
+            (Value::Entier(x), Value::Entier(y)) => Value::Entier(x - y),
+            (Value::Decimal(x), Value::Entier(y)) => Value::Decimal(x - y as f64),
+            (Value::Entier(x), Value::Decimal(y)) => Value::Decimal(x as f64 - y),
+            (Value::Decimal(x), Value::Decimal(y)) => Value::Decimal(x - y),
             _ => unimplemented!(),
         }
-        .into()
     }
 }
 
@@ -364,21 +366,15 @@ impl Mul for Value {
     type Output = Value;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        use ASObj::*;
-
         match (self, rhs) {
-            (Value::ASObj(ASTexte(s)), Value::ASObj(ASEntier(n))) => {
-                ASTexte(s.repeat(if n >= 0 { n as usize } else { 0 })).into()
+            (Value::Texte(s), Value::Entier(n)) => {
+                Value::Texte(s.repeat(if n >= 0 { n as usize } else { 0 }))
             }
-            (Value::ASObj(ASEntier(x)), Value::ASObj(ASEntier(y))) => ASEntier(x * y).into(),
-            (Value::ASObj(ASDecimal(x)), Value::ASObj(ASEntier(y))) => {
-                ASDecimal(x * y as f64).into()
-            }
-            (Value::ASObj(ASEntier(x)), Value::ASObj(ASDecimal(y))) => {
-                ASDecimal(x as f64 * y).into()
-            }
-            (Value::ASObj(ASDecimal(x)), Value::ASObj(ASDecimal(y))) => ASDecimal(x * y).into(),
-            (Value::List(l), Value::ASObj(ASEntier(n))) => Value::List(if n <= 0 {
+            (Value::Entier(x), Value::Entier(y)) => Value::Entier(x * y),
+            (Value::Decimal(x), Value::Entier(y)) => Value::Decimal(x * y as f64),
+            (Value::Entier(x), Value::Decimal(y)) => Value::Decimal(x as f64 * y),
+            (Value::Decimal(x), Value::Decimal(y)) => Value::Decimal(x * y),
+            (Value::Liste(l), Value::Entier(n)) => Value::Liste(if n <= 0 {
                 Rc::new(RefCell::new(vec![]))
             } else {
                 let n = n as usize;
@@ -399,19 +395,11 @@ impl Div for Value {
     type Output = Value;
 
     fn div(self, rhs: Self) -> Self::Output {
-        use ASObj::*;
-
         match (self, rhs) {
-            (Value::ASObj(ASEntier(x)), Value::ASObj(ASEntier(y))) => {
-                ASDecimal(x as f64 / y as f64).into()
-            }
-            (Value::ASObj(ASDecimal(x)), Value::ASObj(ASEntier(y))) => {
-                ASDecimal(x / y as f64).into()
-            }
-            (Value::ASObj(ASEntier(x)), Value::ASObj(ASDecimal(y))) => {
-                ASDecimal(x as f64 / y).into()
-            }
-            (Value::ASObj(ASDecimal(x)), Value::ASObj(ASDecimal(y))) => ASDecimal(x / y).into(),
+            (Value::Entier(x), Value::Entier(y)) => Value::Decimal(x as f64 / y as f64),
+            (Value::Decimal(x), Value::Entier(y)) => Value::Decimal(x / y as f64),
+            (Value::Entier(x), Value::Decimal(y)) => Value::Decimal(x as f64 / y),
+            (Value::Decimal(x), Value::Decimal(y)) => Value::Decimal(x / y),
             _ => unimplemented!(),
         }
     }
@@ -421,20 +409,15 @@ impl Rem for Value {
     type Output = Value;
 
     fn rem(self, rhs: Self) -> Self::Output {
-        use ASObj::*;
-
         match (self, rhs) {
-            (Value::ASObj(ASEntier(x)), Value::ASObj(ASEntier(y))) => ASEntier((x % y + y) % y),
-            (Value::ASObj(ASDecimal(x)), Value::ASObj(ASEntier(y))) => {
-                ASDecimal((x % y as f64 + y as f64) % y as f64)
+            (Value::Entier(x), Value::Entier(y)) => Value::Entier((x % y + y) % y),
+            (Value::Decimal(x), Value::Entier(y)) => {
+                Value::Decimal((x % y as f64 + y as f64) % y as f64)
             }
-            (Value::ASObj(ASEntier(x)), Value::ASObj(ASDecimal(y))) => {
-                ASDecimal((x as f64 % y + y) % y)
-            }
-            (Value::ASObj(ASDecimal(x)), Value::ASObj(ASDecimal(y))) => ASDecimal((x % y + y) % y),
+            (Value::Entier(x), Value::Decimal(y)) => Value::Decimal((x as f64 % y + y) % y),
+            (Value::Decimal(x), Value::Decimal(y)) => Value::Decimal((x % y + y) % y),
             _ => unimplemented!(),
         }
-        .into()
     }
 }
 
@@ -442,18 +425,12 @@ impl BitXor for Value {
     type Output = Result<Value, ASErreurType>;
 
     fn bitxor(self, rhs: Self) -> Self::Output {
-        use ASObj::*;
-
         let type_1 = self.get_type().clone();
         let type_2 = rhs.get_type().clone();
 
-        let Value::ASObj(s) = self else {
-            unreachable!()
-        };
-        let Value::ASObj(r) = rhs else { unreachable!() };
-        match (s, r) {
-            (ASEntier(x), ASEntier(y)) => Ok(ASEntier(x ^ y).into()),
-            (ASBooleen(x), ASBooleen(y)) => Ok(ASBooleen(x ^ y).into()),
+        match (self, rhs) {
+            (Value::Entier(x), Value::Entier(y)) => Ok(Value::Entier(x ^ y)),
+            (Value::Booleen(x), Value::Booleen(y)) => Ok(Value::Booleen(x ^ y)),
             _ => Err(ASErreurType::new_erreur_operation(
                 "xor".into(),
                 type_1,
@@ -467,18 +444,12 @@ impl BitAnd for Value {
     type Output = Result<Value, ASErreurType>;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        use ASObj::*;
-
         let type_1 = self.get_type().clone();
         let type_2 = rhs.get_type().clone();
 
-        let Value::ASObj(s) = self else {
-            unreachable!()
-        };
-        let Value::ASObj(r) = rhs else { unreachable!() };
-        match (s, r) {
-            (ASEntier(x), ASEntier(y)) => Ok(ASEntier(x & y).into()),
-            (ASBooleen(x), ASBooleen(y)) => Ok(ASBooleen(x & y).into()),
+        match (self, rhs) {
+            (Value::Entier(x), Value::Entier(y)) => Ok(Value::Entier(x & y)),
+            (Value::Booleen(x), Value::Booleen(y)) => Ok(Value::Booleen(x & y)),
             _ => Err(ASErreurType::new_erreur_operation(
                 "&".into(),
                 type_1,
@@ -492,17 +463,12 @@ impl BitOr for Value {
     type Output = Result<Value, ASErreurType>;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        use ASObj::*;
-
         let type_1 = self.get_type().clone();
         let type_2 = rhs.get_type().clone();
-        let Value::ASObj(s) = self else {
-            unreachable!()
-        };
-        let Value::ASObj(r) = rhs else { unreachable!() };
-        match (s, r) {
-            (ASEntier(x), ASEntier(y)) => Ok(ASEntier(x | y).into()),
-            (ASBooleen(x), ASBooleen(y)) => Ok(ASBooleen(x | y).into()),
+
+        match (self, rhs) {
+            (Value::Entier(x), Value::Entier(y)) => Ok(Value::Entier(x | y).into()),
+            (Value::Booleen(x), Value::Booleen(y)) => Ok(Value::Booleen(x | y).into()),
             _ => Err(ASErreurType::new_erreur_operation(
                 "|".into(),
                 type_1,
@@ -516,16 +482,11 @@ impl Shl for Value {
     type Output = Result<Value, ASErreurType>;
 
     fn shl(self, rhs: Self) -> Self::Output {
-        use ASObj::*;
-
         let type_1 = self.get_type().clone();
         let type_2 = rhs.get_type().clone();
-        let Value::ASObj(s) = self else {
-            unreachable!()
-        };
-        let Value::ASObj(r) = rhs else { unreachable!() };
-        match (s, r) {
-            (ASEntier(x), ASEntier(y)) => Ok(ASEntier(x << y).into()),
+
+        match (self, rhs) {
+            (Value::Entier(x), Value::Entier(y)) => Ok(Value::Entier(x << y)),
             _ => Err(ASErreurType::new_erreur_operation(
                 "<<".into(),
                 type_1,
@@ -539,21 +500,32 @@ impl Shr for Value {
     type Output = Result<Value, ASErreurType>;
 
     fn shr(self, rhs: Self) -> Self::Output {
-        use ASObj::*;
-
         let type_1 = self.get_type().clone();
         let type_2 = rhs.get_type().clone();
-        let Value::ASObj(s) = self else {
-            unreachable!()
-        };
-        let Value::ASObj(r) = rhs else { unreachable!() };
-        match (s, r) {
-            (ASEntier(x), ASEntier(y)) => Ok(ASEntier(x >> y).into()),
+
+        match (self, rhs) {
+            (Value::Entier(x), Value::Entier(y)) => Ok(Value::Entier(x >> y)),
             _ => Err(ASErreurType::new_erreur_operation(
                 ">>".into(),
                 type_1,
                 type_2,
             )),
         }
+    }
+}
+
+impl PartialOrd for Value {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use Value as V;
+
+        let (x, y) = match (self, other) {
+            (V::Entier(x), V::Entier(y)) => (*x as f64, *y as f64),
+            (V::Decimal(x), V::Entier(y)) => (*x, *y as f64),
+            (V::Entier(x), V::Decimal(y)) => (*x as f64, *y),
+            (V::Decimal(x), V::Decimal(y)) => (*x, *y),
+            _ => None?,
+        };
+
+        x.partial_cmp(&y)
     }
 }

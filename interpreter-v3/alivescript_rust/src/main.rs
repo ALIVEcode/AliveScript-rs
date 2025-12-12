@@ -4,7 +4,11 @@
 use std::{cell::RefCell, env, io::Write, rc::Rc};
 
 use alivescript_rust::{
-    bench::main_benchmark, compile_script_from_file, compile_script_from_file2, data::{Data, Response}, io::InterpretorIO, run_script_from_file, run_script_with_runner
+    bench::main_benchmark,
+    cli, compile_script_from_file2,
+    data::{Data, Response},
+    io::InterpretorIO,
+    run_script_from_file, run_script_with_runner,
 };
 
 const ALIVESCRIPT_VERSION: &'static str = "0.10.0";
@@ -76,59 +80,63 @@ impl InterpretorIO for ReplIO {
     }
 }
 
-fn main() -> std::io::Result<()> {
-    let mut args = env::args();
-    let first_arg = args.nth(1);
-    if let Some(script_file) = first_arg {
-        if script_file == "--version" {
-            println!("{}", ALIVESCRIPT_VERSION);
-            return Ok(());
-        } else if script_file == "-c" {
-            let script_file = args.next().expect("File arg missing after -c");
-            let mut io = IO {};
-            let script = std::fs::read_to_string(&script_file).unwrap();
-            compile_script_from_file2(&script, &mut io, script_file);
-            return Ok(());
-        } else if script_file == "bench" {
-            main_benchmark();
-            return Ok(());
-        }
-        let mut io = IO {};
-        let script = std::fs::read_to_string(&script_file).unwrap();
-        run_script_from_file(&script, &mut io, script_file);
-        return Ok(());
-    }
-    let console = Rc::new(RefCell::new(console::Term::stdout()));
-    let mut io = ReplIO {
-        console: Rc::clone(&console),
-    };
-    let mut runner = alivescript_rust::runner::Runner::new(&mut io);
-    loop {
-        write!(console.borrow_mut(), "> ")?;
-        let in_block = false;
-        let mut body = String::new();
-        loop {
-            let line = console.borrow_mut().read_line()?;
-            if in_block {
-                console.borrow_mut().clear_last_lines(1)?;
-                writeln!(console.borrow_mut(), "{}", line.replace("\t", "  "))?;
-            }
-            body += &(line + "\n");
-            if let Err(err) = run_script_with_runner(&body, &mut runner) {
-                writeln!(console.borrow_mut(), "{}", err.to_string())?;
-                // ParseError::UnrecognizedEof { location, expected } => {
-                //     body += "\n";
-                //     write!(console.borrow_mut(), "|")?;
-                //     in_block = true;
-                //     continue;
-                // }
-            } else {
-                break;
-            }
-        }
-        runner.remove_error_status();
-        if let Some(value) = runner.get_stmt_result() {
-            writeln!(console.borrow_mut(), "{}", value.repr())?;
-        }
-    }
+fn main() {
+    cli::run_cli();
 }
+
+// fn main() -> std::io::Result<()> {
+//     let mut args = env::args();
+//     let first_arg = args.nth(1);
+//     if let Some(script_file) = first_arg {
+//         if script_file == "--version" {
+//             println!("{}", ALIVESCRIPT_VERSION);
+//             return Ok(());
+//         } else if script_file == "-c" {
+//             let script_file = args.next().expect("File arg missing after -c");
+//             let mut io = IO {};
+//             let script = std::fs::read_to_string(&script_file).unwrap();
+//             compile_script_from_file2(&script, &mut io, script_file);
+//             return Ok(());
+//         } else if script_file == "bench" {
+//             main_benchmark();
+//             return Ok(());
+//         }
+//         let mut io = IO {};
+//         let script = std::fs::read_to_string(&script_file).unwrap();
+//         run_script_from_file(&script, &mut io, script_file);
+//         return Ok(());
+//     }
+//     let console = Rc::new(RefCell::new(console::Term::stdout()));
+//     let mut io = ReplIO {
+//         console: Rc::clone(&console),
+//     };
+//     let mut runner = alivescript_rust::runner::Runner::new(&mut io);
+//     loop {
+//         write!(console.borrow_mut(), "> ")?;
+//         let in_block = false;
+//         let mut body = String::new();
+//         loop {
+//             let line = console.borrow_mut().read_line()?;
+//             if in_block {
+//                 console.borrow_mut().clear_last_lines(1)?;
+//                 writeln!(console.borrow_mut(), "{}", line.replace("\t", "  "))?;
+//             }
+//             body += &(line + "\n");
+//             if let Err(err) = run_script_with_runner(&body, &mut runner) {
+//                 writeln!(console.borrow_mut(), "{}", err.to_string())?;
+//                 // ParseError::UnrecognizedEof { location, expected } => {
+//                 //     body += "\n";
+//                 //     write!(console.borrow_mut(), "|")?;
+//                 //     in_block = true;
+//                 //     continue;
+//                 // }
+//             } else {
+//                 break;
+//             }
+//         }
+//         runner.remove_error_status();
+//         if let Some(value) = runner.get_stmt_result() {
+//             writeln!(console.borrow_mut(), "{}", value.repr())?;
+//         }
+//     }
+// }
