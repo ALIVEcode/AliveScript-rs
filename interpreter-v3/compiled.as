@@ -19,7 +19,6 @@ fin fonction
 
 var plus_1 = plus(1)
 
-
 fonction apply(f, arg)
   retourner f(arg)
 fin fonction
@@ -45,3 +44,10 @@ tant que x > 0
 fin tant que
 
 
+
+var ls = [1, 2, 3]
+
+ls2 = [1]
+ls = ls + ls2
+
+afficher ls

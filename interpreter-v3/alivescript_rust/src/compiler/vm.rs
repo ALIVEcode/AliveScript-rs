@@ -95,6 +95,107 @@ impl VM {
                     let val = fnc.constants[const_idx as usize].clone();
                     self.push(val);
                 }
+                Opcode::NewList => {
+                    let nb_el = fnc.code[frame.ip];
+                    frame.ip += 1;
+
+                    let mut lst = Vec::with_capacity(nb_el as usize);
+                    for _ in 0..nb_el {
+                        lst.push(self.pop().unwrap());
+                    }
+
+                    // poped in the reverse order
+                    lst.reverse();
+
+                    self.push(Value::List(Rc::new(RefCell::new(lst))).into());
+                }
+                Opcode::GetItem => {
+                    let slice = self.pop().unwrap();
+                    let obj = self.pop().unwrap();
+
+                    let result = match (obj, slice) {
+                        (Value::List(lst), Value::ASObj(ASObj::ASEntier(i))) => {
+                            let lst = lst.borrow();
+                            let i = if i < 0 { lst.len() as i64 + i } else { i };
+                            if i < 0 || i >= lst.len() as i64 {
+                                // throw_err!(self, ASErreurType::new_erreur_index(i, lst.len()));
+                            }
+                            lst[i as usize].clone()
+                        }
+                        (Value::List(lst), Value::List(range)) => {
+                            let mut lst_final = Vec::with_capacity(range.borrow().len());
+                            for obj in range.borrow().iter() {
+                                if let Value::ASObj(ASObj::ASEntier(i)) = obj {
+                                    let lst = lst.borrow();
+                                    let i = if *i < 0 { lst.len() as i64 + *i } else { *i };
+                                    if i < 0 || i >= lst.len() as i64 {
+                                        // throw_err!(
+                                        //     self,
+                                        //     ASErreurType::new_erreur_index(i, lst.len())
+                                        // );
+                                    }
+                                    lst_final.push(lst[i as usize].clone());
+                                } else {
+                                    // throw_err!(
+                                    //     self,
+                                    //     ASErreurType::new_erreur_type(
+                                    //         ASType::Entier,
+                                    //         obj.get_type()
+                                    //     )
+                                    // );
+                                }
+                            }
+                            Value::List(Rc::new(RefCell::new(lst_final)))
+                        }
+                        (Value::ASObj(ASObj::ASTexte(txt)), Value::ASObj(ASObj::ASEntier(i))) => {
+                            let i = if i < 0 { txt.len() as i64 + i } else { i };
+                            if i < 0 || i >= txt.len() as i64 {
+                                // throw_err!(self, ASErreurType::new_erreur_index(i, txt.len()));
+                            }
+                            Value::ASObj(ASObj::ASTexte(txt[i as usize..i as usize + 1].into()))
+                        }
+                        (Value::ASObj(ASObj::ASTexte(txt)), Value::List(range)) => {
+                            let mut txt_final = String::with_capacity(range.borrow().len());
+                            for obj in range.borrow().iter() {
+                                if let Value::ASObj(ASObj::ASEntier(i)) = obj {
+                                    let i = if *i < 0 { txt.len() as i64 + *i } else { *i };
+                                    if i < 0 || i >= txt.len() as i64 {
+                                        // throw_err!(
+                                        //     self,
+                                        //     ASErreurType::new_erreur_index(i, txt.len())
+                                        // );
+                                    }
+                                    txt_final.push(txt.chars().nth(i as usize).unwrap());
+                                } else {
+                                    // throw_err!(
+                                    //     self,
+                                    //     ASErreurType::new_erreur_type(
+                                    //         ASType::Entier,
+                                    //         obj.get_type(),
+                                    //     )
+                                    // );
+                                }
+                            }
+                            Value::ASObj(ASObj::ASTexte(txt_final))
+                        }
+                        // (ASObj::ASDict(dict), clef) => {
+                        //     let d = dict.borrow();
+                        //     let el = d.get(&clef);
+                        //     match el {
+                        //         Some(paire) => paire.val().clone(),
+                        //         None => {
+                        //             throw_err!(self, ASErreurType::new_erreur_clef(clef.clone()))
+                        //         }
+                        //     }
+                        // }
+                        _ => todo!(),
+                    };
+
+                    self.push(result);
+                }
+                Opcode::GetAttr => {
+                    todo!()
+                }
                 Opcode::Closure => {
                     let const_idx = fnc.code[frame.ip] as usize;
                     frame.ip += 1;
@@ -256,9 +357,6 @@ impl VM {
                             }
                             self.push(result.unwrap_or(Value::ASObj(ASObj::ASNoValue)));
                         }
-                        Value::ASObj(asobj) => {
-                            return Err(format!("Cannot call value of type: {}", asobj.get_type()));
-                        }
                         Value::Closure(closure) => {
                             // set the base as the first arg of the function
                             let base = self.stack.len() - nbargs;
@@ -267,6 +365,9 @@ impl VM {
                                 ip: 0,
                                 base,
                             });
+                        }
+                        Value::ASObj(..) | Value::List(..) => {
+                            return Err(format!("Cannot call value of type: {}", func.get_type()));
                         }
                     }
                 }
@@ -293,18 +394,13 @@ impl VM {
 
                     let binop = BinOpcode::try_from(op).expect(&format!("Invalid binop: {}", op));
 
-                    let Value::ASObj(arg2) = self
+                    let arg2 = self
                         .pop()
-                        .ok_or_else(|| format!("Missing rhs in {:?}", op))?
-                    else {
-                        return Err("Cannot do arithmetics on closures".into());
-                    };
-                    let Value::ASObj(arg1) = self
+                        .ok_or_else(|| format!("Missing rhs in {:?}", op))?;
+
+                    let arg1 = self
                         .pop()
-                        .ok_or_else(|| format!("Missing lhs in {:?}", op))?
-                    else {
-                        return Err("Cannot do arithmetics on closures".into());
-                    };
+                        .ok_or_else(|| format!("Missing rhs in {:?}", op))?;
 
                     self.push(
                         match binop {

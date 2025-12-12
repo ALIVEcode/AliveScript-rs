@@ -792,19 +792,25 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
     fn parse_top_expr(&mut self, primary: Pair<'a, Rule>) -> Result<(), PestError<Rule>> {
         match primary.as_rule() {
             Rule::List => {
+                let mut nb_el = 0;
                 for arg in primary.into_inner() {
                     self.parse_expr(arg.into_inner())?;
+                    nb_el += 1;
                 }
                 // todo: push list
+                self.borrow_mut().code.emit_new_list(nb_el);
             }
+
             Rule::Expr => {
                 self.parse_expr(primary.into_inner())?;
             }
+
             Rule::ListExpr => {
                 for expr in primary.into_inner() {
                     self.parse_expr(expr.into_inner())?;
                 }
             }
+
             Rule::Ident => {
                 let ident = primary.as_str();
                 let mut compiler = self.borrow_mut();
@@ -827,9 +833,11 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     compiler.get_or_add_const(Value::ASObj(ASObj::ASTexte(ident.to_string())));
                 compiler.code.emit_get_global(glob_name_idx as u16);
             }
+
             Rule::Lit => {
                 self.parse_lit(primary.into_inner().next().unwrap())?;
             }
+
             Rule::FnCall => {
                 let mut inner = primary.into_inner();
                 // func
@@ -843,6 +851,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
                 self.borrow_mut().code.emit_call(arg_len);
             }
+
             Rule::DebutBloc => {
                 self.borrow_mut().begin_scope();
 
@@ -964,49 +973,27 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     todo!();
                 }
                 todo!();
-
-                // match infix.as_rule() {
-                //     rule @ (Rule::Range | Rule::RangeEq) => {
-                //         let inner = infix.into_inner();
-                //         let start = lhs;
-                //         let end = inner
-                //             .find_first_tagged("end")
-                //             .map(|end| parse_expr(end.into_inner()))
-                //             .invert()?;
-                //
-                //         let (end, step) = if end.is_some() {
-                //             (end.unwrap(), Some(rhs))
-                //         } else {
-                //             (rhs, None)
-                //         };
-                //
-                //         Ok(Box::new(Expr::Range {
-                //             start,
-                //             end,
-                //             step,
-                //             is_incl: rule == Rule::RangeEq,
-                //         }))
-                //     }
-                //     _ => Err(PestError::new_from_span(
-                //         PestErrorVariant::ParsingError {
-                //             positives: vec![Rule::Not, Rule::Neg, Rule::Pos],
-                //             negatives: vec![infix.as_rule()],
-                //         },
-                //         infix.as_span(),
-                //     )),
-                // }
             })
             .map_postfix(|lhs, postfix| {
                 let lhs = lhs?;
 
-                // match postfix.as_rule() {
-                //     Rule::AccessProp => {
-                //         let mut inner = postfix.into_inner();
-                //         Ok(Box::new(Expr::AccessProp {
-                //             obj: lhs,
-                //             prop: inner.next().unwrap().as_str().to_string(),
-                //         }))
-                //     }
+                match postfix.as_rule() {
+                    Rule::AccessProp => {
+                        let prop = postfix.into_inner().next().unwrap();
+                        if matches!(prop.as_node_tag(), Some("prop")) {
+                            let idx =
+                                self.borrow_mut()
+                                    .get_or_add_const(Value::ASObj(ASObj::ASTexte(
+                                        prop.as_str().to_string(),
+                                    )));
+                            self.borrow_mut().code.emit_get_attr(idx as u16);
+                        } else {
+                            Rc::clone(self).parse_expr(prop.into_inner())?;
+                            self.borrow_mut().code.emit_get_item();
+                        }
+                    }
+                    _ => unreachable!(),
+                }
                 //     Rule::Ternary => {
                 //         let inner = postfix.into_inner();
                 //         let then_expr = parse_expr(

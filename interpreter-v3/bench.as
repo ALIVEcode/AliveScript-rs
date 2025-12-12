@@ -17,16 +17,16 @@ fonction make_adder(n)
 fin fonction
 
 # Create a series of closures (100 unique objects).
-#var adders_list = []
-#var i = 0
-#tant que i < 100
-#    # The 'make_adder(i)' call creates a new closure referencing 'i'
-#    adders_list = adders_list + [make_adder(i)]
-#    i = i + 1
-#fin tant que
+var adders_list = []
+var i = 0
+tant que i < 100
+    # The 'make_adder(i)' call creates a new closure referencing 'i'
+    adders_list = adders_list + make_adder(i)
+    i = i + 1
+fin tant que
 
 # Run the last adder to ensure the objects were created and are working
-#var closure_result = adders_list[99](5) # Should equal 99 + 5 = 104
+var closure_result = adders_list[99](5) # Should equal 99 + 5 = 104
 
 (:
 --------------------------------------------------------------------------
@@ -80,4 +80,5 @@ sinon
 fin si
 
 # Display closure and loop results
+afficher closure_result
 afficher loop_accumulator

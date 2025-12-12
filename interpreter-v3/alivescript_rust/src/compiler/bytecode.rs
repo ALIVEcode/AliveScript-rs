@@ -29,6 +29,10 @@ pub enum Opcode {
 
     BinOp,
     BinComp,
+
+    NewList,
+    GetItem,
+    GetAttr,
 }
 
 impl Opcode {
@@ -49,6 +53,9 @@ impl Opcode {
             Opcode::BinComp => "BINCOMP",
             Opcode::Jump => "JUMP",
             Opcode::JumpIfFalse => "JUMP_IF_FALSE",
+            Opcode::NewList => "NEW_LIST",
+            Opcode::GetItem => "GET_ITEM",
+            Opcode::GetAttr => "GET_ATTR",
         }
     }
 
@@ -60,7 +67,9 @@ impl Opcode {
             | Opcode::GetLocal
             | Opcode::SetLocal
             | Opcode::GetGlobal
-            | Opcode::SetGlobal => 1,
+            | Opcode::SetGlobal
+            | Opcode::NewList
+            | Opcode::GetAttr => 1,
 
             Opcode::Jump | Opcode::JumpIfFalse => 1,
 
@@ -70,7 +79,7 @@ impl Opcode {
 
             Opcode::BinOp | Opcode::BinComp => 1,
 
-            Opcode::Pop => 0,
+            Opcode::Pop | Opcode::GetItem => 0,
         }
     }
 }
@@ -104,7 +113,8 @@ pub fn instructions_to_string(insts: &[u16]) -> Vec<String> {
             | Opcode::GetGlobal
             | Opcode::SetGlobal
             | Opcode::Closure
-            | Opcode::Call => {
+            | Opcode::Call
+            | Opcode::NewList => {
                 let Some(idx) = iter.next() else {
                     panic!("Missing arg for {}", op.name());
                 };
@@ -218,6 +228,20 @@ impl Instructions {
     pub fn emit_const(&mut self, idx: u16) {
         self.emit_opcode(Opcode::Constant);
         self.emit_byte(idx);
+    }
+
+    pub fn emit_new_list(&mut self, nb_el: u16) {
+        self.emit_opcode(Opcode::NewList);
+        self.emit_byte(nb_el);
+    }
+
+    pub fn emit_get_item(&mut self) {
+        self.emit_opcode(Opcode::GetItem);
+    }
+
+    pub fn emit_get_attr(&mut self, const_idx: u16) {
+        self.emit_opcode(Opcode::GetAttr);
+        self.emit_byte(const_idx);
     }
 
     pub fn emit_closure(&mut self, const_idx: u16) {
