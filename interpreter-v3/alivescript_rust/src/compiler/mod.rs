@@ -3,29 +3,30 @@ use std::{
     iter,
     rc::Rc,
     str::FromStr,
+    sync::Arc,
 };
 
 use pest::{
+    Parser as PestParser,
     error::{Error as PestError, ErrorVariant as PestErrorVariant},
     iterators::{Pair, Pairs},
-    Parser as PestParser,
 };
 
 use crate::{
+    AlivescriptParser, Rule,
     as_obj::{ASErreur, ASErreurType, ASType},
     ast::{
         AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, DefFn, Expr, FnParam, Stmt, Type,
         UnaryOpcode,
     },
     compiler::{
-        bytecode::{Instructions, Opcode, JUMP_OFFSET},
+        bytecode::{Instructions, JUMP_OFFSET, Opcode},
         err::CompilationError,
         obj::{Closure, Function, Upvalue, UpvalueSpec, Value},
         parser::{PRATT_EXPR_PARSER, PRATT_TYPE_PARSER},
     },
     utils::Invert,
     visitor::{Visitable, Visitor},
-    AlivescriptParser, Rule,
 };
 
 mod bitmasks;
@@ -118,6 +119,20 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    pub fn parse_and_compile(self) -> Result<Closure, CompilationError> {
+        let stmts = AlivescriptParser::parse(Rule::script, self.input)?;
+
+        self.compile(stmts)
+    }
+
+    pub fn parse_and_compile_debug(self) -> Result<Closure, CompilationError> {
+        let stmts = AlivescriptParser::parse(Rule::script, self.input)?;
+
+        println!("{:#?}", &stmts);
+
+        self.compile_debug(stmts)
+    }
+
     pub fn compile(self, pairs: Pairs<'a, Rule>) -> Result<Closure, CompilationError> {
         let mut rc_self = Rc::new(RefCell::new(self));
 
@@ -130,7 +145,7 @@ impl<'a> Compiler<'a> {
         rc_self.borrow_mut().finish();
 
         let x = Closure {
-            function: Rc::new(rc_self.borrow().function.borrow().clone()),
+            function: Arc::new(rc_self.borrow().function.borrow().clone()),
             upvalues: vec![],
         };
 
@@ -151,7 +166,7 @@ impl<'a> Compiler<'a> {
         println!("{:#?}", rc_self.borrow());
 
         let x = Closure {
-            function: Rc::new(rc_self.borrow().function.borrow().clone()),
+            function: Arc::new(rc_self.borrow().function.borrow().clone()),
             upvalues: vec![],
         };
 
@@ -498,7 +513,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
                 let idx = self
                     .borrow_mut()
-                    .get_or_add_const(Value::Closure(Rc::new(closure)));
+                    .get_or_add_const(Value::Closure(Arc::new(closure)));
 
                 self.borrow_mut().code.emit_closure(idx as u16);
             }
@@ -897,7 +912,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     }
                 }
                 Rule::sinonBr => {
-                    let body = curr_br.into_inner().find_first_tagged("body").unwrap();
+                    let body = curr_br.into_inner().next().unwrap();
                     if body.as_rule() == Rule::StmtBody {
                         self.build_ast_stmts(body.into_inner())?;
                     } else {
@@ -1034,7 +1049,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
                 let idx = self
                     .borrow_mut()
-                    .get_or_add_const(Value::Closure(Rc::new(closure)));
+                    .get_or_add_const(Value::Closure(Arc::new(closure)));
 
                 self.borrow_mut().code.emit_closure(idx as u16);
                 self.borrow_mut().mark_initialized(local_idx);
@@ -1062,7 +1077,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 self.borrow_mut()
                     .code
                     .emit_jump(before_cond as i16 - now as i16 - 2); // - 2 here to account for this
-                                                                     // instruction and its argument
+                // instruction and its argument
                 self.borrow_mut().patch_jump(if_not_cond_jmp);
             }
             Rule::PourStmt => {

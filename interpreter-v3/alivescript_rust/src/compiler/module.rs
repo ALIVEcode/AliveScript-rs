@@ -1,14 +1,18 @@
-use crate::{as_mod, as_obj::ASObj, compiler::obj::Value};
+use crate::{
+    as_mod,
+    as_obj::{ASObj, ASType},
+    compiler::obj::Value,
+};
 
 #[macro_export]
 macro_rules! as_fonction_native {
     ($($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
-     -> $return_type:expr; $body:expr) => {
+     : $return_type:expr => $body:block) => {
          (
             String::from(std::stringify!($name)),
-            $crate::compiler::obj::NativeFunction {
-                name: std::rc::Rc::new(String::from(std::stringify!($name))),
-                desc: std::rc::Rc::new($crate::opt_value!($($desc)?)),
+            $crate::compiler::obj::Value::NativeFunction($crate::compiler::obj::NativeFunction {
+                name: std::sync::Arc::new(String::from(std::stringify!($name))),
+                desc: std::sync::Arc::new($crate::opt_value!($($desc)?)),
                 // std::vec![$(
                 // $crate::as_obj::ASFnParam {
                 //     name: std::stringify!($param_name).into(),
@@ -16,15 +20,27 @@ macro_rules! as_fonction_native {
                 //     default_value: $crate::default_value!($($default)?),
                 // },
                 // )*],
-                func: std::rc::Rc::new(|vm: &mut $crate::compiler::vm::VM| {
+                func: std::sync::Arc::new(|vm: &mut $crate::compiler::vm::VM, args: std::vec::Vec<Value>| {
+                    let mut args = std::collections::VecDeque::from_iter(args.iter());
                     $(
-                    let $param_name = vm.pop().unwrap();
+                    let $param_name = {
+                        let p = args.pop_front();
+                        $crate::optional_body!($($default)?, {p.unwrap_or_else(|| $($default)?)}, {p.unwrap()})
+                    };
+                    if !$crate::as_obj::ASType::type_match(&$param_type, &$param_name.get_type()) {
+                        return Err($crate::as_obj::ASErreurType::ErreurTypeAppel {
+                            func_name: Some(String::from(std::stringify!($name))),
+                            param_name: String::from(std::stringify!($param_name)),
+                            type_attendu: $param_type,
+                            type_obtenu: $param_name.get_type(),
+                        });
+                    }
                     )*
                     $(let $vm = vm;)?
                     $body
                 }),
                 // $return_type,
-            }
+            })
          )
      };
 }
@@ -35,7 +51,7 @@ macro_rules! as_mod_native {
             let mut hashmap = ::std::collections::HashMap::new();
             $({
                 let (name, func) = $var;
-                hashmap.insert(name, $crate::compiler::obj::Value::NativeFunction(func));
+                hashmap.insert(name, func);
             })*
             std::rc::Rc::new(std::cell::RefCell::new(hashmap))
         });
@@ -46,20 +62,29 @@ macro_rules! as_mod_native {
 as_mod_native! {
     BUILTIN_MOD,
     as_fonction_native! {
-        afficherErr(msg: ASType::any()) -> ASType::Nul; {
+        afficherErr(msg: ASType::any()): ASType::Nul => {
             eprintln!("{}", msg);
             Ok(Some(Value::Nul))
         }
     },
     as_fonction_native! {
-        afficher(msg: ASType::any()) -> ASType::Nul; {
+        afficher(msg: ASType::any()): ASType::Nul => {
             println!("{}", msg);
             Ok(Some(Value::Nul))
         }
     },
     as_fonction_native! {
-        typeDe(obj: ASType::any()) -> ASType::Type; {
+        typeDe(obj: ASType::any()): ASType::Type => {
             Ok(Some(Value::TypeObj(obj.get_type())))
+        }
+    },
+    as_fonction_native! {
+        tailleDe(obj: ASType::iterable()): ASType::Entier => {
+            Ok(Some(Value::Entier(match obj {
+                Value::Texte(t) => t.len(),
+                Value::Liste(l) => l.read().unwrap().len(),
+                _ => unreachable!()
+            } as i64)))
         }
     },
     // as_fonction_native! {
@@ -80,19 +105,6 @@ as_mod_native! {
     //
     //         let result = template.format(attrs.borrow().iter());
     //         Ok(Some(ASObj::ASTexte(result)))
-    //     }
-    // },
-    // as_fonction_native! {
-    //     tailleDe[runner](obj: ASType::iterable()) -> ASType::Entier; {
-    //         if let Some(result) = call_methode!(obj.__taille__() or throw, runner) {
-    //             return result;
-    //         }
-    //         Ok(Some(ASObj::ASEntier(match obj {
-    //             ASObj::ASTexte(t) => t.len(),
-    //             ASObj::ASListe(l) => l.borrow().len(),
-    //             ASObj::ASDict(d) => d.borrow().len(),
-    //             _ => unreachable!()
-    //         } as i64)))
     //     }
     // },
 }

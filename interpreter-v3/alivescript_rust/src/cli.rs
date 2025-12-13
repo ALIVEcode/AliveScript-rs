@@ -43,7 +43,7 @@ fn evaluate_string(code: &str, debug_infos: Option<&DebugInfo>, run: bool) {
 
             if run {
                 let mut vm = VM::new();
-                let result = vm.run(Rc::new(closure)).unwrap();
+                let result = vm.run(closure).unwrap();
             }
             // println!("{:#?}", vm.stack);
             // println!("{:?}", result);

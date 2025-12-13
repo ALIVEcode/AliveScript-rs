@@ -105,8 +105,8 @@ macro_rules! call_methode {
     };
 
     ($obj:ident.$methode:ident($($args:expr),*) $(-> $type_retour:expr)? $(; $error:expr)?, $runner:expr) => {
-        match $obj {
-            $crate::as_obj::ASObj::ASClasseInst(ref inst) => {
+        match &$obj {
+            $crate::as_obj::ASObj::ASClasseInst(inst) => {
                 let __value = {
                     let inst_env = inst.env().borrow();
                     inst_env.get_value(&stringify!($methode).to_owned()).cloned()
@@ -152,7 +152,7 @@ macro_rules! call_methode {
                     })
                 }
             }
-            $crate::as_obj::ASObj::ASClasse(ref classe) => {
+            $crate::as_obj::ASObj::ASClasse(classe) => {
                 let __value = {
                     let cls_env = classe.static_env().borrow();
                     cls_env.get_value(&stringify!($methode).to_owned()).cloned()

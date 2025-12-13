@@ -76,7 +76,7 @@ fn execute_alive_script_a(source_code: &str) {
 
     // 2. Execute the closure
     let mut vm = VM::new();
-    vm.run(Rc::new(closure)).unwrap();
+    vm.run(closure).unwrap();
 }
 
 fn execute_alive_script_b(source_code: &str) {

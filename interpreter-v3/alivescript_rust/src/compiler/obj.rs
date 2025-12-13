@@ -1,16 +1,16 @@
 use std::cell::RefCell;
 use std::fmt::{Debug, Display};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub};
-use std::rc::Rc;
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::as_obj::{self, ASErreurType, ASType};
 use crate::ast::CallRust;
-use crate::compiler::bytecode::{instructions_to_string, Instructions};
+use crate::compiler::bytecode::{Instructions, instructions_to_string};
 use crate::compiler::vm::VM;
 
-pub type RcUpvalue = Rc<RefCell<Upvalue>>;
-pub type RcClosure = Rc<Closure>;
-pub type RcFunction = Rc<Function>;
+pub type ArcUpvalue = Arc<RwLock<Upvalue>>;
+pub type ArcClosure = Arc<Closure>;
+pub type ArcFunction = Arc<Function>;
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -19,9 +19,9 @@ pub enum Value {
     Booleen(bool),
     Nul,
     Texte(String),
-    Closure(RcClosure),
+    Closure(ArcClosure),
     NativeFunction(NativeFunction),
-    Liste(Rc<RefCell<Vec<Value>>>),
+    Liste(Arc<RwLock<Vec<Value>>>),
     TypeObj(ASType),
 }
 
@@ -51,7 +51,7 @@ impl Value {
             V::Texte(s) => !s.is_empty(),
             V::Booleen(b) => *b,
             V::Nul => false,
-            V::Liste(l) => !l.borrow().is_empty(),
+            V::Liste(l) => !l.read().unwrap().is_empty(),
             _ => true,
         }
     }
@@ -86,9 +86,9 @@ impl Value {
         match (self, rhs) {
             (Value::Texte(s), rhs @ Value::Texte(..)) => Ok(self.clone() + rhs),
             (Value::Liste(l), Value::Liste(l2)) => {
-                let mut l3 = l.borrow().clone();
-                l3.extend(l2.borrow().to_owned());
-                Ok(Value::Liste(Rc::new(RefCell::new(l3))))
+                let mut l3 = l.read().unwrap().clone();
+                l3.extend(l2.read().unwrap().to_owned());
+                Ok(Value::Liste(Arc::new(RwLock::new(l3))))
             }
 
             // (ASDict(d), ASDict(d2)) => {
@@ -115,7 +115,7 @@ impl Value {
 
         match (self, rhs) {
             (Value::Texte(s), Value::Texte(sub_s)) => Ok(s.contains(sub_s)),
-            (Value::Liste(l), rhs) => Ok(l.borrow().contains(rhs)),
+            (Value::Liste(l), rhs) => Ok(l.read().unwrap().contains(rhs)),
             // (ASDict(d), rhs) => Ok(d.borrow().contains(rhs)),
 
             // (ASTuple(_), _) => todo!("Tuple pas encore (et peut-être jamais) dans le langage"),
@@ -126,6 +126,28 @@ impl Value {
                 self.get_type(),
                 rhs.get_type(),
             )),
+        }
+    }
+
+    pub fn as_entier(&self) -> Option<i64> {
+        match &self {
+            Value::Entier(i) => Some(*i as i64),
+            _ => None,
+        }
+    }
+
+    pub fn as_decimal(&self) -> Option<f64> {
+        match &self {
+            Value::Entier(i) => Some(*i as f64),
+            Value::Decimal(d) => Some(*d as f64),
+            _ => None,
+        }
+    }
+
+    pub fn as_texte(&self) -> Option<&str> {
+        match &self {
+            Value::Texte(s) => Some(&s),
+            _ => None,
         }
     }
 }
@@ -141,7 +163,8 @@ impl Display for Value {
             Value::TypeObj(t) => t.to_string(),
             Value::Liste(vals) => format!(
                 "[{}]",
-                vals.borrow()
+                vals.read()
+                    .unwrap()
                     .iter()
                     .map(|val| val.to_string())
                     .collect::<Vec<_>>()
@@ -212,16 +235,37 @@ impl Debug for Function {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct Closure {
-    pub function: Rc<Function>,
-    pub upvalues: Vec<Rc<RefCell<Upvalue>>>,
+    pub function: Arc<Function>,
+    pub upvalues: Vec<Arc<RwLock<Upvalue>>>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+impl PartialEq for Closure {
+    fn eq(&self, other: &Self) -> bool {
+        self.function == other.function
+            && self
+                .upvalues
+                .iter()
+                .zip(other.upvalues.iter())
+                .all(|(u1, u2)| Arc::ptr_eq(&u1, &u2))
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum UpvalueLocation {
     Open(usize),                // index into VM.stack
-    Closed(Rc<RefCell<Value>>), // heap cell
+    Closed(Arc<RwLock<Value>>), // heap cell
+}
+
+impl PartialEq for UpvalueLocation {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Open(l0), Self::Open(r0)) => l0 == r0,
+            (Self::Closed(l0), Self::Closed(r0)) => Arc::ptr_eq(l0, r0),
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -233,28 +277,28 @@ impl Upvalue {
     pub fn get(&self, vm: &VM) -> Value {
         match &self.location {
             UpvalueLocation::Open(idx) => vm.stack[*idx].clone(),
-            UpvalueLocation::Closed(cell) => cell.borrow().clone(),
+            UpvalueLocation::Closed(cell) => cell.read().unwrap().clone(),
         }
     }
 
     pub fn set(&mut self, vm: &mut VM, v: Value) {
         match &mut self.location {
             UpvalueLocation::Open(idx) => vm.stack[*idx] = v,
-            UpvalueLocation::Closed(cell) => *cell.borrow_mut() = v,
+            UpvalueLocation::Closed(cell) => *cell.write().unwrap() = v,
         }
     }
 
     pub fn close(&mut self, vm: &VM) {
         if let UpvalueLocation::Open(idx) = self.location {
             let v = vm.stack[idx].clone();
-            self.location = UpvalueLocation::Closed(Rc::new(RefCell::new(v)));
+            self.location = UpvalueLocation::Closed(Arc::new(RwLock::new(v)));
         }
     }
 }
 
 #[derive(Debug)]
 pub struct CallFrame {
-    pub closure: Rc<Closure>,
+    pub closure: Arc<Closure>,
     pub ip: usize,
     pub base: usize, // where this frame's locals start in VM.stack
 }
@@ -279,17 +323,17 @@ impl UpvalueSpec {
 }
 
 pub struct NativeFunction {
-    pub func: Rc<dyn Fn(&mut VM) -> Result<Option<Value>, ASErreurType>>,
-    pub name: Rc<String>,
-    pub desc: Rc<Option<String>>,
+    pub func: Arc<dyn Fn(&mut VM, Vec<Value>) -> Result<Option<Value>, ASErreurType>>,
+    pub name: Arc<String>,
+    pub desc: Arc<Option<String>>,
 }
 
 impl Clone for NativeFunction {
     fn clone(&self) -> Self {
         Self {
-            func: Rc::clone(&self.func),
-            desc: Rc::clone(&self.desc),
-            name: Rc::clone(&self.name),
+            func: Arc::clone(&self.func),
+            desc: Arc::clone(&self.desc),
+            name: Arc::clone(&self.name),
         }
     }
 }
@@ -300,7 +344,7 @@ impl PartialEq for NativeFunction {
 }
 impl std::fmt::Debug for NativeFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("définition interne")
+        write!(f, "fonction native {}()", self.name)
     }
 }
 
@@ -314,7 +358,8 @@ impl PartialEq for Value {
             (Value::Texte(t1), Value::Texte(t2)) => t1 == t2,
             (Value::Booleen(b1), Value::Booleen(b2)) => b1 == b2,
             (Value::Liste(l1), Value::Liste(l2)) => {
-                l1.borrow().as_ref() as &Vec<Value> == l2.borrow().as_ref() as &Vec<Value>
+                l1.read().unwrap().as_ref() as &Vec<Value>
+                    == l2.read().unwrap().as_ref() as &Vec<Value>
             }
             // (ASDict(d1), ASDict(d2)) => d1 == d2,
             // (ASFonc(f1), ASFonc(f2)) => f1 == f2,
@@ -332,9 +377,9 @@ impl Add for Value {
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Value::Liste(l), any) => Value::Liste({
-                let mut l = l.borrow().clone();
+                let mut l = l.read().unwrap().clone();
                 l.push(any);
-                Rc::new(RefCell::new(l))
+                Arc::new(RwLock::new(l))
             }),
             (Value::Texte(s), any) => Value::Texte(format!("{}{}", s, any.to_string())),
             (any, Value::Texte(s)) => Value::Texte(format!("{}{}", any.to_string(), s)),
@@ -375,16 +420,16 @@ impl Mul for Value {
             (Value::Entier(x), Value::Decimal(y)) => Value::Decimal(x as f64 * y),
             (Value::Decimal(x), Value::Decimal(y)) => Value::Decimal(x * y),
             (Value::Liste(l), Value::Entier(n)) => Value::Liste(if n <= 0 {
-                Rc::new(RefCell::new(vec![]))
+                Arc::new(RwLock::new(vec![]))
             } else {
                 let n = n as usize;
-                let l = l.borrow();
+                let l = l.read().unwrap();
                 let len = l.len();
                 let mut new_vec = Vec::with_capacity(n * len);
                 for i in 0..n * len {
                     new_vec.push(l[i % len].clone());
                 }
-                Rc::new(RefCell::new(new_vec))
+                Arc::new(RwLock::new(new_vec))
             }),
             _ => unimplemented!(),
         }
@@ -406,18 +451,25 @@ impl Div for Value {
 }
 
 impl Rem for Value {
-    type Output = Value;
+    type Output = Result<Value, ASErreurType>;
 
     fn rem(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
+        let type_1 = self.get_type().clone();
+        let type_2 = rhs.get_type().clone();
+
+        Ok(match (self, rhs) {
             (Value::Entier(x), Value::Entier(y)) => Value::Entier((x % y + y) % y),
             (Value::Decimal(x), Value::Entier(y)) => {
                 Value::Decimal((x % y as f64 + y as f64) % y as f64)
             }
             (Value::Entier(x), Value::Decimal(y)) => Value::Decimal((x as f64 % y + y) % y),
             (Value::Decimal(x), Value::Decimal(y)) => Value::Decimal((x % y + y) % y),
-            _ => unimplemented!(),
-        }
+            _ => Err(ASErreurType::new_erreur_operation(
+                "% (modulo)".into(),
+                type_1,
+                type_2,
+            ))?,
+        })
     }
 }
 

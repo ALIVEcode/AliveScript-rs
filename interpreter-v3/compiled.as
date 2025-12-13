@@ -50,4 +50,4 @@ var ls = [1, 2, 3]
 ls2 = [1]
 ls = ls + ls2
 
-afficher ls
+afficher tailleDe(ls)

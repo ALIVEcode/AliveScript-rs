@@ -1,7 +1,7 @@
 #![allow(dead_code, unused_variables, unused_imports)]
 
 pub mod as_modules;
-mod as_obj_utils;
+pub mod as_obj_utils;
 #[cfg(feature = "py")]
 mod as_py;
 pub mod visitor;
@@ -20,7 +20,7 @@ pub mod utils;
 
 pub mod bench;
 
-mod compiler;
+pub mod compiler;
 
 pub mod cli;
 
@@ -41,7 +41,7 @@ use crate::runner::Runner;
 
 #[derive(Parser)]
 #[grammar = "./alivescript.pest"]
-struct AlivescriptParser;
+pub struct AlivescriptParser;
 
 use crate::visitor::Visitor;
 
@@ -144,7 +144,7 @@ pub fn compile_script_from_file2<'a, IO: InterpretorIO + 'a>(
             let compiler = Compiler::new(script);
             let closure = compiler.compile(stmts).unwrap();
             let mut vm = VM::new();
-            let result = vm.run(Rc::new(closure)).unwrap();
+            let result = vm.run(closure).unwrap();
             // println!("{:#?}", vm.stack);
             // println!("{:?}", result);
         }

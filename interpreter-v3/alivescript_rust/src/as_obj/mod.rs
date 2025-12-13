@@ -33,7 +33,8 @@ pub type ASResult<T> = Result<T, ASErreurType>;
 /// w_lit means "With literal"
 macro_rules! w_lit {
     ($type:expr, $self:ident) => {
-        ASType::union_of($type, ASType::Lit(Box::new($self.clone())))
+        //ASType::union_of($type, ASType::Lit(Box::new($self.clone())))
+        $type 
     };
 }
 

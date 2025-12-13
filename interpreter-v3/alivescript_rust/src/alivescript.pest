@@ -118,7 +118,7 @@ siInner  = _{
 }
 
 sinonInner = _{
-    (!eos ~ (#body = stmtBloc))
+    (!eos ~ stmtBloc)
   | (eos+ ~ (#body = StmtBody) ~ finSi)
 }
 

@@ -38,7 +38,7 @@ pub enum ASType {
 
     Erreur,
 
-    Lit(Box<ASObj>),
+    // Lit(Box<ASObj>),
 }
 
 macro_rules! decl_types {
@@ -118,7 +118,7 @@ impl ASType {
             T::Union(_) => todo!(),
             T::Array(_) => todo!(),
             T::Erreur => todo!(),
-            T::Lit(o) => Ok(*o.clone()),
+            // T::Lit(o) => Ok(*o.clone()),
         }
     }
 
@@ -196,7 +196,7 @@ impl ASType {
 
             (Tout, other) | (other, Tout) => other != &Rien && other != &Nul,
 
-            (Lit(o1), Lit(o2)) => o1 == o2,
+            // (Lit(o1), Lit(o2)) => o1 == o2,
 
             (Optional(t), other) | (other, Optional(t)) => {
                 other == &Nul || ASType::type_match(t.as_ref(), other)
@@ -374,7 +374,7 @@ impl Display for ASType {
 
             Erreur => "Erreur".into(),
 
-            Lit(o) => o.repr(),
+            // Lit(o) => o.repr(),
         };
         write!(f, "{}", to_string)
     }

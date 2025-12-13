@@ -1942,7 +1942,8 @@ impl Visitor for Runner<'_> {
             return;
         };
 
-        self.type_results.push(ASType::Lit(Box::new(v.clone())))
+        // FIXME: removed to make the compiler work
+        // self.type_results.push(ASType::Lit(Box::new(v.clone())))
     }
 
     fn visit_type_name(&mut self, t: &Type) {

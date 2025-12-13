@@ -1,14 +1,19 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, VecDeque},
+    rc::Rc,
+    sync::{Arc, Mutex, RwLock},
+};
 
 use crate::{
     as_modules::ASModuleBuiltin,
     as_obj::{ASEnv, ASType},
     ast::{BinCompcode, BinOpcode, CallRust},
     compiler::{
-        bytecode::{Opcode, JUMP_OFFSET},
+        bytecode::{JUMP_OFFSET, Opcode},
         module::BUILTIN_MOD,
         obj::{
-            CallFrame, Closure, NativeFunction, RcClosure, RcUpvalue, Upvalue, UpvalueLocation,
+            ArcClosure, ArcUpvalue, CallFrame, Closure, NativeFunction, Upvalue, UpvalueLocation,
             UpvalueSpec, Value,
         },
     },
@@ -17,7 +22,7 @@ use crate::{
 pub struct VM {
     pub stack: Vec<Value>,
     frames: Vec<CallFrame>,
-    open_upvalues: Vec<RcUpvalue>, // track upvalues that point to stack slots
+    open_upvalues: Vec<ArcUpvalue>, // track upvalues that point to stack slots
     global_table: HashMap<String, Value>,
 }
 
@@ -33,11 +38,23 @@ impl VM {
         }
     }
 
+    pub fn dump_stack(&self) -> String {
+        format!("{:#?}", self.stack)
+    }
+
+    pub fn insert_global(&mut self, (name, val): (impl ToString, Value)) -> Option<Value> {
+        self.global_table.insert(name.to_string(), val)
+    }
+
+    pub fn get_global(&mut self, name: &str) -> Option<&Value> {
+        self.global_table.get(name)
+    }
+
     fn push(&mut self, v: Value) {
         self.stack.push(v);
     }
 
-    pub fn pop(&mut self) -> Option<Value> {
+    fn pop(&mut self) -> Option<Value> {
         self.stack.pop()
     }
 
@@ -56,7 +73,7 @@ impl VM {
         let mut i = 0;
         while i < self.open_upvalues.len() {
             let refer = {
-                let uv = self.open_upvalues[i].borrow();
+                let uv = self.open_upvalues[i].read().unwrap();
                 match uv.location {
                     UpvalueLocation::Open(idx) => idx >= frame_base,
                     UpvalueLocation::Closed(_) => false,
@@ -64,7 +81,7 @@ impl VM {
             };
             if refer {
                 // close it
-                self.open_upvalues[i].borrow_mut().close(self);
+                self.open_upvalues[i].write().unwrap().close(self);
                 // remove from open_upvalues
                 self.open_upvalues.remove(i);
             } else {
@@ -73,7 +90,11 @@ impl VM {
         }
     }
 
-    pub fn run(&mut self, closure: RcClosure) -> Result<Value, String> {
+    pub fn run(&mut self, closure: Closure) -> Result<Value, String> {
+        self.run_shared_closure(Arc::new(closure))
+    }
+
+    pub fn run_shared_closure(&mut self, closure: ArcClosure) -> Result<Value, String> {
         self.frames.push(CallFrame {
             closure: closure.clone(),
             ip: 0,
@@ -99,15 +120,11 @@ impl VM {
                     let nb_el = fnc.code[frame.ip];
                     frame.ip += 1;
 
-                    let mut lst = Vec::with_capacity(nb_el as usize);
+                    let mut lst = VecDeque::with_capacity(nb_el as usize);
                     for _ in 0..nb_el {
-                        lst.push(self.pop().unwrap());
+                        lst.push_front(self.pop().unwrap());
                     }
-
-                    // poped in the reverse order
-                    lst.reverse();
-
-                    self.push(Value::Liste(Rc::new(RefCell::new(lst))).into());
+                    self.push(Value::Liste(Arc::new(RwLock::new(lst.into()))).into());
                 }
                 Opcode::GetItem => {
                     let slice = self.pop().unwrap();
@@ -115,7 +132,7 @@ impl VM {
 
                     let result = match (obj, slice) {
                         (Value::Liste(lst), Value::Entier(i)) => {
-                            let lst = lst.borrow();
+                            let lst = lst.read().unwrap();
                             let i = if i < 0 { lst.len() as i64 + i } else { i };
                             if i < 0 || i >= lst.len() as i64 {
                                 // throw_err!(self, ASErreurType::new_erreur_index(i, lst.len()));
@@ -123,10 +140,11 @@ impl VM {
                             lst[i as usize].clone()
                         }
                         (Value::Liste(lst), Value::Liste(range)) => {
-                            let mut lst_final = Vec::with_capacity(range.borrow().len());
-                            for obj in range.borrow().iter() {
+                            let range = range.read().unwrap();
+                            let mut lst_final = Vec::with_capacity(range.len());
+                            for obj in range.iter() {
                                 if let Value::Entier(i) = obj {
-                                    let lst = lst.borrow();
+                                    let lst = lst.read().unwrap();
                                     let i = if *i < 0 { lst.len() as i64 + *i } else { *i };
                                     if i < 0 || i >= lst.len() as i64 {
                                         // throw_err!(
@@ -145,7 +163,7 @@ impl VM {
                                     // );
                                 }
                             }
-                            Value::Liste(Rc::new(RefCell::new(lst_final)))
+                            Value::Liste(Arc::new(RwLock::new(lst_final)))
                         }
                         (Value::Texte(txt), Value::Entier(i)) => {
                             let i = if i < 0 { txt.len() as i64 + i } else { i };
@@ -155,8 +173,9 @@ impl VM {
                             Value::Texte(txt[i as usize..i as usize + 1].into())
                         }
                         (Value::Texte(txt), Value::Liste(range)) => {
-                            let mut txt_final = String::with_capacity(range.borrow().len());
-                            for obj in range.borrow().iter() {
+                            let range = range.read().unwrap();
+                            let mut txt_final = String::with_capacity(range.len());
+                            for obj in range.iter() {
                                 if let Value::Entier(i) = obj {
                                     let i = if *i < 0 { txt.len() as i64 + *i } else { *i };
                                     if i < 0 || i >= txt.len() as i64 {
@@ -197,12 +216,12 @@ impl VM {
                         _ => {
                             return Err(
                                 "CLOSURE constant must be a Function wrapped as Closure".into()
-                            )
+                            );
                         }
                     };
                     let function = proto_closure.function.clone();
                     // build real closure and wire upvalues according to function.upvalue_specs
-                    let mut closure_upvalues: Vec<RcUpvalue> =
+                    let mut closure_upvalues: Vec<ArcUpvalue> =
                         Vec::with_capacity(function.upvalue_count);
 
                     let frame_base = frame.base;
@@ -214,7 +233,8 @@ impl VM {
                                 let target_stack_idx = frame_base + slot_idx;
 
                                 let existing = self.open_upvalues.iter().find(|uv| {
-                                    if let UpvalueLocation::Open(idx) = uv.borrow().location {
+                                    if let UpvalueLocation::Open(idx) = uv.read().unwrap().location
+                                    {
                                         idx == target_stack_idx
                                     } else {
                                         false
@@ -227,7 +247,7 @@ impl VM {
                                         let uv = Upvalue {
                                             location: UpvalueLocation::Open(target_stack_idx),
                                         };
-                                        let rc = Rc::new(RefCell::new(uv));
+                                        let rc = Arc::new(RwLock::new(uv));
                                         self.open_upvalues.push(rc.clone());
                                         rc
                                     }
@@ -247,7 +267,7 @@ impl VM {
                             }
                         }
                     }
-                    let new_closure = Rc::new(Closure {
+                    let new_closure = Arc::new(Closure {
                         function: function.clone(),
                         upvalues: closure_upvalues,
                     });
@@ -256,14 +276,14 @@ impl VM {
                 Opcode::GetUpvalue => {
                     let idx = fnc.code[frame.ip] as usize;
                     frame.ip += 1;
-                    let uv = Rc::clone(
+                    let uv = Arc::clone(
                         frame
                             .closure
                             .upvalues
                             .get(idx)
                             .ok_or("get upvalue out of range")?,
                     );
-                    let v = uv.borrow().get(self);
+                    let v = uv.read().unwrap().get(self);
                     self.push(v);
                 }
                 Opcode::SetUpvalue => {
@@ -277,7 +297,7 @@ impl VM {
                         .clone();
 
                     let val = self.pop().unwrap_or(Value::Nul);
-                    up_rc.borrow_mut().set(self, val);
+                    up_rc.write().unwrap().set(self, val);
                 }
                 Opcode::GetLocal => {
                     let slot = fnc.code[frame.ip] as usize;
@@ -344,17 +364,25 @@ impl VM {
 
                     match func {
                         Value::NativeFunction(f) => {
-                            let result = (f.clone().func)(self).map_err(|e| e.to_string())?;
+                            let mut args = VecDeque::with_capacity(nbargs);
+                            let f = f.clone();
+
                             for _ in 0..nbargs {
-                                self.pop();
+                                args.push_front(self.pop().unwrap());
                             }
+
+                            // remove the function that is still on the stack
+                            self.pop();
+
+                            let result = (f.func)(self, args.into()).map_err(|e| e.to_string())?;
+
                             self.push(result.unwrap_or(Value::Nul));
                         }
                         Value::Closure(closure) => {
                             // set the base as the first arg of the function
                             let base = self.stack.len() - nbargs;
                             self.frames.push(CallFrame {
-                                closure: Rc::clone(&closure),
+                                closure: Arc::clone(&closure),
                                 ip: 0,
                                 base,
                             });
@@ -395,34 +423,21 @@ impl VM {
                         .pop()
                         .ok_or_else(|| format!("Missing rhs in {:?}", op))?;
 
-                    self.push(
-                        match binop {
-                            BinOpcode::Mul => arg1 * arg2,
-                            BinOpcode::Div => arg1 / arg2,
-                            BinOpcode::DivInt => arg1.div_int(arg2),
-                            BinOpcode::Add => arg1 + arg2,
-                            BinOpcode::Sub => arg1 - arg2,
-                            BinOpcode::Exp => arg1.pow(arg2),
-                            BinOpcode::Mod => arg1 % arg2,
-                            BinOpcode::Extend => {
-                                arg1.extend(arg2).map_err(|err| err.to_string())?
-                            }
-                            BinOpcode::BitwiseOr => (arg1 | arg2).map_err(|err| err.to_string())?,
-                            BinOpcode::BitwiseAnd => {
-                                (arg1 & arg2).map_err(|err| err.to_string())?
-                            }
-                            BinOpcode::BitwiseXor => {
-                                (arg1 ^ arg2).map_err(|err| err.to_string())?
-                            }
-                            BinOpcode::ShiftLeft => {
-                                (arg1 << arg2).map_err(|err| err.to_string())?
-                            }
-                            BinOpcode::ShiftRight => {
-                                (arg1 >> arg2).map_err(|err| err.to_string())?
-                            }
-                        }
-                        .into(),
-                    );
+                    self.push(match binop {
+                        BinOpcode::Mul => arg1 * arg2,
+                        BinOpcode::Div => arg1 / arg2,
+                        BinOpcode::DivInt => arg1.div_int(arg2),
+                        BinOpcode::Add => arg1 + arg2,
+                        BinOpcode::Sub => arg1 - arg2,
+                        BinOpcode::Exp => arg1.pow(arg2),
+                        BinOpcode::Mod => (arg1 % arg2).map_err(|err| err.to_string())?,
+                        BinOpcode::Extend => arg1.extend(arg2).map_err(|err| err.to_string())?,
+                        BinOpcode::BitwiseOr => (arg1 | arg2).map_err(|err| err.to_string())?,
+                        BinOpcode::BitwiseAnd => (arg1 & arg2).map_err(|err| err.to_string())?,
+                        BinOpcode::BitwiseXor => (arg1 ^ arg2).map_err(|err| err.to_string())?,
+                        BinOpcode::ShiftLeft => (arg1 << arg2).map_err(|err| err.to_string())?,
+                        BinOpcode::ShiftRight => (arg1 >> arg2).map_err(|err| err.to_string())?,
+                    });
                 }
                 Opcode::BinComp => {
                     let op = fnc.code[frame.ip];
