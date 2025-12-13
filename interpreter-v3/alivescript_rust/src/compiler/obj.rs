@@ -39,10 +39,18 @@ impl Value {
             V::Texte(..) => ASType::Texte,
             V::Nul => ASType::Nul,
             V::Booleen(..) => ASType::Booleen,
-            V::Liste(..) => ASType::Liste,
+            V::Liste(lst) => ASType::Liste(Box::new(
+                lst.read()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.get_type())
+                    .reduce(|t1, t2| ASType::union_of(t1, t2))
+                    .unwrap_or(ASType::Tout),
+            )),
             V::Closure(..) => ASType::Fonction,
             V::NativeFunction(..) => ASType::Fonction,
-            as_type => todo!("Type inconnue {:?}", as_type),
+            V::TypeObj(t) => ASType::Type,
+            //as_type => todo!("Type inconnue {:?}", as_type),
         }
     }
 

@@ -323,7 +323,8 @@ typeTerm    = _{
 }
 typeInfix   = _{ Pipe }
 typePrefix  = _{ "@" }
-typePostfix = _{ "?" }
+typePostfix = _{ TypeArgs }
+TypeArgs    =  { "<" ~ TypeExpr ~ ("," ~ TypeExpr)* ~ ","? ~ ">" }
 
 Bool      = @{ "vrai" | "faux" }
 Text      = @{ PUSH("\"" | "'") ~ ("\\" ~ PEEK | !PEEK ~ ANY)* ~ POP }

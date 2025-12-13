@@ -1,11 +1,11 @@
 use crate::{
+    Rule,
     as_obj::{ASErreur, ASErreurType, ASObj},
     ast::{
         AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, DefFn, Expr, FnParam, Stmt, Type,
         UnaryOpcode,
     },
     utils::Invert,
-    Rule,
 };
 use pest::error::{Error as PestError, ErrorVariant as PestErrorVariant};
 use pest::{
@@ -63,7 +63,7 @@ lazy_static::lazy_static! {
         use pest::pratt_parser::{Assoc::*, Op};
 
         // Precedence is defined lowest to highest
-        PrattParser::new()
+        PrattParser::new().op(Op::postfix(Rule::TypeArgs))
     };
 }
 

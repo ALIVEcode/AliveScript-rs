@@ -460,7 +460,10 @@ impl<'a> Runner<'a> {
                         }
                         _ => throw_err!(
                             self,
-                            ASErreurType::new_erreur_type(ASType::Liste, value.get_type())
+                            ASErreurType::new_erreur_type(
+                                ASType::Liste(Box::new(ASType::Tout)),
+                                value.get_type()
+                            )
                         ),
                     }
                 }
@@ -510,7 +513,10 @@ impl<'a> Runner<'a> {
                         }
                         _ => throw_err!(
                             self,
-                            ASErreurType::new_erreur_type(ASType::Liste, value.get_type())
+                            ASErreurType::new_erreur_type(
+                                ASType::Liste(Box::new(ASType::Tout)),
+                                value.get_type()
+                            )
                         ),
                     }
                 }

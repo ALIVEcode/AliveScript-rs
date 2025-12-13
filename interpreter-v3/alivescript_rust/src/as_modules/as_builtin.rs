@@ -63,7 +63,7 @@ as_mod! {
         }
     },
     as_fonction! {
-        format(template: ASType::Texte, attrs: ASType::Liste => ASObj::liste(vec![])) -> ASType::Texte; {
+        format(template: ASType::Texte, attrs: ASType::liste_tout() => ASObj::liste(vec![])) -> ASType::Texte; {
             as_cast!(ASObj::ASTexte(template) = template);
             as_cast!(ASObj::ASListe(attrs) = attrs);
 
@@ -152,7 +152,7 @@ as_mod! {
         }
     },
     as_fonction! {
-        liste[runner](obj: ASType::iterable() => ASObj::liste(vec![])) -> ASType::Liste; {
+        liste[runner](obj: ASType::iterable() => ASObj::liste(vec![])) -> ASType::liste_tout(); {
             if let Some(result) = call_methode!(obj.__liste__(), runner) {
                 return result;
             }
@@ -191,7 +191,7 @@ as_mod! {
                     let mut dict = Vec::with_capacity(l.borrow().len());
                     for e in l.borrow().iter() {
                         let ASObj::ASListe(kv) = e else {
-                            return Err(ASErreurType::new_erreur_type(ASType::Liste, e.get_type()));
+                            return Err(ASErreurType::new_erreur_type(ASType::liste_tout(), e.get_type()));
                         };
                         if kv.borrow().len() != 2 {
                             return Err(ASErreurType::new_erreur_valeur(

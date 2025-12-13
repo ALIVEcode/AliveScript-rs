@@ -837,7 +837,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
     fn parse_type(&mut self, pairs: Pairs<Rule>) -> Result<ASType, CompilationError> {
         PRATT_TYPE_PARSER
             .map_primary(|primary| match primary.as_rule() {
-                Rule::TypeExpr => self.parse_type(primary.into_inner()),
+                Rule::TypeExpr => Rc::clone(self).parse_type(primary.into_inner()),
                 Rule::Ident => Ok(ASType::from_str(primary.as_str()).map_err(|e| {
                     PestError::new_from_span(
                         PestErrorVariant::CustomError {
@@ -858,7 +858,25 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 )
                 .into()),
             })
-            .map_infix(|lhs, infix, rhs| todo!())
+            // .map_infix(|lhs, infix, rhs| todo!())
+            .map_postfix(|lhs, postfix| match postfix.as_rule() {
+                Rule::TypeArgs => {
+                    let mut type_args = vec![];
+                    let span = postfix.as_span();
+                    for arg in postfix.into_inner() {
+                        type_args.push(Rc::clone(self).parse_type(arg.into_inner())?);
+                    }
+                    Ok(lhs?.with_type_args(type_args).map_err(|err| {
+                        PestError::new_from_span(
+                            PestErrorVariant::CustomError {
+                                message: format!("{}", err.to_string()),
+                            },
+                            span,
+                        )
+                    })?)
+                }
+                _ => todo!(),
+            })
             .parse(pairs)
     }
 

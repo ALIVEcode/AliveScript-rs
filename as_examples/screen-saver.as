@@ -1,40 +1,38 @@
-i = 0
+var carré_x: entier = 0
+var carré_y: entier = 0
 
-var couleurs = ["bleu", "orange", "noir", "vert"]
+const CARRÉ_W = 50
+const CARRÉ_H = 50
 
-carre_x = 0
-carre_y = 0
-const CARRE_W = 50
-const CARRE_H = 50
+const VEL: décimal = 0.001
 
-const VEL = 0.001
-mov_x = VEL
-mov_y = VEL
+var mov_x: décimal = VEL
+var mov_y: décimal = VEL
 
-tant que vrai
-  écran = tailleÉcran()
-  w = écran[0]
-  h = écran[1]
+répéter
+  var écran: liste = tailleÉcran()
+  var w: décimal = écran[0]
+  var h: décimal = écran[1]
 
-  si carre_x + CARRE_W > w alors 
+  si carré_x + CARRÉ_W > w alors 
     mov_x = -VEL
-    carre_x = w - CARRE_W - 1
-  sinon si carre_x < 0 alors 
+    carré_x = w - CARRÉ_W - 1
+  sinon si carré_x < 0 alors 
     mov_x = VEL
-    carre_x = 1
+    carré_x = 1
   fin si
 
-  si carre_y + CARRE_H > h alors 
+  si carré_y + CARRÉ_H > h alors 
     mov_y = -VEL
-    carre_y = h - CARRE_H - 1
-  sinon si carre_y < 0 alors 
+    carré_y = h - CARRÉ_H - 1
+  sinon si carré_y < 0 alors 
     mov_y = VEL
-    carre_y = 1
+    carré_y = 1
   fin si
 
-  carre_x += mov_x
-  carre_y += mov_y
+  carré_x += mov_x
+  carré_y += mov_y
 
-  dessinerRect(carre_x, carre_y, CARRE_W, CARRE_H, "blanc")
-fin tant que
+  dessinerRect(carré_x, carré_y, CARRÉ_W, CARRÉ_H, "blanc")
+fin répéter
 

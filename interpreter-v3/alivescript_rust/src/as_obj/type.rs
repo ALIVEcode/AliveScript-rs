@@ -20,7 +20,7 @@ pub enum ASType {
     Booleen,
     Texte,
 
-    Liste,
+    Liste(Box<ASType>),
     Dict,
 
     Fonction,
@@ -37,7 +37,6 @@ pub enum ASType {
     Type,
 
     Erreur,
-
     // Lit(Box<ASObj>),
 }
 
@@ -73,7 +72,7 @@ impl ASType {
 
             texte = T::Texte;
 
-            liste = T::Liste;
+            liste = T::Liste(Box::new(T::Tout));
             dict = T::Dict;
 
             fonction = T::Fonction;
@@ -92,6 +91,21 @@ impl ASType {
             type = T::Type;
         });
     }
+
+    pub fn liste_tout() -> Self {
+        Self::Liste(Box::new(ASType::Tout))
+    }
+
+    pub fn with_type_args(&self, args: Vec<ASType>) -> Result<ASType, ASErreurType> {
+        match self {
+            ASType::Liste(astype) => Ok(ASType::Liste(Box::new(Self::union(args)))),
+            ASType::Objet(_) => todo!(),
+            _ => Err(ASErreurType::new_erreur(
+                Some("ErreurTypeArg".into()),
+                format!("Le type {} ne prend pas d'arguments", self),
+            )),
+        }
+    }
 }
 
 impl ASType {
@@ -107,7 +121,7 @@ impl ASType {
             T::Decimal => Ok(ASDecimal(0f64)),
             T::Booleen => Ok(ASBooleen(false)),
             T::Texte => Ok(ASTexte("".into())),
-            T::Liste => Ok(ASListe(Rc::new(RefCell::new(vec![])))),
+            T::Liste(..) => Ok(ASListe(Rc::new(RefCell::new(vec![])))),
             T::Dict => Ok(ASDict(Rc::new(RefCell::new(ASDictObj::default())))),
             T::Type => todo!(),
             T::ClasseInst => todo!(),
@@ -128,7 +142,7 @@ impl ASType {
 
     pub fn iterable() -> ASType {
         ASType::Union(vec![
-            Self::Liste,
+            Self::Liste(Box::new(Self::Tout)),
             Self::Texte,
             Self::Dict,
             Self::Classe,
@@ -138,7 +152,7 @@ impl ASType {
 
     pub fn iterable_ordonne() -> ASType {
         ASType::Union(vec![
-            Self::Liste,
+            Self::Liste(Box::new(Self::Tout)),
             Self::Texte,
             Self::Classe,
             Self::ClasseInst,
@@ -149,15 +163,19 @@ impl ASType {
         if types.len() == 1 {
             types.into_iter().nth(0).unwrap()
         } else {
-            ASType::Union(
-                types
-                    .into_iter()
-                    .flat_map(|t| match t {
-                        ASType::Union(as_types) => as_types,
-                        t => vec![t],
-                    })
-                    .collect(),
-            )
+            let mut types: Vec<ASType> = types
+                .into_iter()
+                .flat_map(|t| match t {
+                    ASType::Union(as_types) => as_types,
+                    t => vec![t],
+                })
+                .collect();
+
+            types.sort_by_key(|t| t.to_string());
+
+            types.dedup();
+
+            ASType::Union(types)
         }
     }
 
@@ -197,7 +215,6 @@ impl ASType {
             (Tout, other) | (other, Tout) => other != &Rien && other != &Nul,
 
             // (Lit(o1), Lit(o2)) => o1 == o2,
-
             (Optional(t), other) | (other, Optional(t)) => {
                 other == &Nul || ASType::type_match(t.as_ref(), other)
             }
@@ -210,7 +227,11 @@ impl ASType {
                 types.iter().any(|t| ASType::type_match(t, &other))
             }
 
-            (Liste, Array(..)) | (Array(..), Liste) => true,
+            (Liste(t1), Liste(t2)) => Self::type_match(t1, t2),
+
+            (Liste(t), Array(arr)) | (Array(arr), Liste(t)) => {
+                arr.iter().all(|el| Self::type_match(el, t))
+            }
 
             (Array(types1), Array(types2)) => {
                 if types1.len() != types2.len() {
@@ -309,7 +330,7 @@ impl FromStr for ASType {
             "nombre" => Ok(Self::nombre()),
             "iterable" | "itérable" => Ok(Self::iterable()),
             "texte" => Ok(Self::Texte),
-            "liste" => Ok(Self::Liste),
+            "liste" => Ok(Self::Liste(Box::new(ASType::Tout))),
             "rien" => Ok(Self::Nul),
             "nul" => Ok(Self::Nul),
             "tout" => Ok(Self::Tout),
@@ -344,7 +365,8 @@ impl Display for ASType {
             Booleen => "booléen".into(),
             Texte => "texte".into(),
 
-            Liste => "liste".into(),
+            Liste(t) => format!("liste<{}>", t),
+
             Dict => "dict".into(),
 
             Module => "module".into(),
@@ -373,7 +395,6 @@ impl Display for ASType {
             Type => "type".into(),
 
             Erreur => "Erreur".into(),
-
             // Lit(o) => o.repr(),
         };
         write!(f, "{}", to_string)

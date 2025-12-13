@@ -45,10 +45,12 @@ fin tant que
 
 
 
-var ls = [1, 2, 3]
+var ls: liste<entier> = [1, 2, 3]
 
 ls2 = [1]
 ls += ls2
+
+afficher typeDe(ls)
 
 x = 12
 
