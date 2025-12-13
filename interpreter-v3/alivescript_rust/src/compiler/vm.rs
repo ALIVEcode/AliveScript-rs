@@ -116,6 +116,10 @@ impl VM {
                     let val = fnc.constants[const_idx as usize].clone();
                     self.push(val);
                 }
+                Opcode::Neg => {
+                    let val = self.pop().unwrap();
+                    self.push(Value::Entier(0) - val);
+                }
                 Opcode::NewList => {
                     let nb_el = fnc.code[frame.ip];
                     frame.ip += 1;

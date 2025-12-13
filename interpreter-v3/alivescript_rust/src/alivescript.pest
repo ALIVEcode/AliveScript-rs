@@ -165,7 +165,7 @@ Var   = @{ "var" ~ !IdentChar }
 AssignStmt = { assignVar }
 
 assignVar      = _{
-    (MultiDeclIdent | declIdent | DeclIdentList) ~ Assign ~ Expr
+    (MultiDeclIdent | declIdent | DeclIdentList) ~ (AssignOp | Assign) ~ Expr
 }
 declIdent      = _{
     Ident ~ (":" ~ TypeExpr)?
@@ -219,10 +219,10 @@ compInfix    = _{
   | Neq
   | In
   | NotIn
-  | Gt
   | Gte
-  | Lt
   | Lte
+  | Lt
+  | Gt
 }
 logicInfix   = _{
     And
@@ -270,7 +270,10 @@ AccessProp = {
   | "[" ~ Expr ~ "]"
 }
 
-Assign = @{ ":=" | "=" | "<-" | "←" }
+AssignOp = ${
+    (Add | Sub | Mul | Div | DivInt | Modulo | BitwiseLeft | BitwiseRight | Pow | Ampersant | Pipe | Xor | NonNull) ~ "="
+}
+Assign   = @{ ":=" | "=" | "<-" | "←" }
 
 term = _{
     Lit

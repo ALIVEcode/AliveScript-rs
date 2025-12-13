@@ -26,6 +26,10 @@ pub enum Value {
 }
 
 impl Value {
+    pub fn liste(values: Vec<Value>) -> Self {
+        Self::Liste(Arc::new(RwLock::new(values)))
+    }
+
     pub fn get_type(&self) -> ASType {
         use Value as V;
 

@@ -1,0 +1,10 @@
+[package]
+name = "as_examples"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+alivescript_rust = { path = "../interpreter-v3/alivescript_rust/" }
+anyhow = "1.0.100"
+macroquad = "0.4.14"

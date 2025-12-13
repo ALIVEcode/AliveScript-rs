@@ -28,6 +28,7 @@ pub enum Opcode {
     Pop,
 
     BinOp,
+    Neg,
     BinComp,
 
     NewList,
@@ -51,6 +52,7 @@ impl Opcode {
             Opcode::Pop => "POP",
             Opcode::BinOp => "BINOP",
             Opcode::BinComp => "BINCOMP",
+            Opcode::Neg => "NEG",
             Opcode::Jump => "JUMP",
             Opcode::JumpIfFalse => "JUMP_IF_FALSE",
             Opcode::NewList => "NEW_LIST",
@@ -79,7 +81,7 @@ impl Opcode {
 
             Opcode::BinOp | Opcode::BinComp => 1,
 
-            Opcode::Pop | Opcode::GetItem => 0,
+            Opcode::Pop | Opcode::GetItem | Opcode::Neg => 0,
         }
     }
 }
@@ -228,6 +230,10 @@ impl Instructions {
     pub fn emit_const(&mut self, idx: u16) {
         self.emit_opcode(Opcode::Constant);
         self.emit_byte(idx);
+    }
+
+    pub fn emit_neg(&mut self) {
+        self.emit_opcode(Opcode::Neg);
     }
 
     pub fn emit_new_list(&mut self, nb_el: u16) {

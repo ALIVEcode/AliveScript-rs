@@ -29,6 +29,10 @@ fn evaluate_string(code: &str, debug_infos: Option<&DebugInfo>, run: bool) {
 
     match result_stmts {
         Ok(stmts) => {
+            if debug_infos.is_some_and(|di| di.show_tokens()) {
+                println!("{:#?}", stmts);
+            }
+
             let compiler = Compiler::new(&code);
             let closure = if debug_infos.is_some_and(|di| di.show_bytecode()) {
                 compiler.compile_debug(stmts)
@@ -131,6 +135,10 @@ struct DebugInfo {
 impl DebugInfo {
     fn show_bytecode(&self) -> bool {
         self.infos.contains(['b', 'B', 'a'])
+    }
+
+    fn show_tokens(&self) -> bool {
+        self.infos.contains(['t', 'a'])
     }
 }
 

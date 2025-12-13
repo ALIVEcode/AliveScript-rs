@@ -22,7 +22,7 @@ use crate::{
     compiler::{
         bytecode::{Instructions, JUMP_OFFSET, Opcode},
         err::CompilationError,
-        obj::{Closure, Function, Upvalue, UpvalueSpec, Value},
+        obj::{ArcClosure, Closure, Function, Upvalue, UpvalueSpec, Value},
         parser::{PRATT_EXPR_PARSER, PRATT_TYPE_PARSER},
     },
     utils::Invert,
@@ -119,10 +119,10 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    pub fn parse_and_compile(self) -> Result<Closure, CompilationError> {
+    pub fn parse_and_compile(self) -> Result<ArcClosure, CompilationError> {
         let stmts = AlivescriptParser::parse(Rule::script, self.input)?;
 
-        self.compile(stmts)
+        Ok(ArcClosure::new(self.compile(stmts)?))
     }
 
     pub fn parse_and_compile_debug(self) -> Result<Closure, CompilationError> {
@@ -349,6 +349,25 @@ impl<'a> Compiler<'a> {
         self.jump_stack.push(jump_idx);
         self.jump_stack.len() - 1
     }
+
+    fn load_var(&mut self, ident: &str) {
+        // 1. Try to resolve as a LOCAL
+        if let Ok(Some(local_idx)) = self.resolve_local(ident, false) {
+            self.code.emit_get_local(local_idx as u16);
+            return;
+        }
+
+        // 2. Try to resolve as an UPVALUE
+        if let Ok(Some(upval_idx)) = self.resolve_upval(ident) {
+            self.code.emit_get_upvalue(upval_idx as u16);
+            return;
+        }
+
+        // 3. Load a GLOBAL by setting the variable name as a string constant
+        // and emiting a LoadGlobal
+        let glob_name_idx = self.get_or_add_const(Value::Texte(ident.to_string()));
+        self.code.emit_get_global(glob_name_idx as u16);
+    }
 }
 
 trait Parser<'a> {
@@ -408,24 +427,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
             Rule::Ident => {
                 let ident = primary.as_str();
-                let mut compiler = self.borrow_mut();
-
-                // 1. Try to resolve as a LOCAL
-                if let Ok(Some(local_idx)) = compiler.resolve_local(ident, false) {
-                    compiler.code.emit_get_local(local_idx as u16);
-                    return Ok(());
-                }
-
-                // 2. Try to resolve as an UPVALUE
-                if let Ok(Some(upval_idx)) = compiler.resolve_upval(ident) {
-                    compiler.code.emit_get_upvalue(upval_idx as u16);
-                    return Ok(());
-                }
-
-                // 3. Load a GLOBAL by setting the variable name as a string constant
-                // and emiting a LoadGlobal
-                let glob_name_idx = compiler.get_or_add_const(Value::Texte(ident.to_string()));
-                compiler.code.emit_get_global(glob_name_idx as u16);
+                self.borrow_mut().load_var(ident);
             }
 
             Rule::Lit => {
@@ -539,6 +541,10 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 let rhs = rhs?;
 
                 if let Ok(op) = UnaryOpcode::try_from(&prefix) {
+                    match op {
+                        UnaryOpcode::Negate => self.borrow_mut().code.emit_neg(),
+                        _ => {}
+                    }
                     // Ok(Box::new(Expr::UnaryOp { expr: rhs, op }))
                     Ok(())
                 } else {
@@ -679,6 +685,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
     fn parse_assign(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError> {
         let mut name = None;
         let mut static_type = ASType::Tout;
+        let mut op = None;
         // let mut var_list = None;
 
         for pair in pairs {
@@ -686,6 +693,12 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 Rule::Var | Rule::Assign => {}
                 Rule::Expr => {
                     self.parse_expr(pair.into_inner())?;
+                }
+                Rule::AssignOp => {
+                    let op_pair = pair.into_inner().next().unwrap();
+                    op = Some(BinOpcode::try_from(&op_pair).unwrap());
+                    // if we have an assign op, we push the current value of the var
+                    self.borrow_mut().load_var(name.unwrap());
                 }
                 Rule::TypeExpr => static_type = self.parse_type(pair.into_inner())?,
                 Rule::Ident => name = Some(pair.as_str()),
@@ -708,6 +721,13 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         }
 
         let mut compiler = self.borrow_mut();
+
+        // if we have an assign op, we already pushed the value of the var and
+        // the value of the expression, the only thing that remains is adding
+        // the bin op
+        if let Some(op) = op {
+            compiler.code.emit_binop(op);
+        }
 
         let name = name.unwrap();
 

@@ -48,6 +48,12 @@ fin tant que
 var ls = [1, 2, 3]
 
 ls2 = [1]
-ls = ls + ls2
+ls += ls2
+
+x = 12
+
+x *= -1
+
+afficher x
 
 afficher tailleDe(ls)

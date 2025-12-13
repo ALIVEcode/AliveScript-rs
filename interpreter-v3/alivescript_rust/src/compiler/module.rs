@@ -20,7 +20,7 @@ macro_rules! as_fonction_native {
                 //     default_value: $crate::default_value!($($default)?),
                 // },
                 // )*],
-                func: std::sync::Arc::new(|vm: &mut $crate::compiler::vm::VM, args: std::vec::Vec<Value>| {
+                func: std::sync::Arc::new(move |vm: &mut $crate::compiler::vm::VM, args: std::vec::Vec<Value>| {
                     let mut args = std::collections::VecDeque::from_iter(args.iter());
                     $(
                     let $param_name = {
