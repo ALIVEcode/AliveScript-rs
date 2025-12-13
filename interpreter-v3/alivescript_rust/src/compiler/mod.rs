@@ -22,8 +22,9 @@ use crate::{
     compiler::{
         bytecode::{Instructions, JUMP_OFFSET, Opcode},
         err::CompilationError,
-        obj::{ArcClosure, Closure, Function, Upvalue, UpvalueSpec, Value},
+        obj::{ArcClosure, Upvalue, UpvalueSpec, Value},
         parser::{PRATT_EXPR_PARSER, PRATT_TYPE_PARSER},
+        value::{Closure, Function},
     },
     utils::Invert,
     visitor::{Visitable, Visitor},
@@ -36,8 +37,8 @@ mod module;
 pub mod obj;
 mod parser;
 mod utils;
-pub mod vm;
 pub mod value;
+pub mod vm;
 
 macro_rules! unpack {
     ($pat:pat = $expr:expr) => {
@@ -181,7 +182,7 @@ impl<'a> Compiler<'a> {
         self.function.borrow_mut().upvalue_count = self.upvalues.len();
     }
 
-    fn get_or_add_const(&mut self, obj: Value) -> usize {
+    fn get_or_add_const(&mut self, obj: Value) -> u16 {
         let idx = self
             .function
             .borrow()
@@ -191,12 +192,12 @@ impl<'a> Compiler<'a> {
             .find(|(i, o)| **o == obj)
             .map(|(i, o)| i);
         if let Some(idx) = idx {
-            return idx;
+            return idx as u16;
         }
 
         let mut f = self.function.borrow_mut();
         f.constants.push(obj);
-        f.constants.len() - 1
+        f.constants.len() as u16 - 1
     }
 
     fn func(&mut self) -> RefMut<'_, Function> {
@@ -231,6 +232,18 @@ impl<'a> Compiler<'a> {
 
             self.locals.pop();
         }
+    }
+
+    // declare a local inner variable (no name)
+    fn declare_inner_local(&mut self, debug_name: &str) -> u16 {
+        self.locals.push(Local {
+            name: format!("(({}))", debug_name),
+            depth: -1, // not initialized yet
+            is_captured: false,
+            var_type: ASType::Tout,
+            is_const: false,
+        });
+        self.locals.len() as u16 - 1
     }
 
     fn declare_local(&mut self, name: &str, var_type: ASType, is_const: bool) -> u16 {
@@ -367,7 +380,7 @@ impl<'a> Compiler<'a> {
         // 3. Load a GLOBAL by setting the variable name as a string constant
         // and emiting a LoadGlobal
         let glob_name_idx = self.get_or_add_const(Value::Texte(ident.to_string()));
-        self.code.emit_get_global(glob_name_idx as u16);
+        self.code.emit_get_global(glob_name_idx);
     }
 }
 
@@ -518,7 +531,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     .borrow_mut()
                     .get_or_add_const(Value::Closure(Arc::new(closure)));
 
-                self.borrow_mut().code.emit_closure(idx as u16);
+                self.borrow_mut().code.emit_closure(idx);
             }
             rule => Err(PestError::new_from_span(
                 PestErrorVariant::ParsingError {
@@ -586,7 +599,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                             let idx = self
                                 .borrow_mut()
                                 .get_or_add_const(Value::Texte(prop.as_str().to_string()));
-                            self.borrow_mut().code.emit_get_attr(idx as u16);
+                            self.borrow_mut().code.emit_get_attr(idx);
                         } else {
                             Rc::clone(self).parse_expr(prop.into_inner())?;
                             self.borrow_mut().code.emit_get_item();
@@ -830,7 +843,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
         let idx = compiler.get_or_add_const(obj);
 
-        compiler.code.emit_const(idx as u16);
+        compiler.code.emit_const(idx);
 
         Ok(())
     }
@@ -1093,9 +1106,60 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 self.borrow_mut().code.emit_closure(idx as u16);
                 self.borrow_mut().mark_initialized(local_idx);
             }
-            Rule::StructureDef => {
-            }
+            Rule::StructureDef => {}
             Rule::SiStmt => self.parse_if(pair)?,
+
+            Rule::RepeterStmt => {
+                let mut inner = pair.into_inner();
+                let mut if_not_cond_jmp = None;
+
+                let before_cond;
+
+                if let Some(nb_iter) = inner
+                    .clone()
+                    .find(|p| matches!(p.as_node_tag(), Some("nb_iter")))
+                {
+                    let cptr = self.borrow_mut().declare_inner_local("compteur_repeter");
+                    self.borrow_mut().mark_initialized(cptr);
+                    self.parse_expr(nb_iter.into_inner())?;
+
+                    let mut compiler = self.borrow_mut();
+                    compiler.code.emit_set_local(cptr);
+
+                    // the code should jump to the start of the condition
+                    before_cond = compiler.code.inner().len();
+
+                    compiler.code.emit_get_local(cptr);
+                    let num1 = compiler.get_or_add_const(Value::Entier(1));
+                    compiler.code.emit_const(num1);
+
+                    compiler.code.emit_binop(BinOpcode::Sub);
+                    compiler.code.emit_set_local(cptr);
+
+                    compiler.code.emit_get_local(cptr);
+                    let num1 = compiler.get_or_add_const(Value::Entier(0));
+                    compiler.code.emit_const(num1);
+                    compiler.code.emit_bincomp(BinCompcode::Geq);
+
+                    if_not_cond_jmp = Some(compiler.push_cond_jump());
+                } else {
+                    before_cond = self.borrow().code.inner().len();
+                }
+
+                if let Some(body) = inner.find(|p| p.as_rule() == Rule::StmtBody) {
+                    self.build_ast_stmts(body.into_inner())?;
+                }
+
+                let now = self.borrow().code.inner().len();
+                self.borrow_mut()
+                    .code
+                    .emit_jump(before_cond as i16 - now as i16 - 2); // - 2 here to account for this jump
+
+                if let Some(if_not_cond_jmp) = if_not_cond_jmp {
+                    self.borrow_mut().patch_jump(if_not_cond_jmp);
+                }
+            }
+
             Rule::TantQueStmt => {
                 let inner = pair.into_inner();
                 let before_cond = self.borrow().code.inner().len();
@@ -1117,7 +1181,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 let now = self.borrow().code.inner().len();
                 self.borrow_mut()
                     .code
-                    .emit_jump(before_cond as i16 - now as i16 - 2); // - 2 here to account for this
+                    .emit_jump(before_cond as i16 - now as i16 - 2); // - 2 here to account for this jump
                 // instruction and its argument
                 self.borrow_mut().patch_jump(if_not_cond_jmp);
             }

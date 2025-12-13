@@ -151,9 +151,9 @@ PourStmt =  {
 finPour  = @{ "fin" ~ WHITESPACE+ ~ "pour" }
 
 RepeterStmt =  {
-    "repeter" ~ Expr? ~ eos+ ~ StmtBody? ~ finRepeter
+    PUSH("repeter" | "répéter") ~ (#nb_iter = Expr)? ~ eos+ ~ StmtBody? ~ finRepeter
 }
-finRepeter  = @{ "fin" ~ WHITESPACE+ ~ "repeter" }
+finRepeter  = @{ "fin" ~ WHITESPACE+ ~ POP } // "repeter" | "répéter"
 
 TantQueStmt =  {
     tantQue ~ (#cond = Expr) ~ "faire"? ~ eos+ ~ StmtBody? ~ finTantQue

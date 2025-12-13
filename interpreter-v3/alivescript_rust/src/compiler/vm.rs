@@ -12,11 +12,8 @@ use crate::{
     compiler::{
         bytecode::{JUMP_OFFSET, Opcode},
         module::BUILTIN_MOD,
-        obj::{
-            ArcClosure, ArcUpvalue, CallFrame, Closure, Upvalue, UpvalueLocation, UpvalueSpec,
-            Value,
-        },
-        value::NativeFunction,
+        obj::{ArcClosure, ArcUpvalue, CallFrame, Upvalue, UpvalueLocation, UpvalueSpec, Value},
+        value::{Closure, NativeFunction},
     },
 };
 

@@ -59,3 +59,7 @@ x *= -1
 afficher x
 
 afficher tailleDe(ls)
+
+répéter 1
+  afficher 2
+fin répéter
