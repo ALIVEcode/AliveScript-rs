@@ -77,17 +77,19 @@ StructureField = {
     (Const ~ Ident | Var? ~ Ident) ~ (":" ~ TypeExpr)? ~ (Assign ~ Expr)?
 }
 
-ImplDef  =  {
+ImplDef     =  {
     Docs? ~ eos* ~ PUSH("impl" | "implementation" | "implémentation") ~ (#name = Ident) ~ eos+ ~ (Methode ~ eos+)* ~ finImpl
 }
-finImpl = @{ "fin" ~ WHITESPACE+ ~ POP } // "impl" | "implementation" | "implémentation"
-Methode    =  { 
+finImpl     = @{ "fin" ~ WHITESPACE+ ~ POP }
+// "impl" | "implementation" | "implémentation"
+Methode     =  {
     Docs? ~ eos* ~ PUSH("methode" | "méthode") ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ MethodeBody
 }
 MethodeBody =  {
     (":" ~ Expr | eos ~ StmtBody? ~ finMethode)
 }
-finMethode = @{ "fin" ~ WHITESPACE+ ~ POP } // "methode" | "méthode"
+finMethode  = @{ "fin" ~ WHITESPACE+ ~ POP }
+// "methode" | "méthode"
 
 ClasseDef           =  {
     Docs? ~ eos* ~ "classe" ~ (#name = Ident) ~ eos+ ~ ClasseBody
@@ -153,7 +155,8 @@ finPour  = @{ "fin" ~ WHITESPACE+ ~ "pour" }
 RepeterStmt =  {
     PUSH("repeter" | "répéter") ~ (#nb_iter = Expr)? ~ eos+ ~ StmtBody? ~ finRepeter
 }
-finRepeter  = @{ "fin" ~ WHITESPACE+ ~ POP } // "repeter" | "répéter"
+finRepeter  = @{ "fin" ~ WHITESPACE+ ~ POP }
+// "repeter" | "répéter"
 
 TantQueStmt =  {
     tantQue ~ (#cond = Expr) ~ "faire"? ~ eos+ ~ StmtBody? ~ finTantQue
@@ -377,6 +380,7 @@ keyword = @{
   | "dans"
   | "faire"
   | "repeter"
+  | "répéter"
   | "tant"
   | "que"
   | "continuer"

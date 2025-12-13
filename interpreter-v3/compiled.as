@@ -60,6 +60,6 @@ afficher x
 
 afficher tailleDe(ls)
 
-répéter 1
+répéter
   afficher 2
 fin répéter
