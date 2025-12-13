@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use crate::as_obj::{self, ASErreurType, ASType};
 use crate::ast::CallRust;
 use crate::compiler::bytecode::{Instructions, instructions_to_string};
+use crate::compiler::value::{ASStructure, NativeFunction};
 use crate::compiler::vm::VM;
 
 pub type ArcUpvalue = Arc<RwLock<Upvalue>>;
@@ -23,6 +24,7 @@ pub enum Value {
     NativeFunction(NativeFunction),
     Liste(Arc<RwLock<Vec<Value>>>),
     TypeObj(ASType),
+    Structure(Arc<RwLock<ASStructure>>),
 }
 
 impl Value {
@@ -50,7 +52,7 @@ impl Value {
             V::Closure(..) => ASType::Fonction,
             V::NativeFunction(..) => ASType::Fonction,
             V::TypeObj(t) => ASType::Type,
-            //as_type => todo!("Type inconnue {:?}", as_type),
+            as_type => todo!("Type inconnue {:?}", as_type),
         }
     }
 
@@ -173,6 +175,7 @@ impl Display for Value {
             Value::Booleen(b) => if *b { "vrai" } else { "faux" }.into(),
             Value::Nul => "nul".into(),
             Value::TypeObj(t) => t.to_string(),
+            Value::Structure(s) => format!("{:?}", s),
             Value::Liste(vals) => format!(
                 "[{}]",
                 vals.read()
@@ -331,32 +334,6 @@ impl UpvalueSpec {
             UpvalueSpec::Local(index) => *index,
             UpvalueSpec::Upvalue(index) => *index,
         }
-    }
-}
-
-pub struct NativeFunction {
-    pub func: Arc<dyn Fn(&mut VM, Vec<Value>) -> Result<Option<Value>, ASErreurType>>,
-    pub name: Arc<String>,
-    pub desc: Arc<Option<String>>,
-}
-
-impl Clone for NativeFunction {
-    fn clone(&self) -> Self {
-        Self {
-            func: Arc::clone(&self.func),
-            desc: Arc::clone(&self.desc),
-            name: Arc::clone(&self.name),
-        }
-    }
-}
-impl PartialEq for NativeFunction {
-    fn eq(&self, _: &Self) -> bool {
-        false
-    }
-}
-impl std::fmt::Debug for NativeFunction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "fonction native {}()", self.name)
     }
 }
 

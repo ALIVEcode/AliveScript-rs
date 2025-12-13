@@ -13,9 +13,10 @@ use crate::{
         bytecode::{JUMP_OFFSET, Opcode},
         module::BUILTIN_MOD,
         obj::{
-            ArcClosure, ArcUpvalue, CallFrame, Closure, NativeFunction, Upvalue, UpvalueLocation,
-            UpvalueSpec, Value,
+            ArcClosure, ArcUpvalue, CallFrame, Closure, Upvalue, UpvalueLocation, UpvalueSpec,
+            Value,
         },
+        value::NativeFunction,
     },
 };
 

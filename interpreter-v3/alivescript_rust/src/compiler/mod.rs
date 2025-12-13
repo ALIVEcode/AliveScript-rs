@@ -37,6 +37,7 @@ pub mod obj;
 mod parser;
 mod utils;
 pub mod vm;
+pub mod value;
 
 macro_rules! unpack {
     ($pat:pat = $expr:expr) => {
@@ -1091,6 +1092,8 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
                 self.borrow_mut().code.emit_closure(idx as u16);
                 self.borrow_mut().mark_initialized(local_idx);
+            }
+            Rule::StructureDef => {
             }
             Rule::SiStmt => self.parse_if(pair)?,
             Rule::TantQueStmt => {

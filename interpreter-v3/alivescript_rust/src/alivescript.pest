@@ -25,7 +25,8 @@ stmtBloc = _{
   | TantQueStmt
   | TypeStmt
   | FnDef
-  | ClasseDef
+  | StructureDef
+  | ImplDef
   | subStmt ~ ("si" ~ Expr)?
 }
 
@@ -35,8 +36,7 @@ stmt = _{
 }
 
 subStmt = _{
-    AfficherStmt
-  | RetournerStmt
+    RetournerStmt
   | ContinuerStmt
   | SortirStmt
   | CommandStmt
@@ -65,6 +65,30 @@ FnBody =  {
 }
 finFn  = @{ "fin" ~ WHITESPACE+ ~ "fonction" }
 
+StructureDef  =  {
+    Docs? ~ eos* ~ "structure" ~ (#name = Ident) ~ eos+ ~ ClasseBody
+}
+StructureBody =  {
+    (StructureField ~ eos+)* ~ finStructure
+}
+finStructure  = @{ "fin" ~ WHITESPACE+ ~ "structure" }
+
+StructureField = {
+    (Const ~ Ident | Var? ~ Ident) ~ (":" ~ TypeExpr)? ~ (Assign ~ Expr)?
+}
+
+ImplDef  =  {
+    Docs? ~ eos* ~ PUSH("impl" | "implementation" | "implémentation") ~ (#name = Ident) ~ eos+ ~ (Methode ~ eos+)* ~ finImpl
+}
+finImpl = @{ "fin" ~ WHITESPACE+ ~ POP } // "impl" | "implementation" | "implémentation"
+Methode    =  { 
+    Docs? ~ eos* ~ PUSH("methode" | "méthode") ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ MethodeBody
+}
+MethodeBody =  {
+    (":" ~ Expr | eos ~ StmtBody? ~ finMethode)
+}
+finMethode = @{ "fin" ~ WHITESPACE+ ~ POP } // "methode" | "méthode"
+
 ClasseDef           =  {
     Docs? ~ eos* ~ "classe" ~ (#name = Ident) ~ eos+ ~ ClasseBody
 }
@@ -87,7 +111,6 @@ ClasseInit          =  {
 }
 finInit             = @{ "fin" ~ WHITESPACE+ ~ "init" }
 ClasseMethode       =  { ("methode" | "méthode") }
-finMethode          = @{ "fin" ~ WHITESPACE+ ~ ("methode" | "méthode") }
 
 Pub = @{ "pub" }
 

@@ -10,7 +10,7 @@ macro_rules! as_fonction_native {
      : $return_type:expr => $body:block) => {
          (
             String::from(std::stringify!($name)),
-            $crate::compiler::obj::Value::NativeFunction($crate::compiler::obj::NativeFunction {
+            $crate::compiler::obj::Value::NativeFunction($crate::compiler::value::NativeFunction {
                 name: std::sync::Arc::new(String::from(std::stringify!($name))),
                 desc: std::sync::Arc::new($crate::opt_value!($($desc)?)),
                 // std::vec![$(
