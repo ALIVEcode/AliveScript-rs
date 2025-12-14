@@ -9,13 +9,7 @@ use pest::Parser;
 
 // Assuming you have a core module that exposes the VM/Compiler logic
 use crate::{
-    compiler::{obj::Value, vm::VM, Compiler},
-    data::{Data, Response},
-    io::InterpretorIO,
-    parser::{build_ast_stmt, build_ast_stmts},
-    runner::Runner,
-    visitor::Visitor,
-    AlivescriptParser, Rule,
+    AlivescriptParser, Rule, compiler::{Compiler, obj::Value}, data::{Data, Response}, io::InterpretorIO, parser::{build_ast_stmt, build_ast_stmts}, runner::Runner, runtime::vm::VM, visitor::Visitor
 };
 
 // --- Configuration Constants ---

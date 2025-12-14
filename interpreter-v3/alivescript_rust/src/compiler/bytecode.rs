@@ -1,11 +1,11 @@
-use std::fmt::Debug;
+use std::{cell::RefCell, fmt::Debug, rc::Rc};
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use thiserror::Error;
 
 use crate::{
     ast::{BinCompcode, BinOpcode},
-    compiler::{bitmasks::BitArray, utils::format_table},
+    compiler::{Compiler, bitmasks::BitArray, utils::format_table},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
@@ -13,6 +13,8 @@ use crate::{
 pub enum Opcode {
     Constant,
     Closure,
+    Struct,
+
     GetUpvalue,
     SetUpvalue,
     GetLocal,
@@ -33,7 +35,10 @@ pub enum Opcode {
 
     NewList,
     GetItem,
+    SetItem,
+
     GetAttr,
+    SetAttr,
 }
 
 impl Opcode {
@@ -41,6 +46,7 @@ impl Opcode {
         match self {
             Opcode::Constant => "CONST",
             Opcode::Closure => "CLOSURE",
+            Opcode::Struct => "STRUCT",
             Opcode::GetUpvalue => "GET_UPVAL",
             Opcode::SetUpvalue => "SET_UPVAL",
             Opcode::GetLocal => "GET_LOCAL",
@@ -57,7 +63,9 @@ impl Opcode {
             Opcode::JumpIfFalse => "JUMP_IF_FALSE",
             Opcode::NewList => "NEW_LIST",
             Opcode::GetItem => "GET_ITEM",
+            Opcode::SetItem => "SET_ITEM",
             Opcode::GetAttr => "GET_ATTR",
+            Opcode::SetAttr => "SET_ATTR",
         }
     }
 
@@ -70,18 +78,23 @@ impl Opcode {
             | Opcode::SetLocal
             | Opcode::GetGlobal
             | Opcode::SetGlobal
-            | Opcode::NewList
-            | Opcode::GetAttr => 1,
+            | Opcode::NewList => 1,
 
             Opcode::Jump | Opcode::JumpIfFalse => 1,
 
-            Opcode::Closure => 1,
+            Opcode::Closure | Opcode::Struct => 1,
             Opcode::Call => 1,
-            Opcode::Return => todo!(),
+
+            Opcode::Return => 0,
 
             Opcode::BinOp | Opcode::BinComp => 1,
 
             Opcode::Pop | Opcode::GetItem | Opcode::Neg => 0,
+
+            Opcode::SetItem => 0,
+
+            Opcode::GetAttr => 1,
+            Opcode::SetAttr => 1,
         }
     }
 }
@@ -105,53 +118,108 @@ pub fn instructions_to_string(insts: &[u16]) -> Vec<String> {
         let mut inst_str = vec![];
 
         inst_str.push(format!("{}. {}", op_i, op.name()));
+        let args = (0..op.nargs())
+            .map(|_| {
+                iter.next()
+                    .expect(&format!("Missing arg for {}", op.name()))
+            })
+            .collect::<Vec<_>>();
+
+        inst_str.extend(args.iter().map(|arg| arg.to_string()));
 
         match op {
-            Opcode::Constant
-            | Opcode::SetLocal
-            | Opcode::GetLocal
-            | Opcode::GetUpvalue
-            | Opcode::SetUpvalue
-            | Opcode::GetGlobal
-            | Opcode::SetGlobal
-            | Opcode::Closure
-            | Opcode::Call
-            | Opcode::NewList => {
-                let Some(idx) = iter.next() else {
-                    panic!("Missing arg for {}", op.name());
-                };
-
-                inst_str.push(idx.to_string());
-            }
-
             Opcode::JumpIfFalse | Opcode::Jump => {
-                let Some(idx) = iter.next() else {
-                    panic!("Missing arg for {}", op.name());
-                };
+                let idx = args[0];
 
                 inst_str.push((*idx as i16 - JUMP_OFFSET).to_string());
                 // inst_str.push(format!("(to {})", op_i + idx));
             }
 
             Opcode::BinOp => {
-                let Some(op) = iter.next() else {
-                    panic!("Missing arg for {}", op.name());
-                };
-
+                let op = args[0];
                 let binop = BinOpcode::try_from(*op).expect(&format!("Invalid binop: {}", op));
 
-                inst_str.push(op.to_string());
                 inst_str.push(format!("({:?})", binop));
             }
             Opcode::BinComp => {
-                let Some(op) = iter.next() else {
-                    panic!("Missing arg for {}", op.name());
-                };
-
+                let op = args[0];
                 let binop = BinCompcode::try_from(*op).expect(&format!("Invalid bin comp: {}", op));
 
-                inst_str.push(op.to_string());
                 inst_str.push(format!("({:?})", binop));
+            }
+            _ => {}
+        }
+
+        instructions.push(inst_str);
+
+        op_i += 1;
+    }
+
+    let instructions = format_table(&instructions);
+
+    instructions
+}
+
+pub fn instructions_to_string_debug(insts: &[u16], compiler: Rc<RefCell<Compiler>>) -> Vec<String> {
+    let mut instructions = vec![];
+    let mut iter = insts.iter();
+
+    let mut op_i = 1;
+    while let Some(byte) = iter.next() {
+        let Ok(op) = Opcode::try_from(*byte) else {
+            panic!("Invalid opcode {}", byte);
+        };
+
+        let mut inst_str = vec![];
+
+        inst_str.push(format!("{}. {}", op_i, op.name()));
+        let args = (0..op.nargs())
+            .map(|_| {
+                iter.next()
+                    .expect(&format!("Missing arg for {}", op.name()))
+            })
+            .collect::<Vec<_>>();
+
+        inst_str.extend(args.iter().map(|arg| arg.to_string()));
+
+        match op {
+            Opcode::Constant => {
+                let idx = args[0];
+                inst_str.push(format!(
+                    "{:?}",
+                    compiler.borrow().function.borrow().constants[*idx as usize]
+                ));
+            }
+            Opcode::GetLocal | Opcode::SetLocal => {
+                let idx = args[0];
+                inst_str.push(format!(
+                    "{:?}",
+                    compiler.borrow().locals[*idx as usize].name
+                ));
+            }
+            Opcode::GetUpvalue | Opcode::SetUpvalue => {
+                let idx = args[0];
+                inst_str.push(format!("{:?}", compiler.borrow().upvalues[*idx as usize]));
+            }
+            Opcode::JumpIfFalse | Opcode::Jump => {
+                let idx = args[0];
+
+                inst_str.pop();
+                inst_str.push(format!("{}", (*idx as i16 - JUMP_OFFSET)));
+                // inst_str.push(format!("(to {})", op_i + idx));
+            }
+
+            Opcode::BinOp => {
+                let op = args[0];
+                let binop = BinOpcode::try_from(*op).expect(&format!("Invalid binop: {}", op));
+
+                inst_str.push(format!("{:?}", binop));
+            }
+            Opcode::BinComp => {
+                let op = args[0];
+                let binop = BinCompcode::try_from(*op).expect(&format!("Invalid bin comp: {}", op));
+
+                inst_str.push(format!("{:?}", binop));
             }
             _ => {}
         }
@@ -245,13 +313,27 @@ impl Instructions {
         self.emit_opcode(Opcode::GetItem);
     }
 
+    pub fn emit_set_item(&mut self) {
+        self.emit_opcode(Opcode::SetItem);
+    }
+
     pub fn emit_get_attr(&mut self, const_idx: u16) {
         self.emit_opcode(Opcode::GetAttr);
         self.emit_byte(const_idx);
     }
 
+    pub fn emit_set_attr(&mut self, const_idx: u16) {
+        self.emit_opcode(Opcode::SetAttr);
+        self.emit_byte(const_idx);
+    }
+
     pub fn emit_closure(&mut self, const_idx: u16) {
         self.emit_opcode(Opcode::Closure);
+        self.emit_byte(const_idx);
+    }
+
+    pub fn emit_struct(&mut self, const_idx: u16) {
+        self.emit_opcode(Opcode::Struct);
         self.emit_byte(const_idx);
     }
 

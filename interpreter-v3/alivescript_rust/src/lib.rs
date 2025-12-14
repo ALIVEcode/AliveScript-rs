@@ -21,6 +21,7 @@ pub mod utils;
 pub mod bench;
 
 pub mod compiler;
+pub mod runtime;
 
 pub mod cli;
 
@@ -33,7 +34,7 @@ use pest::pratt_parser::PrattParser;
 use pest::Parser;
 use pest_derive::Parser;
 
-use crate::compiler::vm::VM;
+use crate::runtime::vm::VM;
 use crate::compiler::Compiler;
 use crate::data::Data;
 use crate::io::InterpretorIO;

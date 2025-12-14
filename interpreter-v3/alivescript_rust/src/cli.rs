@@ -2,10 +2,7 @@ use clap::{Args, Parser, Subcommand};
 use pest::Parser as _;
 use std::{path::PathBuf, rc::Rc};
 
-use crate::{
-    compiler::{vm::VM, Compiler},
-    AlivescriptParser, Rule,
-};
+use crate::{AlivescriptParser, Rule, compiler::Compiler, runtime::vm::VM};
 
 // --- Utility Functions for Unimplemented Features ---
 

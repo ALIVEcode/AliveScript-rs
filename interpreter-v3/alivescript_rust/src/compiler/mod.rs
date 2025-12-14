@@ -1,9 +1,11 @@
 use std::{
     cell::{RefCell, RefMut},
+    collections::HashMap,
+    hash::Hash,
     iter,
     rc::Rc,
     str::FromStr,
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
 
 use pest::{
@@ -14,31 +16,30 @@ use pest::{
 
 use crate::{
     AlivescriptParser, Rule,
-    as_obj::{ASErreur, ASErreurType, ASType},
+    as_obj::{ASErreur, ASErreurType},
     ast::{
         AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, DefFn, Expr, FnParam, Stmt, Type,
         UnaryOpcode,
     },
     compiler::{
-        bytecode::{Instructions, JUMP_OFFSET, Opcode},
+        bytecode::{Instructions, JUMP_OFFSET, Opcode, instructions_to_string_debug},
         err::CompilationError,
         obj::{ArcClosure, Upvalue, UpvalueSpec, Value},
         parser::{PRATT_EXPR_PARSER, PRATT_TYPE_PARSER},
-        value::{Closure, Function},
+        utils::format_table,
+        value::{ASStructure, BaseType, Closure, Function, StructType, TypeSpec},
     },
     utils::Invert,
     visitor::{Visitable, Visitor},
 };
 
 mod bitmasks;
-mod bytecode;
+pub(crate) mod bytecode;
 mod err;
-mod module;
 pub mod obj;
 mod parser;
 mod utils;
 pub mod value;
-pub mod vm;
 
 macro_rules! unpack {
     ($pat:pat = $expr:expr) => {
@@ -52,8 +53,14 @@ pub struct Local {
     depth: i32,   // Scope depth: -1 = declared but not initialized,
     // 0+ = active scope levels.
     is_captured: bool, // Set to true if an inner function captures this variable.
-    var_type: ASType,
+    var_type: TypeSpec,
     is_const: bool,
+}
+
+#[derive(Debug)]
+pub struct LocalType {
+    spec: TypeSpec,
+    depth: i32,
 }
 
 #[derive(Debug)]
@@ -69,8 +76,9 @@ pub struct Compiler<'a> {
 
     // Scope & locals
     pub locals: Vec<Local>,
+    pub local_types: Vec<LocalType>,
     pub scope_depth: usize,
-    pub return_type: ASType,
+    pub return_type: TypeSpec,
 
     // Captured variables
     pub upvalues: Vec<UpvalueSpec>,
@@ -90,12 +98,13 @@ impl<'a> Compiler<'a> {
             code: Instructions::new(),
             parent: None,
             locals: vec![],
+            local_types: vec![],
             scope_depth: 0,
             upvalues: vec![],
             had_error: false,
             panic_mode: false,
             jump_stack: vec![],
-            return_type: ASType::Tout,
+            return_type: BaseType::Tout.into(),
         }
     }
 
@@ -104,7 +113,7 @@ impl<'a> Compiler<'a> {
         name: Option<String>,
         parent: Rc<RefCell<Compiler<'a>>>,
         nb_params: usize,
-        return_type: ASType,
+        return_type: TypeSpec,
     ) -> Self {
         Self {
             input,
@@ -112,6 +121,7 @@ impl<'a> Compiler<'a> {
             code: Instructions::new(),
             parent: Some(parent),
             locals: vec![],
+            local_types: vec![],
             scope_depth: 0,
             upvalues: vec![],
             had_error: false,
@@ -165,7 +175,19 @@ impl<'a> Compiler<'a> {
 
         rc_self.borrow_mut().finish();
 
-        println!("{:#?}", rc_self.borrow());
+        println!(
+            "----INSTRUCTIONS----\n{}",
+            instructions_to_string_debug(
+                &rc_self.borrow().function.borrow().code,
+                Rc::clone(&rc_self)
+            )
+            .join("\n")
+        );
+        println!("----LOCALS----\n{:#?}", rc_self.borrow().locals);
+        println!(
+            "----CONSTANTS----\n{:#?}",
+            rc_self.borrow().function.borrow().constants
+        );
 
         let x = Closure {
             function: Arc::new(rc_self.borrow().function.borrow().clone()),
@@ -232,6 +254,14 @@ impl<'a> Compiler<'a> {
 
             self.locals.pop();
         }
+        // Pop locals from this scope.
+        while let Some(local) = self.local_types.last() {
+            if local.depth <= self.scope_depth as i32 {
+                break;
+            }
+
+            self.local_types.pop();
+        }
     }
 
     // declare a local inner variable (no name)
@@ -240,18 +270,18 @@ impl<'a> Compiler<'a> {
             name: format!("(({}))", debug_name),
             depth: -1, // not initialized yet
             is_captured: false,
-            var_type: ASType::Tout,
+            var_type: BaseType::Tout.into(),
             is_const: false,
         });
         self.locals.len() as u16 - 1
     }
 
-    fn declare_local(&mut self, name: &str, var_type: ASType, is_const: bool) -> u16 {
+    fn declare_local(&mut self, name: &str, var_type: TypeSpec, is_const: bool) -> u16 {
         self.locals.push(Local {
             name: name.to_string(),
             depth: -1, // not initialized yet
             is_captured: false,
-            var_type,
+            var_type: var_type,
             is_const,
         });
         self.locals.len() as u16 - 1
@@ -261,6 +291,15 @@ impl<'a> Compiler<'a> {
         let local = self.locals.get_mut(index as usize).unwrap();
         local.depth = self.scope_depth as i32;
     }
+
+    fn declare_local_type(&mut self, name: &str, spec: TypeSpec) -> u16 {
+        self.local_types.push(LocalType {
+            spec,
+            depth: self.scope_depth as i32,
+        });
+        self.local_types.len() as u16 - 1
+    }
+
     // Helper to record an upvalue and return its index
     fn add_upvalue(&mut self, is_local: bool, index: usize) -> usize {
         let spec = if is_local {
@@ -407,7 +446,7 @@ trait Parser<'a> {
 
     fn parse_lit(&mut self, pair: Pair<Rule>) -> Result<(), CompilationError>;
 
-    fn parse_type(&mut self, pairs: Pairs<Rule>) -> Result<ASType, CompilationError>;
+    fn parse_type(&mut self, pairs: Pairs<Rule>) -> Result<TypeSpec, CompilationError>;
 
     fn parse_if(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
@@ -446,6 +485,14 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
             Rule::Lit => {
                 self.parse_lit(primary.into_inner().next().unwrap())?;
+            }
+
+            Rule::StructInit => {
+                let mut inner = primary.into_inner();
+
+                let struct_name = inner.next().unwrap().as_str();
+
+                while let Some(field) = inner.next() {}
             }
 
             Rule::FnCall => {
@@ -511,7 +558,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                         None,
                         Rc::clone(self),
                         0,
-                        return_type.unwrap_or(ASType::Tout),
+                        return_type.unwrap_or(BaseType::Tout.into()),
                     )));
                     c.parse_fn_params(params)?;
 
@@ -662,7 +709,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 .into());
             };
 
-            let mut static_type = ASType::Tout;
+            let mut static_type = BaseType::Tout.into();
             if let Some(static_type_pair) = inner.find_first_tagged("p_type") {
                 static_type = self.parse_type(static_type_pair.into_inner())?;
             }
@@ -698,7 +745,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
     fn parse_assign(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError> {
         let mut name = None;
-        let mut static_type = ASType::Tout;
+        let mut static_type = BaseType::Tout.into();
         let mut op = None;
         // let mut var_list = None;
 
@@ -758,7 +805,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         }
 
         // 3. It defines a new local variable
-        let local_idx = compiler.declare_local(name, ASType::Tout, false);
+        let local_idx = compiler.declare_local(name, BaseType::Tout.into(), false);
 
         compiler.mark_initialized(local_idx);
         compiler.code.emit_set_local(local_idx);
@@ -768,7 +815,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
     fn parse_declare(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError> {
         let mut name = None;
-        let mut static_type = ASType::Tout;
+        let mut static_type = BaseType::Tout.into();
         let mut is_const = false;
         let mut public = false;
         // let mut var_list = None;
@@ -848,18 +895,20 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         Ok(())
     }
 
-    fn parse_type(&mut self, pairs: Pairs<Rule>) -> Result<ASType, CompilationError> {
+    fn parse_type(&mut self, pairs: Pairs<Rule>) -> Result<TypeSpec, CompilationError> {
         PRATT_TYPE_PARSER
             .map_primary(|primary| match primary.as_rule() {
                 Rule::TypeExpr => Rc::clone(self).parse_type(primary.into_inner()),
-                Rule::Ident => Ok(ASType::from_str(primary.as_str()).map_err(|e| {
-                    PestError::new_from_span(
-                        PestErrorVariant::CustomError {
-                            message: format!("Unknown type {}", primary.as_str()),
-                        },
-                        primary.as_span(),
-                    )
-                })?),
+                Rule::Ident => Ok(BaseType::from_str(primary.as_str())
+                    .map_err(|e| {
+                        PestError::new_from_span(
+                            PestErrorVariant::CustomError {
+                                message: format!("Unknown type {}", primary.as_str()),
+                            },
+                            primary.as_span(),
+                        )
+                    })?
+                    .into()),
                 // Rule::Lit => Ok(Box::new(Type::Lit(self.parse_lit(
                 //     primary.into_inner().next().unwrap(),
                 // )?))),
@@ -880,14 +929,17 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     for arg in postfix.into_inner() {
                         type_args.push(Rc::clone(self).parse_type(arg.into_inner())?);
                     }
-                    Ok(lhs?.with_type_args(type_args).map_err(|err| {
-                        PestError::new_from_span(
-                            PestErrorVariant::CustomError {
-                                message: format!("{}", err.to_string()),
-                            },
-                            span,
-                        )
-                    })?)
+                    Ok(lhs?
+                        .compute(type_args)
+                        .map_err(|err| {
+                            PestError::new_from_span(
+                                PestErrorVariant::CustomError {
+                                    message: format!("{}", err.to_string()),
+                                },
+                                span,
+                            )
+                        })?
+                        .into())
                 }
                 _ => todo!(),
             })
@@ -1061,7 +1113,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
                 let local_idx = self.borrow_mut().declare_local(
                     name.as_ref().unwrap(),
-                    ASType::Fonction,
+                    BaseType::Fonction.into(),
                     false,
                 );
 
@@ -1083,7 +1135,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                         name.clone(),
                         Rc::clone(self),
                         0,
-                        return_type.unwrap_or(ASType::Tout),
+                        return_type.unwrap_or(BaseType::Tout.into()),
                     )));
                     c.parse_fn_params(params)?;
 
@@ -1106,7 +1158,41 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 self.borrow_mut().code.emit_closure(idx as u16);
                 self.borrow_mut().mark_initialized(local_idx);
             }
-            Rule::StructureDef => {}
+
+            Rule::StructureDef => {
+                let mut inner = pair.into_inner();
+
+                let name = inner
+                    .find_first_tagged("name")
+                    .map(|node| node.as_str().to_string())
+                    .unwrap();
+
+                // let mut struct_fields = HashMap::new();
+                let fields_token = inner
+                    .find(|node| node.as_rule() == Rule::StructureBody)
+                    .unwrap()
+                    .into_inner();
+
+                let mut field_types = HashMap::new();
+                for field in fields_token {}
+
+                let structure = ASStructure::new(name.clone(), HashMap::new());
+
+                let idx = self
+                    .borrow_mut()
+                    .get_or_add_const(Value::Structure(Arc::new(RwLock::new(structure))));
+
+                self.borrow_mut().declare_local_type(
+                    &name,
+                    TypeSpec::new_simple(
+                        name.clone(),
+                        BaseType::Struct(StructType::new(name.clone(), field_types)),
+                    ),
+                );
+
+                self.borrow_mut().code.emit_struct(idx as u16);
+            }
+
             Rule::SiStmt => self.parse_if(pair)?,
 
             Rule::RepeterStmt => {

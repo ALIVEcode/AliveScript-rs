@@ -66,7 +66,7 @@ FnBody =  {
 finFn  = @{ "fin" ~ WHITESPACE+ ~ "fonction" }
 
 StructureDef  =  {
-    Docs? ~ eos* ~ "structure" ~ (#name = Ident) ~ eos+ ~ ClasseBody
+    Docs? ~ eos* ~ "structure" ~ (#name = Ident) ~ eos+ ~ StructureBody
 }
 StructureBody =  {
     (StructureField ~ eos+)* ~ finStructure
@@ -77,10 +77,10 @@ StructureField = {
     (Const ~ Ident | Var? ~ Ident) ~ (":" ~ TypeExpr)? ~ (Assign ~ Expr)?
 }
 
-ImplDef     =  {
+ImplDef =  {
     Docs? ~ eos* ~ PUSH("impl" | "implementation" | "implémentation") ~ (#name = Ident) ~ eos+ ~ (Methode ~ eos+)* ~ finImpl
 }
-finImpl     = @{ "fin" ~ WHITESPACE+ ~ POP }
+finImpl = @{ "fin" ~ WHITESPACE+ ~ POP }
 // "impl" | "implementation" | "implémentation"
 Methode     =  {
     Docs? ~ eos* ~ PUSH("methode" | "méthode") ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ MethodeBody
@@ -307,11 +307,15 @@ term = _{
   | FnExpr
   | FnCall
   | DebutBloc
+  | StructInit
   | Ident
   | List
   | Dict
   | "(" ~ NEWLINE* ~ Expr ~ NEWLINE* ~ ")"
 }
+
+StructInit      = { Ident ~ "{" ~ (StructInitField ~ ",")* ~ StructInitField? ~ "}" }
+StructInitField = { Ident ~ ":" ~ Expr }
 
 DebutBloc = { ("debut" | "début") ~ eos+ ~ (!"fin" ~ stmtBloc ~ eos+)* ~ "fin" }
 

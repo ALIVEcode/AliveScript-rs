@@ -11,10 +11,10 @@ use crate::{
     ast::{BinCompcode, BinOpcode, CallRust},
     compiler::{
         bytecode::{JUMP_OFFSET, Opcode},
-        module::BUILTIN_MOD,
         obj::{ArcClosure, ArcUpvalue, CallFrame, Upvalue, UpvalueLocation, UpvalueSpec, Value},
         value::{Closure, NativeFunction},
     },
+    runtime::{err::RuntimeError, module::BUILTIN_MOD},
 };
 
 pub struct VM {
@@ -61,8 +61,10 @@ impl VM {
         &self.stack[idx]
     }
 
-    fn get_frame(&mut self) -> Result<&mut CallFrame, String> {
-        self.frames.last_mut().ok_or("no frame".into())
+    fn get_frame(&mut self) -> Result<&mut CallFrame, RuntimeError> {
+        self.frames
+            .last_mut()
+            .ok_or(RuntimeError::generic_err("no frame"))
     }
 
     fn close_upvalues(&mut self, frame_base: usize) {
@@ -88,11 +90,11 @@ impl VM {
         }
     }
 
-    pub fn run(&mut self, closure: Closure) -> Result<Value, String> {
+    pub fn run(&mut self, closure: Closure) -> Result<Value, RuntimeError> {
         self.run_shared_closure(Arc::new(closure))
     }
 
-    pub fn run_shared_closure(&mut self, closure: ArcClosure) -> Result<Value, String> {
+    pub fn run_shared_closure(&mut self, closure: ArcClosure) -> Result<Value, RuntimeError> {
         self.frames.push(CallFrame {
             closure: closure.clone(),
             ip: 0,
@@ -102,7 +104,7 @@ impl VM {
             let frame = self.get_frame()?;
             let fnc = &frame.closure.function;
             if frame.ip >= fnc.code.len() {
-                return Err("IP out of range".into());
+                return Err(RuntimeError::generic_err("IP out of range"));
             }
             let op = Opcode::try_from(fnc.code[frame.ip]).expect("Value expected to be an opcode");
             frame.ip += 1;
@@ -116,7 +118,7 @@ impl VM {
                 }
                 Opcode::Neg => {
                     let val = self.pop().unwrap();
-                    self.push(Value::Entier(0) - val);
+                    self.push((Value::Entier(0) - val)?);
                 }
                 Opcode::NewList => {
                     let nb_el = fnc.code[frame.ip];
@@ -204,7 +206,13 @@ impl VM {
 
                     self.push(result);
                 }
+                Opcode::SetItem => {
+                    todo!()
+                }
                 Opcode::GetAttr => {
+                    todo!()
+                }
+                Opcode::SetAttr => {
                     todo!()
                 }
                 Opcode::Closure => {
@@ -216,9 +224,9 @@ impl VM {
                     let proto_closure = match &fnc.constants[const_idx] {
                         Value::Closure(rc_cl) => rc_cl.clone(),
                         _ => {
-                            return Err(
-                                "CLOSURE constant must be a Function wrapped as Closure".into()
-                            );
+                            return Err(RuntimeError::generic_err(
+                                "CLOSURE constant must be a Function wrapped as Closure",
+                            ));
                         }
                     };
                     let function = proto_closure.function.clone();
@@ -264,7 +272,9 @@ impl VM {
                                     .closure
                                     .upvalues
                                     .get(*parent_index)
-                                    .ok_or("parent upvalue index out of range")?;
+                                    .ok_or(RuntimeError::generic_err(
+                                        "parent upvalue index out of range",
+                                    ))?;
                                 closure_upvalues.push(parent_uv.clone());
                             }
                         }
@@ -275,6 +285,19 @@ impl VM {
                     });
                     self.push(Value::Closure(new_closure));
                 }
+                Opcode::Struct => {
+                    let const_idx = fnc.code[frame.ip] as usize;
+                    frame.ip += 1;
+
+                    let structure = match &fnc.constants[const_idx] {
+                        Value::Structure(rc_cl) => rc_cl.clone(),
+                        _ => {
+                            return Err(RuntimeError::generic_err(
+                                "STRUCTURE constant must be a Structure",
+                            ));
+                        }
+                    };
+                }
                 Opcode::GetUpvalue => {
                     let idx = fnc.code[frame.ip] as usize;
                     frame.ip += 1;
@@ -283,7 +306,7 @@ impl VM {
                             .closure
                             .upvalues
                             .get(idx)
-                            .ok_or("get upvalue out of range")?,
+                            .ok_or(RuntimeError::generic_err("get upvalue out of range"))?,
                     );
                     let v = uv.read().unwrap().get(self);
                     self.push(v);
@@ -295,7 +318,7 @@ impl VM {
                         .closure
                         .upvalues
                         .get(idx)
-                        .ok_or("set upvalue out of range")?
+                        .ok_or(RuntimeError::generic_err("set upvalue out of range"))?
                         .clone();
 
                     let val = self.pop().unwrap_or(Value::Nul);
@@ -307,11 +330,15 @@ impl VM {
                     let ip = frame.ip;
                     let idx = frame.base + slot;
 
-                    let v = self.stack.get(idx).cloned().ok_or(format!(
-                        "Variable sans valeur (ip={}, idx={})",
-                        ip - 1,
-                        idx
-                    ))?;
+                    let v = self
+                        .stack
+                        .get(idx)
+                        .cloned()
+                        .ok_or(RuntimeError::generic_err(format!(
+                            "Variable sans valeur (ip={}, idx={})",
+                            ip - 1,
+                            idx
+                        )))?;
 
                     self.push(v);
                 }
@@ -320,7 +347,9 @@ impl VM {
                     frame.ip += 1;
                     let idx = frame.base + slot;
 
-                    let val = self.pop().ok_or("Missing value in SET_LOCAL")?;
+                    let val = self
+                        .pop()
+                        .ok_or(RuntimeError::generic_err("Missing value in SET_LOCAL"))?;
                     if idx >= self.stack.len() {
                         // expand stack to fit local (for simplicity)
                         self.stack.resize(idx + 1, Value::Nul);
@@ -336,11 +365,9 @@ impl VM {
                     };
                     let name = name.clone();
 
-                    let v = self
-                        .global_table
-                        .get(&name)
-                        .cloned()
-                        .ok_or_else(|| format!("Variable globale inconnue {:?}", name))?;
+                    let v = self.global_table.get(&name).cloned().ok_or_else(|| {
+                        RuntimeError::generic_err(format!("Variable globale inconnue {:?}", name))
+                    })?;
 
                     self.push(v);
                 }
@@ -353,7 +380,9 @@ impl VM {
                     };
                     let name = name.clone();
 
-                    let val = self.pop().ok_or("Missing value in SET_LOCAL")?;
+                    let val = self
+                        .pop()
+                        .ok_or(RuntimeError::generic_err("Missing value in SET_LOCAL"))?;
 
                     self.global_table.insert(name, val);
                 }
@@ -376,7 +405,7 @@ impl VM {
                             // remove the function that is still on the stack
                             self.pop();
 
-                            let result = (f.func)(self, args.into()).map_err(|e| e.to_string())?;
+                            let result = (f.func)(self, args.into())?;
 
                             self.push(result.unwrap_or(Value::Nul));
                         }
@@ -390,14 +419,20 @@ impl VM {
                             });
                         }
                         _ => {
-                            return Err(format!("Cannot call value of type: {}", func.get_type()));
+                            return Err(RuntimeError::generic_err(format!(
+                                "Cannot call value of type: {}",
+                                func.get_type()
+                            )));
                         }
                     }
                 }
                 Opcode::Return => {
                     let ret = self.pop().unwrap_or(Value::Nul);
 
-                    let frame = self.frames.pop().ok_or("return with no frame")?;
+                    let frame = self
+                        .frames
+                        .pop()
+                        .ok_or(RuntimeError::generic_err("return with no frame"))?;
                     self.close_upvalues(frame.base);
                     // remove stack entries above base (leave space where callee was)
                     self.stack.truncate(frame.base);
@@ -417,13 +452,13 @@ impl VM {
 
                     let binop = BinOpcode::try_from(op).expect(&format!("Invalid binop: {}", op));
 
-                    let arg2 = self
-                        .pop()
-                        .ok_or_else(|| format!("Missing rhs in {:?}", op))?;
+                    let arg2 = self.pop().ok_or_else(|| {
+                        RuntimeError::generic_err(format!("Missing rhs in {:?}", op))
+                    })?;
 
-                    let arg1 = self
-                        .pop()
-                        .ok_or_else(|| format!("Missing rhs in {:?}", op))?;
+                    let arg1 = self.pop().ok_or_else(|| {
+                        RuntimeError::generic_err(format!("Missing rhs in {:?}", op))
+                    })?;
 
                     self.push(match binop {
                         BinOpcode::Mul => arg1 * arg2,
@@ -432,14 +467,14 @@ impl VM {
                         BinOpcode::Add => arg1 + arg2,
                         BinOpcode::Sub => arg1 - arg2,
                         BinOpcode::Exp => arg1.pow(arg2),
-                        BinOpcode::Mod => (arg1 % arg2).map_err(|err| err.to_string())?,
-                        BinOpcode::Extend => arg1.extend(arg2).map_err(|err| err.to_string())?,
-                        BinOpcode::BitwiseOr => (arg1 | arg2).map_err(|err| err.to_string())?,
-                        BinOpcode::BitwiseAnd => (arg1 & arg2).map_err(|err| err.to_string())?,
-                        BinOpcode::BitwiseXor => (arg1 ^ arg2).map_err(|err| err.to_string())?,
-                        BinOpcode::ShiftLeft => (arg1 << arg2).map_err(|err| err.to_string())?,
-                        BinOpcode::ShiftRight => (arg1 >> arg2).map_err(|err| err.to_string())?,
-                    });
+                        BinOpcode::Mod => arg1 % arg2,
+                        BinOpcode::Extend => arg1.extend(arg2),
+                        BinOpcode::BitwiseOr => arg1 | arg2,
+                        BinOpcode::BitwiseAnd => arg1 & arg2,
+                        BinOpcode::BitwiseXor => arg1 ^ arg2,
+                        BinOpcode::ShiftLeft => arg1 << arg2,
+                        BinOpcode::ShiftRight => arg1 >> arg2,
+                    }?);
                 }
                 Opcode::BinComp => {
                     let op = fnc.code[frame.ip];
@@ -447,13 +482,13 @@ impl VM {
 
                     let binop = BinCompcode::try_from(op).expect(&format!("Invalid binop: {}", op));
 
-                    let arg2 = self
-                        .pop()
-                        .ok_or_else(|| format!("Missing rhs in {:?}", op))?;
+                    let arg2 = self.pop().ok_or_else(|| {
+                        RuntimeError::generic_err(format!("Missing rhs in {:?}", op))
+                    })?;
 
-                    let arg1 = self
-                        .pop()
-                        .ok_or_else(|| format!("Missing lhs in {:?}", op))?;
+                    let arg1 = self.pop().ok_or_else(|| {
+                        RuntimeError::generic_err(format!("Missing rhs in {:?}", op))
+                    })?;
 
                     self.push(
                         Value::Booleen(match binop {
@@ -463,10 +498,8 @@ impl VM {
                             BinCompcode::Gth => arg1 > arg2,
                             BinCompcode::Geq => arg1 >= arg2,
                             BinCompcode::Leq => arg1 <= arg2,
-                            BinCompcode::Dans => arg2.contains(&arg1).map_err(|e| e.to_string())?,
-                            BinCompcode::PasDans => {
-                                !arg2.contains(&arg1).map_err(|e| e.to_string())?
-                            }
+                            BinCompcode::Dans => arg2.contains(&arg1)?,
+                            BinCompcode::PasDans => !arg2.contains(&arg1)?,
                         })
                         .into(),
                     );

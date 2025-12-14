@@ -3,11 +3,11 @@ use std::fmt::{Debug, Display};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub};
 use std::sync::{Arc, Mutex, RwLock};
 
-use crate::as_obj::{self, ASErreurType, ASType};
+use crate::as_obj::{self, ASErreurType};
 use crate::ast::CallRust;
-use crate::compiler::bytecode::{Instructions, instructions_to_string};
-use crate::compiler::value::{ASStructure, Closure, Function, NativeFunction};
-use crate::compiler::vm::VM;
+use crate::compiler::value::{ASStructure, BaseType, Closure, Function, NativeFunction};
+use crate::runtime::err::RuntimeError;
+use crate::runtime::vm::VM;
 
 pub type ArcUpvalue = Arc<RwLock<Upvalue>>;
 pub type ArcClosure = Arc<Closure>;
@@ -23,7 +23,7 @@ pub enum Value {
     Closure(ArcClosure),
     NativeFunction(NativeFunction),
     Liste(Arc<RwLock<Vec<Value>>>),
-    TypeObj(ASType),
+    TypeObj(BaseType),
     Structure(Arc<RwLock<ASStructure>>),
 }
 
@@ -32,26 +32,26 @@ impl Value {
         Self::Liste(Arc::new(RwLock::new(values)))
     }
 
-    pub fn get_type(&self) -> ASType {
+    pub fn get_type(&self) -> BaseType {
         use Value as V;
 
         match self {
-            V::Entier(..) => ASType::Entier,
-            V::Decimal(..) => ASType::Decimal,
-            V::Texte(..) => ASType::Texte,
-            V::Nul => ASType::Nul,
-            V::Booleen(..) => ASType::Booleen,
-            V::Liste(lst) => ASType::Liste(Box::new(
+            V::Entier(..) => BaseType::Entier,
+            V::Decimal(..) => BaseType::Decimal,
+            V::Texte(..) => BaseType::Texte,
+            V::Nul => BaseType::Nul,
+            V::Booleen(..) => BaseType::Booleen,
+            V::Liste(lst) => BaseType::Liste(Box::new(
                 lst.read()
                     .unwrap()
                     .iter()
                     .map(|v| v.get_type())
-                    .reduce(|t1, t2| ASType::union_of(t1, t2))
-                    .unwrap_or(ASType::Tout),
+                    .reduce(|t1, t2| BaseType::union_of(t1, t2))
+                    .unwrap_or(BaseType::Tout),
             )),
-            V::Closure(..) => ASType::Fonction,
-            V::NativeFunction(..) => ASType::Fonction,
-            V::TypeObj(t) => ASType::Type,
+            V::Closure(..) => BaseType::Fonction,
+            V::NativeFunction(..) => BaseType::Fonction,
+            V::TypeObj(t) => BaseType::Type,
             as_type => todo!("Type inconnue {:?}", as_type),
         }
     }
@@ -70,35 +70,43 @@ impl Value {
         }
     }
 
-    pub fn div_int(&self, rhs: Self) -> Value {
+    pub fn div_int(&self, rhs: Self) -> Result<Value, RuntimeError> {
         use Value as V;
 
-        match (self, rhs) {
+        Ok(match (self, rhs) {
             (V::Entier(x), V::Entier(y)) => V::Entier(x / y),
             (V::Decimal(x), V::Entier(y)) => V::Entier(*x as i64 / y),
             (V::Entier(x), V::Decimal(y)) => V::Entier(x / y as i64),
             (V::Decimal(x), V::Decimal(y)) => V::Entier(*x as i64 / y as i64),
-            _ => unimplemented!(),
-        }
+            (_, rhs) => Err(RuntimeError::invalid_op(
+                "++",
+                self.get_type(),
+                rhs.get_type(),
+            ))?,
+        })
     }
 
-    pub fn pow(&self, rhs: Self) -> Value {
+    pub fn pow(&self, rhs: Self) -> Result<Value, RuntimeError> {
         use Value as V;
 
-        match (self, rhs) {
+        Ok(match (self, rhs) {
             (V::Entier(x), V::Entier(y)) => V::Entier(x.pow(y as u32)),
             (V::Decimal(x), V::Entier(y)) => V::Decimal(x.powi(y as i32)),
             (V::Entier(x), V::Decimal(y)) => V::Decimal((*x as f64).powf(y)),
             (V::Decimal(x), V::Decimal(y)) => V::Decimal(x.powf(y)),
-            _ => unimplemented!(),
-        }
+            (_, rhs) => Err(RuntimeError::invalid_op(
+                "++",
+                self.get_type(),
+                rhs.get_type(),
+            ))?,
+        })
     }
 
-    pub fn extend(&self, rhs: Self) -> Result<Value, ASErreurType> {
+    pub fn extend(&self, rhs: Self) -> Result<Value, RuntimeError> {
         use Value as V;
 
         match (self, rhs) {
-            (Value::Texte(s), rhs @ Value::Texte(..)) => Ok(self.clone() + rhs),
+            (Value::Texte(s), rhs @ Value::Texte(..)) => self.clone() + rhs,
             (Value::Liste(l), Value::Liste(l2)) => {
                 let mut l3 = l.read().unwrap().clone();
                 l3.extend(l2.read().unwrap().to_owned());
@@ -106,7 +114,7 @@ impl Value {
             }
 
             // (ASDict(d), ASDict(d2)) => {
-            //     let mut d3 = d.borrow().clone();
+            //     let mut d3 = d.borrow().clone();+
             //     for e in d2.borrow().items() {
             //         d3.insert(e.key().to_owned(), e.val().to_owned());
             //     }
@@ -116,15 +124,15 @@ impl Value {
             // (ASTuple(_), _) => todo!("Tuple pas encore (et peut-être jamais) dans le langage"),
             // (ASClasse(classe), _) => todo!("Check présense du field?"),
             // (ASModule { name, alias, env }, _) => todo!(),
-            (_, rhs) => Err(ASErreurType::new_erreur_operation(
-                "++".into(),
+            (_, rhs) => Err(RuntimeError::invalid_op(
+                "++",
                 self.get_type(),
                 rhs.get_type(),
             )),
         }
     }
 
-    pub fn contains(&self, rhs: &Self) -> Result<bool, ASErreurType> {
+    pub fn contains(&self, rhs: &Self) -> Result<bool, RuntimeError> {
         use Value as V;
 
         match (self, rhs) {
@@ -135,8 +143,8 @@ impl Value {
             // (ASTuple(_), _) => todo!("Tuple pas encore (et peut-être jamais) dans le langage"),
             // (ASClasse(classe), _) => todo!("Check présense du field?"),
             // (ASModule { name, alias, env }, _) => todo!(),
-            _ => Err(ASErreurType::new_erreur_operation(
-                "dans".into(),
+            _ => Err(RuntimeError::invalid_op(
+                "dans",
                 self.get_type(),
                 rhs.get_type(),
             )),
@@ -309,10 +317,10 @@ impl PartialEq for Value {
 }
 
 impl Add for Value {
-    type Output = Value;
+    type Output = Result<Value, RuntimeError>;
 
     fn add(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
+        Ok(match (self, rhs) {
             (Value::Liste(l), any) => Value::Liste({
                 let mut l = l.read().unwrap().clone();
                 l.push(any);
@@ -324,31 +332,31 @@ impl Add for Value {
             (Value::Decimal(x), Value::Entier(y)) => Value::Decimal(x + y as f64).into(),
             (Value::Entier(x), Value::Decimal(y)) => Value::Decimal(x as f64 + y).into(),
             (Value::Decimal(x), Value::Decimal(y)) => Value::Decimal(x + y).into(),
-            (l, r) => unimplemented!("Add for {} and {}", l, r),
-        }
+            (l, r) => Err(RuntimeError::invalid_op("+", l.get_type(), r.get_type()))?,
+        })
     }
 }
 
 impl Sub for Value {
-    type Output = Value;
+    type Output = Result<Value, RuntimeError>;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
+        Ok(match (self, rhs) {
             (Value::Texte(s), Value::Texte(s2)) => Value::Texte(s.replace(s2.as_str(), "")),
             (Value::Entier(x), Value::Entier(y)) => Value::Entier(x - y),
             (Value::Decimal(x), Value::Entier(y)) => Value::Decimal(x - y as f64),
             (Value::Entier(x), Value::Decimal(y)) => Value::Decimal(x as f64 - y),
             (Value::Decimal(x), Value::Decimal(y)) => Value::Decimal(x - y),
-            _ => unimplemented!(),
-        }
+            (l, r) => Err(RuntimeError::invalid_op("-", l.get_type(), r.get_type()))?,
+        })
     }
 }
 
 impl Mul for Value {
-    type Output = Value;
+    type Output = Result<Value, RuntimeError>;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
+        Ok(match (self, rhs) {
             (Value::Texte(s), Value::Entier(n)) => {
                 Value::Texte(s.repeat(if n >= 0 { n as usize } else { 0 }))
             }
@@ -368,27 +376,27 @@ impl Mul for Value {
                 }
                 Arc::new(RwLock::new(new_vec))
             }),
-            _ => unimplemented!(),
-        }
+            (l, r) => Err(RuntimeError::invalid_op("*", l.get_type(), r.get_type()))?,
+        })
     }
 }
 
 impl Div for Value {
-    type Output = Value;
+    type Output = Result<Value, RuntimeError>;
 
     fn div(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
+        Ok(match (self, rhs) {
             (Value::Entier(x), Value::Entier(y)) => Value::Decimal(x as f64 / y as f64),
             (Value::Decimal(x), Value::Entier(y)) => Value::Decimal(x / y as f64),
             (Value::Entier(x), Value::Decimal(y)) => Value::Decimal(x as f64 / y),
             (Value::Decimal(x), Value::Decimal(y)) => Value::Decimal(x / y),
-            _ => unimplemented!(),
-        }
+            (l, r) => Err(RuntimeError::invalid_op("*", l.get_type(), r.get_type()))?,
+        })
     }
 }
 
 impl Rem for Value {
-    type Output = Result<Value, ASErreurType>;
+    type Output = Result<Value, RuntimeError>;
 
     fn rem(self, rhs: Self) -> Self::Output {
         let type_1 = self.get_type().clone();
@@ -401,17 +409,13 @@ impl Rem for Value {
             }
             (Value::Entier(x), Value::Decimal(y)) => Value::Decimal((x as f64 % y + y) % y),
             (Value::Decimal(x), Value::Decimal(y)) => Value::Decimal((x % y + y) % y),
-            _ => Err(ASErreurType::new_erreur_operation(
-                "% (modulo)".into(),
-                type_1,
-                type_2,
-            ))?,
+            _ => Err(RuntimeError::invalid_op("% (modulo)", type_1, type_2))?,
         })
     }
 }
 
 impl BitXor for Value {
-    type Output = Result<Value, ASErreurType>;
+    type Output = Result<Value, RuntimeError>;
 
     fn bitxor(self, rhs: Self) -> Self::Output {
         let type_1 = self.get_type().clone();
@@ -420,17 +424,13 @@ impl BitXor for Value {
         match (self, rhs) {
             (Value::Entier(x), Value::Entier(y)) => Ok(Value::Entier(x ^ y)),
             (Value::Booleen(x), Value::Booleen(y)) => Ok(Value::Booleen(x ^ y)),
-            _ => Err(ASErreurType::new_erreur_operation(
-                "xor".into(),
-                type_1,
-                type_2,
-            )),
+            _ => Err(RuntimeError::invalid_op("xor", type_1, type_2))?,
         }
     }
 }
 
 impl BitAnd for Value {
-    type Output = Result<Value, ASErreurType>;
+    type Output = Result<Value, RuntimeError>;
 
     fn bitand(self, rhs: Self) -> Self::Output {
         let type_1 = self.get_type().clone();
@@ -439,17 +439,13 @@ impl BitAnd for Value {
         match (self, rhs) {
             (Value::Entier(x), Value::Entier(y)) => Ok(Value::Entier(x & y)),
             (Value::Booleen(x), Value::Booleen(y)) => Ok(Value::Booleen(x & y)),
-            _ => Err(ASErreurType::new_erreur_operation(
-                "&".into(),
-                type_1,
-                type_2,
-            )),
+            _ => Err(RuntimeError::invalid_op("&", type_1, type_2))?,
         }
     }
 }
 
 impl BitOr for Value {
-    type Output = Result<Value, ASErreurType>;
+    type Output = Result<Value, RuntimeError>;
 
     fn bitor(self, rhs: Self) -> Self::Output {
         let type_1 = self.get_type().clone();
@@ -458,17 +454,13 @@ impl BitOr for Value {
         match (self, rhs) {
             (Value::Entier(x), Value::Entier(y)) => Ok(Value::Entier(x | y).into()),
             (Value::Booleen(x), Value::Booleen(y)) => Ok(Value::Booleen(x | y).into()),
-            _ => Err(ASErreurType::new_erreur_operation(
-                "|".into(),
-                type_1,
-                type_2,
-            )),
+            _ => Err(RuntimeError::invalid_op("|", type_1, type_2))?,
         }
     }
 }
 
 impl Shl for Value {
-    type Output = Result<Value, ASErreurType>;
+    type Output = Result<Value, RuntimeError>;
 
     fn shl(self, rhs: Self) -> Self::Output {
         let type_1 = self.get_type().clone();
@@ -476,17 +468,13 @@ impl Shl for Value {
 
         match (self, rhs) {
             (Value::Entier(x), Value::Entier(y)) => Ok(Value::Entier(x << y)),
-            _ => Err(ASErreurType::new_erreur_operation(
-                "<<".into(),
-                type_1,
-                type_2,
-            )),
+            _ => Err(RuntimeError::invalid_op("<<", type_1, type_2))?,
         }
     }
 }
 
 impl Shr for Value {
-    type Output = Result<Value, ASErreurType>;
+    type Output = Result<Value, RuntimeError>;
 
     fn shr(self, rhs: Self) -> Self::Output {
         let type_1 = self.get_type().clone();
@@ -494,11 +482,7 @@ impl Shr for Value {
 
         match (self, rhs) {
             (Value::Entier(x), Value::Entier(y)) => Ok(Value::Entier(x >> y)),
-            _ => Err(ASErreurType::new_erreur_operation(
-                ">>".into(),
-                type_1,
-                type_2,
-            )),
+            _ => Err(RuntimeError::invalid_op(">>", type_1, type_2))?,
         }
     }
 }

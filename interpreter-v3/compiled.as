@@ -60,6 +60,13 @@ afficher x
 
 afficher tailleDe(ls)
 
-répéter
-  afficher 2
-fin répéter
+structure Point
+  x: entier
+  y: entier
+fin structure
+
+
+var p = Point { x: 10, y: 11 }
+afficher p
+
+
