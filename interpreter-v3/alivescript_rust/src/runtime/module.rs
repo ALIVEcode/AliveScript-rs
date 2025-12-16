@@ -1,8 +1,4 @@
-use crate::{
-    as_mod,
-    as_obj::ASObj,
-    compiler::{obj::Value, value::BaseType},
-};
+use crate::compiler::{obj::Value, value::BaseType};
 
 #[macro_export]
 macro_rules! as_fonction_native {
@@ -10,7 +6,7 @@ macro_rules! as_fonction_native {
      : $return_type:expr => $body:block) => {
          (
             String::from(std::stringify!($name)),
-            $crate::compiler::obj::Value::NativeFunction($crate::compiler::value::NativeFunction {
+            $crate::compiler::obj::Value::Function($crate::compiler::obj::Function::NativeFunction($crate::compiler::value::NativeFunction {
                 name: std::sync::Arc::new(String::from(std::stringify!($name))),
                 desc: std::sync::Arc::new($crate::opt_value!($($desc)?)),
                 // std::vec![$(
@@ -40,7 +36,7 @@ macro_rules! as_fonction_native {
                     $body
                 }),
                 // $return_type,
-            })
+            }))
          )
      };
 }

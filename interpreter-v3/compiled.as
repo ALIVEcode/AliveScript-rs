@@ -69,15 +69,26 @@ structure Point
   y: entier = 12
 fin structure
 
+implémentation Point
+  methode creer_vide() -> Point
+    retourner Point {x: 0, y: 0}
+  fin methode
+
+  méthode getX(inst)
+    retourner "from getX: " + inst.x
+  fin méthode
+fin implémentation
 
 var p = Point {}
 x = 22
 var p2 = Point {}
 afficher p
 afficher p2.y
-afficher p
+afficher p.getX()
 afficher p2
 afficher p
 
+var p3 = Point.creer_vide()
+afficher p3
 
 

@@ -21,7 +21,10 @@ use crate::{
         err::CompilationError,
         obj::{ArcClosure, UpvalueSpec, Value},
         parser::{PRATT_EXPR_PARSER, PRATT_TYPE_PARSER},
-        value::{ASFieldInfo, ASStructure, BaseType, Closure, Function, StructType, TypeSpec},
+        value::{
+            ASFieldInfo, ASFunction, ASStructure, ArcStructure, BaseType, Closure, StructType,
+            TypeSpec,
+        },
     },
     utils::Invert,
 };
@@ -41,7 +44,7 @@ macro_rules! unpack {
     };
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Local {
     name: String, // Identifier text, needed for shadowing and error reporting.
     depth: i32,   // Scope depth: -1 = declared but not initialized,
@@ -60,7 +63,7 @@ pub struct LocalType {
 
 #[derive(Debug)]
 pub struct CompilerDebug {
-    debug_level: u8
+    debug_level: u8,
 }
 
 #[derive(Debug)]
@@ -68,7 +71,7 @@ pub struct Compiler<'a> {
     pub input: &'a str,
 
     // Current function being built
-    pub function: Rc<RefCell<Function>>,
+    pub function: Rc<RefCell<ASFunction>>,
     pub code: Instructions,
 
     // Compiler nesting
@@ -94,7 +97,7 @@ impl<'a> Compiler<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {
             input,
-            function: Rc::new(RefCell::new(Function::new_anonymous(0))),
+            function: Rc::new(RefCell::new(ASFunction::new_anonymous(0))),
             code: Instructions::new(),
             parent: None,
             locals: vec![],
@@ -117,7 +120,7 @@ impl<'a> Compiler<'a> {
     ) -> Self {
         Self {
             input,
-            function: Rc::new(RefCell::new(Function::new(name, nb_params))),
+            function: Rc::new(RefCell::new(ASFunction::new(name, nb_params))),
             code: Instructions::new(),
             parent: Some(parent),
             locals: vec![],
@@ -155,28 +158,6 @@ impl<'a> Compiler<'a> {
         rc_self.borrow_mut().code.emit_return();
 
         rc_self.borrow_mut().finish();
-        println!("FUNCTION:");
-        println!(
-            "| ----INSTRUCTIONS----\n| {}",
-            instructions_to_string_debug(
-                &rc_self.borrow().function.borrow().code,
-                Rc::clone(&rc_self)
-            )
-            .join("\n| ")
-        );
-        println!(
-            "| ----LOCALS----\n| {}",
-            format!("{:#?}", rc_self.borrow().locals).replace("\n", "\n| ")
-        );
-        println!(
-            "| ----CONSTANTS----\n| {}",
-            format!("{:#?}", rc_self.borrow().function.borrow().constants).replace("\n", "\n| ")
-        );
-        println!(
-            "| ----UPVALUES----\n| {}",
-            format!("{:#?}", rc_self.borrow().function.borrow().upvalue_specs).replace("\n", "\n| ")
-        );
-        println!();
 
         let x = Closure {
             function: Arc::new(rc_self.borrow().function.borrow().clone()),
@@ -195,28 +176,28 @@ impl<'a> Compiler<'a> {
 
         rc_self.borrow_mut().finish();
 
-        println!("CLOSURE:");
-        println!(
-            "| ----INSTRUCTIONS----\n| {}",
-            instructions_to_string_debug(
-                &rc_self.borrow().function.borrow().code,
-                Rc::clone(&rc_self)
-            )
-            .join("\n| ")
-        );
-        println!(
-            "| ----LOCALS----\n| {}",
-            format!("{:#?}", rc_self.borrow().locals).replace("\n", "\n| ")
-        );
-        println!(
-            "| ----CONSTANTS----\n| {}",
-            format!("{:#?}", rc_self.borrow().function.borrow().constants).replace("\n", "\n| ")
-        );
-        println!(
-            "| ----UPVALUES----\n| {}",
-            format!("{:#?}", rc_self.borrow().function.borrow().upvalue_specs).replace("\n", "\n| ")
-        );
-        println!();
+        // println!("CLOSURE:");
+        // println!(
+        //     "| ----INSTRUCTIONS----\n| {}",
+        //     instructions_to_string_debug(
+        //         &rc_self.borrow().function.borrow().code,
+        //         Rc::clone(&rc_self)
+        //     )
+        //     .join("\n| ")
+        // );
+        // println!(
+        //     "| ----LOCALS----\n| {}",
+        //     format!("{:#?}", rc_self.borrow().locals).replace("\n", "\n| ")
+        // );
+        // println!(
+        //     "| ----CONSTANTS----\n| {}",
+        //     format!("{:#?}", rc_self.borrow().function.borrow().constants).replace("\n", "\n| ")
+        // );
+        // println!(
+        //     "| ----UPVALUES----\n| {}",
+        //     format!("{:#?}", rc_self.borrow().function.borrow().upvalue_specs).replace("\n", "\n| ")
+        // );
+        // println!();
 
         let x = Closure {
             function: Arc::new(rc_self.borrow().function.borrow().clone()),
@@ -237,19 +218,29 @@ impl<'a> Compiler<'a> {
 
         rc_self.borrow_mut().finish();
 
+        println!("FUNCTION:");
         println!(
-            "----INSTRUCTIONS----\n{}",
+            "| ----INSTRUCTIONS----\n| {}",
             instructions_to_string_debug(
                 &rc_self.borrow().function.borrow().code,
                 Rc::clone(&rc_self)
             )
-            .join("\n")
+            .join("\n| ")
         );
-        println!("----LOCALS----\n{:#?}", rc_self.borrow().locals);
         println!(
-            "----CONSTANTS----\n{:#?}",
-            rc_self.borrow().function.borrow().constants
+            "| ----LOCALS----\n| {}",
+            format!("{:#?}", rc_self.borrow().locals).replace("\n", "\n| ")
         );
+        println!(
+            "| ----CONSTANTS----\n| {}",
+            format!("{:#?}", rc_self.borrow().function.borrow().constants).replace("\n", "\n| ")
+        );
+        println!(
+            "| ----UPVALUES----\n| {}",
+            format!("{:#?}", rc_self.borrow().function.borrow().upvalue_specs)
+                .replace("\n", "\n| ")
+        );
+        println!();
 
         let x = Closure {
             function: Arc::new(rc_self.borrow().function.borrow().clone()),
@@ -264,6 +255,33 @@ impl<'a> Compiler<'a> {
         self.function.borrow_mut().code = code;
         self.function.borrow_mut().upvalue_specs = self.upvalues.clone();
         self.function.borrow_mut().upvalue_count = self.upvalues.len();
+    }
+
+    fn get_const(&mut self, idx: usize) -> Option<Value> {
+        self.function.borrow().constants.get(idx).cloned()
+    }
+
+    fn get_struct_const(&self, name: &str) -> Option<ArcStructure> {
+        let f = self.function.borrow();
+        let s = f.constants.iter().find(|c| match c {
+            Value::Structure(s) => s.read().unwrap().name == name,
+            _ => false,
+        });
+
+        if let Some(s) = s {
+            let Value::Structure(s) = s else {
+                unreachable!()
+            };
+            return Some(ArcStructure::clone(s));
+        }
+
+        // 2. Try to resolve as an UPVALUE
+        if let Some(parent) = &self.parent {
+            let p = parent.borrow();
+            return p.get_struct_const(name);
+        }
+
+        None
     }
 
     fn get_or_add_const(&mut self, obj: Value) -> u16 {
@@ -292,7 +310,7 @@ impl<'a> Compiler<'a> {
         c_idx
     }
 
-    fn func(&mut self) -> RefMut<'_, Function> {
+    fn func(&mut self) -> RefMut<'_, ASFunction> {
         self.function.borrow_mut()
     }
 
@@ -517,6 +535,12 @@ trait Parser<'a> {
 
     fn parse_fn_params(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError>;
     fn parse_fn_expr(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
+
+    fn parse_methode_def(
+        &mut self,
+        structure: ArcStructure,
+        pair: Pair<'a, Rule>,
+    ) -> Result<(), CompilationError>;
 
     fn parse_assign_vars(
         &mut self,
@@ -803,9 +827,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             }
         };
 
-        let idx = self
-            .borrow_mut()
-            .get_or_add_const(Value::Closure(Arc::new(closure)));
+        let idx = self.borrow_mut().get_or_add_const(Value::closure(closure));
 
         self.borrow_mut().code.emit_closure(idx);
 
@@ -851,6 +873,88 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         // ensures a parameter cannot reference another parameter
         for idx in param_indexes {
             self.borrow_mut().mark_initialized(idx);
+        }
+
+        Ok(())
+    }
+
+    fn parse_methode_def(
+        &mut self,
+        structure: ArcStructure,
+        pair: Pair<'a, Rule>,
+    ) -> Result<(), CompilationError> {
+        let mut inner = pair.into_inner();
+
+        let name = inner
+            .find_first_tagged("name")
+            .map(|node| node.as_str().to_string())
+            .unwrap();
+
+        let mut is_static_method = true;
+
+        let mut params = inner.find_first_tagged("params").unwrap().into_inner();
+
+        let closure = {
+            let return_type = inner
+                .find_first_tagged("return_type")
+                .map(|te| self.parse_type(te.into_inner()))
+                .invert()?;
+
+            let body = inner
+                .find(|node| node.as_rule() == Rule::MethodeBody)
+                .unwrap()
+                .into_inner()
+                .next()
+                .unwrap();
+
+            let mut c = Rc::new(RefCell::new(Compiler::new_closure(
+                body.as_str(),
+                Some(name.clone()),
+                Rc::clone(self),
+                0,
+                return_type.unwrap_or(BaseType::Tout.into()),
+            )));
+
+            if params
+                .peek()
+                .is_some_and(|first| matches!(first.as_node_tag(), Some("inst_param")))
+            {
+                // consume the inst param
+                params.next();
+                let inst_idx = c
+                    .borrow_mut()
+                    .declare_local("inst", BaseType::Tout.into(), true);
+                c.borrow_mut().mark_initialized(inst_idx);
+
+                is_static_method = false;
+            }
+
+            c.parse_fn_params(params)?;
+
+            let inner_body = match body.as_rule() {
+                Rule::Expr => body.into_inner(),
+                Rule::StmtBody => body.into_inner(),
+                _ => unreachable!(),
+            };
+
+            Rc::try_unwrap(c)
+                .unwrap()
+                .into_inner()
+                .compile(inner_body)?
+        };
+
+        if is_static_method {
+            structure
+                .write()
+                .unwrap()
+                .struct_methods
+                .insert(name, closure.into());
+        } else {
+            structure
+                .write()
+                .unwrap()
+                .inst_methods
+                .insert(name, closure.into());
         }
 
         Ok(())
@@ -1273,9 +1377,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                         .compile(inner_body)?
                 };
 
-                let idx = self
-                    .borrow_mut()
-                    .get_or_add_const(Value::Closure(Arc::new(closure)));
+                let idx = self.borrow_mut().get_or_add_const(Value::closure(closure));
 
                 self.borrow_mut().code.emit_closure(idx as u16);
                 self.borrow_mut().mark_initialized(local_idx);
@@ -1339,8 +1441,8 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                             static_type.clone(),
                         );
 
-                        value = Some(Value::Closure(
-                            cmp.compile_lambda_expr(default_val.into_inner())?.into(),
+                        value = Some(Value::closure(
+                            cmp.compile_lambda_expr(default_val.into_inner())?,
                         ));
                     }
 
@@ -1376,6 +1478,24 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
                 self.borrow_mut().code.emit_const(idx);
                 self.borrow_mut().code.emit_set_local(s_idx);
+            }
+
+            Rule::ImplDef => {
+                let mut inner = pair.into_inner();
+
+                let name = inner.next().map(|node| node.as_str().to_string()).unwrap();
+
+                // remove the "finImpl" token from the list
+                inner.next_back();
+
+                let structure = self
+                    .borrow_mut()
+                    .get_struct_const(&name)
+                    .ok_or(CompilationError::generic_error("Needs to be a struct"))?;
+
+                for methode in inner {
+                    self.parse_methode_def(Arc::clone(&structure), methode)?;
+                }
             }
 
             Rule::SiStmt => self.parse_if(pair)?,

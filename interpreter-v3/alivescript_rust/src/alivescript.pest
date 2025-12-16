@@ -44,8 +44,9 @@ subStmt = _{
 }
 
 CommandStmt = {
-    Ident ~ !"(" ~ term ~ postfix? // (Lit | FnCall | DebutBloc | List | Dict | Ident | FnExpr)
+    Ident ~ !"(" ~ term ~ postfix?
 }
+// (Lit | FnCall | DebutBloc | List | Dict | Ident | FnExpr)}
 
 PubStmt = {
     Pub ~ (UtiliserStmt | DeclStmt | FnDef)
@@ -77,18 +78,23 @@ StructureField = {
     (Const ~ Ident | Var? ~ Ident) ~ (":" ~ TypeExpr)? ~ (Assign ~ Expr)?
 }
 
-ImplDef =  {
-    Docs? ~ eos* ~ PUSH("impl" | "implementation" | "implémentation") ~ (#name = Ident) ~ eos+ ~ (Methode ~ eos+)* ~ finImpl
+ImplDef = {
+    Docs? ~ eos* ~ PUSH("implementation" | "implémentation" | "impl") ~ (#name = Ident) ~ eos+ ~ (Methode ~ eos+)* ~ finImpl
 }
-finImpl = @{ "fin" ~ WHITESPACE+ ~ POP }
 // "impl" | "implementation" | "implémentation"
-Methode     =  {
-    Docs? ~ eos* ~ PUSH("methode" | "méthode") ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ MethodeBody
+finImpl      = @{ "fin" ~ WHITESPACE+ ~ POP }
+Methode      =  {
+    Docs? ~ eos* ~ PUSH("methode" | "méthode") ~ (#name = Ident) ~ (#params = MethodParams) ~ ("->" ~ #return_type = TypeExpr)? ~ MethodeBody
 }
-MethodeBody =  {
+MethodParams =  {
+    "(" ~ (#inst_param = InstParam) ~ ("," ~ FnParam)* ~ ","? ~ ")"
+  | "(" ~ (FnParam ~ ",")* ~ FnParam? ~ ")"
+}
+InstParam    = @{ "inst" }
+MethodeBody  =  {
     (":" ~ Expr | eos ~ StmtBody? ~ finMethode)
 }
-finMethode  = @{ "fin" ~ WHITESPACE+ ~ POP }
+finMethode   = @{ "fin" ~ WHITESPACE+ ~ POP }
 // "methode" | "méthode"
 
 ClasseDef           =  {

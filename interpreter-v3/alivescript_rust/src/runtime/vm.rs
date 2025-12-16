@@ -7,7 +7,10 @@ use crate::{
     ast::{BinCompcode, BinOpcode},
     compiler::{
         bytecode::{JUMP_OFFSET, Opcode},
-        obj::{ArcClosure, ArcUpvalue, CallFrame, Upvalue, UpvalueLocation, UpvalueSpec, Value},
+        obj::{
+            ArcClosure, ArcUpvalue, CallFrame, Function, Upvalue, UpvalueLocation, UpvalueSpec,
+            Value,
+        },
         value::{ASObjet, ArcStructure, Closure},
     },
     runtime::{err::RuntimeError, module::BUILTIN_MOD},
@@ -104,7 +107,7 @@ impl VM {
                     continue;
                 }
 
-                let Value::Closure(factory) = default_val else {
+                let Value::Function(Function::Closure(factory)) = default_val else {
                     panic!(
                         "Dans la structure '{}'. La valeur par défaut du champs '{}' doit être une closure",
                         struct_name, field_info.name
@@ -333,17 +336,19 @@ impl VM {
 
                     match self.pop().expect("Object") {
                         Value::Objet(o) => {
-                            let o = o.read().unwrap();
-                            let fields = &o.fields;
-                            let val = fields.get(&field_name);
-                            if let Some(val) = val {
-                                self.push(val.clone());
-                            } else {
-                                return Err(RuntimeError::invalid_field(
-                                    &o.to_string(),
-                                    &field_name,
-                                ));
-                            }
+                            let val = ASObjet::get_field(o, &field_name)?;
+                            self.push(val);
+                            // let o = o.read().unwrap();
+                            // let fields = &o.fields;
+                            // let val = fields.get(&field_name);
+                            // if let Some(val) = val {
+                            //     self.push(val.clone());
+                            // } else {
+                            //     return Err(RuntimeError::invalid_field(
+                            //         &o.to_string(),
+                            //         &field_name,
+                            //     ));
+                            // }
                         }
                         o => {
                             return Err(RuntimeError::type_error(format!(
@@ -363,7 +368,7 @@ impl VM {
                     // convention: constants[const_idx] stores a Value::Closure whose inner `function` is an RcFunction with upvalue_specs populated.
                     // To keep constants simple, we actually store the function as a Closure inside the constant with no upvalues.
                     let proto_closure = match &fnc.constants[const_idx] {
-                        Value::Closure(rc_cl) => rc_cl.clone(),
+                        Value::Function(Function::Closure(rc_cl)) => rc_cl.clone(),
                         _ => {
                             return Err(RuntimeError::generic_err(
                                 "CLOSURE constant must be a Function wrapped as Closure",
@@ -372,8 +377,9 @@ impl VM {
                     };
 
                     let new_closure = self.resolve_proto_closure_upvalues(proto_closure)?;
-                    self.push(Value::Closure(new_closure));
+                    self.push(Value::closure(new_closure));
                 }
+
                 Opcode::NewStruct => {
                     let nb_fields = fnc.code[frame.ip];
                     frame.ip += 1;
@@ -498,7 +504,7 @@ impl VM {
                     let func = self.peek(nbargs);
 
                     match func {
-                        Value::NativeFunction(f) => {
+                        Value::Function(Function::NativeFunction(f)) => {
                             let mut args = VecDeque::with_capacity(nbargs);
                             let f = f.clone();
 
@@ -513,7 +519,7 @@ impl VM {
 
                             self.push(result.unwrap_or(Value::Nul));
                         }
-                        Value::Closure(closure) => {
+                        Value::Function(Function::Closure(closure)) => {
                             // set the base as the first arg of the function
                             let base = self.stack.len() - nbargs;
                             self.frames.push(CallFrame {
@@ -521,6 +527,21 @@ impl VM {
                                 ip: 0,
                                 base,
                             });
+                        }
+                        Value::Function(Function::ClosureMethod(closure)) => {
+                            // set the base as the first arg of the function
+                            let base = self.stack.len() - nbargs; // - 1 for the 'inst' param
+                            let inst_value = closure.read().unwrap().inst_value.clone();
+                            let closure = Arc::clone(&closure.read().unwrap().closure);
+
+                            self.frames.push(CallFrame {
+                                closure,
+                                ip: 0,
+                                base,
+                            });
+
+                            // setting the "inst" argument as the first argument
+                            self.stack.insert(base, inst_value);
                         }
                         _ => {
                             return Err(RuntimeError::generic_err(format!(

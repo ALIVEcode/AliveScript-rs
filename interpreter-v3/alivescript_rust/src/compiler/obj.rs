@@ -1,12 +1,9 @@
-use std::cell::RefCell;
 use std::fmt::{Debug, Display};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
-use crate::as_obj::{self, ASErreurType};
-use crate::ast::CallRust;
 use crate::compiler::value::{
-    ASObjet, ASStructure, ArcStructure, BaseType, Closure, Function, NativeFunction,
+    ArcClosureMethod, ArcObjet, ArcStructure, BaseType, Closure, ClosureMethod, NativeFunction,
 };
 use crate::runtime::err::RuntimeError;
 use crate::runtime::vm::VM;
@@ -22,15 +19,25 @@ pub enum Value {
     Booleen(bool),
     Nul,
     Texte(String),
-    Closure(ArcClosure),
-    NativeFunction(NativeFunction),
+    Function(Function),
     Liste(Arc<RwLock<Vec<Value>>>),
     TypeObj(BaseType),
     Structure(ArcStructure),
-    Objet(Arc<RwLock<ASObjet>>),
+    Objet(ArcObjet),
+}
+
+#[derive(Debug, Clone)]
+pub enum Function {
+    Closure(ArcClosure),
+    NativeFunction(NativeFunction),
+    ClosureMethod(ArcClosureMethod),
 }
 
 impl Value {
+    pub fn closure(closure: impl Into<ArcClosure>) -> Self {
+        Self::Function(Function::Closure(closure.into()))
+    }
+
     pub fn liste(values: Vec<Value>) -> Self {
         Self::Liste(Arc::new(RwLock::new(values)))
     }
@@ -52,8 +59,7 @@ impl Value {
                     .reduce(|t1, t2| BaseType::union_of(t1, t2))
                     .unwrap_or(BaseType::Tout),
             )),
-            V::Closure(..) => BaseType::Fonction,
-            V::NativeFunction(..) => BaseType::Fonction,
+            V::Function(..) => BaseType::Fonction,
             V::TypeObj(..) => BaseType::Type,
             V::Structure(..) => BaseType::Type,
             V::Objet(o) => {
@@ -217,7 +223,8 @@ impl Display for Value {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            Value::Closure(closure) => format!(
+            Value::Objet(o) => o.read().unwrap().to_string(),
+            Value::Function(Function::Closure(closure)) => format!(
                 "fonction {}()",
                 closure
                     .function
@@ -225,10 +232,20 @@ impl Display for Value {
                     .as_ref()
                     .unwrap_or(&"anonyme".to_string())
             ),
-            Value::Objet(o) => o.read().unwrap().to_string(),
-            Value::NativeFunction(native_function) => {
+            Value::Function(Function::NativeFunction(native_function)) => {
                 format!("fonction native {}()", native_function.name)
             }
+            Value::Function(Function::ClosureMethod(closure)) => format!(
+                "méthode {}()",
+                closure
+                    .read()
+                    .unwrap()
+                    .closure
+                    .function
+                    .name
+                    .as_ref()
+                    .unwrap_or(&"anonyme".to_string())
+            ),
         };
 
         write!(f, "{}", to_str)

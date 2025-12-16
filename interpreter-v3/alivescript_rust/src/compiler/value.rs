@@ -7,18 +7,21 @@ use std::sync::{Arc, RwLock};
 use crate::as_obj::ASErreurType;
 use crate::compiler::bytecode::instructions_to_string;
 use crate::compiler::err::CompilationError;
-use crate::compiler::obj::{Upvalue, UpvalueSpec, Value};
+use crate::compiler::obj::{ArcClosure, ArcUpvalue, Function, UpvalueSpec, Value};
 use crate::runtime::err::RuntimeError;
 use crate::runtime::vm::VM;
 
 pub type ArcStructure = Arc<RwLock<ASStructure>>;
+pub type ArcObjet = Arc<RwLock<ASObjet>>;
+pub type ArcClosureMethod = Arc<RwLock<ClosureMethod>>;
 
 #[derive(Debug)]
 pub struct ASStructure {
     pub name: String,
 
     pub fields: Vec<ASFieldInfo>,
-    pub methods: HashMap<String, ClosureMethod>,
+    pub inst_methods: HashMap<String, ArcClosure>,
+    pub struct_methods: HashMap<String, ArcClosure>,
 }
 
 impl ASStructure {
@@ -26,7 +29,8 @@ impl ASStructure {
         Self {
             name,
             fields,
-            methods: HashMap::new(),
+            inst_methods: HashMap::new(),
+            struct_methods: HashMap::new(),
         }
     }
 }
@@ -57,14 +61,37 @@ pub struct ASFieldInfo {
 
 #[derive(Debug)]
 pub struct ClosureMethod {
-    pub function: Arc<Function>,
-    pub upvalues: Vec<Arc<RwLock<Upvalue>>>,
+    pub closure: ArcClosure,
+    pub inst_value: Value,
 }
 
 #[derive(Debug)]
 pub struct ASObjet {
     pub structure: ArcStructure,
     pub fields: HashMap<String, Value>,
+}
+
+impl ASObjet {
+    pub fn get_field(obj: Arc<RwLock<Self>>, attr: &str) -> Result<Value, RuntimeError> {
+        // its a field
+        if let Some(val) = obj.read().unwrap().fields.get(attr) {
+            return Ok(val.clone());
+        }
+
+        let obj_val = obj.read().unwrap();
+        // its a method
+        let structure = obj_val.structure.read().unwrap();
+        if let Some(method) = structure.inst_methods.get(attr) {
+            return Ok(Value::Function(Function::ClosureMethod(Arc::new(
+                RwLock::new(ClosureMethod {
+                    closure: Arc::clone(method),
+                    inst_value: Value::Objet(Arc::clone(&obj)),
+                }),
+            ))));
+        }
+
+        Err(RuntimeError::invalid_field(&obj_val.to_string(), attr))
+    }
 }
 
 impl Display for ASObjet {
@@ -103,7 +130,7 @@ impl ASObjet {
 }
 
 #[derive(Clone, PartialEq)]
-pub struct Function {
+pub struct ASFunction {
     pub name: Option<String>,
     pub code: Vec<u16>,        // bytecode
     pub constants: Vec<Value>, // constant pool
@@ -113,7 +140,7 @@ pub struct Function {
     pub nb_params: usize,
 }
 
-impl Function {
+impl ASFunction {
     pub fn new(name: Option<String>, nb_params: usize) -> Self {
         Self {
             name,
@@ -138,7 +165,7 @@ impl Function {
     }
 }
 
-impl Debug for Function {
+impl Debug for ASFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Function")
             .field("name", &self.name)
@@ -150,10 +177,10 @@ impl Debug for Function {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Closure {
-    pub function: Arc<Function>,
-    pub upvalues: Vec<Arc<RwLock<Upvalue>>>,
+    pub function: Arc<ASFunction>,
+    pub upvalues: Vec<ArcUpvalue>,
 }
 
 impl PartialEq for Closure {
