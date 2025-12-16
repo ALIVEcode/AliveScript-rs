@@ -44,7 +44,7 @@ subStmt = _{
 }
 
 CommandStmt = {
-    Ident ~ !"(" ~ term // (Lit | FnCall | DebutBloc | List | Dict | Ident | FnExpr)
+    Ident ~ !"(" ~ term ~ postfix? // (Lit | FnCall | DebutBloc | List | Dict | Ident | FnExpr)
 }
 
 PubStmt = {

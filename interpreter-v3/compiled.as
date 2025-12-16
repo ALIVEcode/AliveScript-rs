@@ -60,13 +60,24 @@ afficher x
 
 afficher tailleDe(ls)
 
+foo = fonction(): "x = " + x
+
+afficher foo()
+
 structure Point
-  x: entier
-  y: entier
+  x = foo()
+  y: entier = 12
 fin structure
 
 
-var p = Point { x: 10, y: 11 }
+var p = Point {}
+x = 22
+var p2 = Point {}
 afficher p
+afficher p2.y
+afficher p
+afficher p2
+afficher p
+
 
 

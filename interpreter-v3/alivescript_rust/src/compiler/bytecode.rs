@@ -13,7 +13,6 @@ use crate::{
 pub enum Opcode {
     Constant,
     Closure,
-    Struct,
 
     GetUpvalue,
     SetUpvalue,
@@ -37,8 +36,9 @@ pub enum Opcode {
     GetItem,
     SetItem,
 
-    GetAttr,
-    SetAttr,
+    NewStruct,
+    GetField,
+    SetField,
 }
 
 impl Opcode {
@@ -46,7 +46,6 @@ impl Opcode {
         match self {
             Opcode::Constant => "CONST",
             Opcode::Closure => "CLOSURE",
-            Opcode::Struct => "STRUCT",
             Opcode::GetUpvalue => "GET_UPVAL",
             Opcode::SetUpvalue => "SET_UPVAL",
             Opcode::GetLocal => "GET_LOCAL",
@@ -64,8 +63,9 @@ impl Opcode {
             Opcode::NewList => "NEW_LIST",
             Opcode::GetItem => "GET_ITEM",
             Opcode::SetItem => "SET_ITEM",
-            Opcode::GetAttr => "GET_ATTR",
-            Opcode::SetAttr => "SET_ATTR",
+            Opcode::NewStruct => "NEW_STRUCT",
+            Opcode::GetField => "GET_ATTR",
+            Opcode::SetField => "SET_ATTR",
         }
     }
 
@@ -78,11 +78,12 @@ impl Opcode {
             | Opcode::SetLocal
             | Opcode::GetGlobal
             | Opcode::SetGlobal
-            | Opcode::NewList => 1,
+            | Opcode::NewList
+            | Opcode::NewStruct => 1,
 
             Opcode::Jump | Opcode::JumpIfFalse => 1,
 
-            Opcode::Closure | Opcode::Struct => 1,
+            Opcode::Closure => 1,
             Opcode::Call => 1,
 
             Opcode::Return => 0,
@@ -93,8 +94,8 @@ impl Opcode {
 
             Opcode::SetItem => 0,
 
-            Opcode::GetAttr => 1,
-            Opcode::SetAttr => 1,
+            Opcode::GetField => 1,
+            Opcode::SetField => 1,
         }
     }
 }
@@ -186,7 +187,7 @@ pub fn instructions_to_string_debug(insts: &[u16], compiler: Rc<RefCell<Compiler
             Opcode::Constant => {
                 let idx = args[0];
                 inst_str.push(format!(
-                    "{:?}",
+                    "{}",
                     compiler.borrow().function.borrow().constants[*idx as usize]
                 ));
             }
@@ -309,6 +310,11 @@ impl Instructions {
         self.emit_byte(nb_el);
     }
 
+    pub fn emit_new_struct(&mut self, nb_el: u16) {
+        self.emit_opcode(Opcode::NewStruct);
+        self.emit_byte(nb_el);
+    }
+
     pub fn emit_get_item(&mut self) {
         self.emit_opcode(Opcode::GetItem);
     }
@@ -318,22 +324,17 @@ impl Instructions {
     }
 
     pub fn emit_get_attr(&mut self, const_idx: u16) {
-        self.emit_opcode(Opcode::GetAttr);
+        self.emit_opcode(Opcode::GetField);
         self.emit_byte(const_idx);
     }
 
     pub fn emit_set_attr(&mut self, const_idx: u16) {
-        self.emit_opcode(Opcode::SetAttr);
+        self.emit_opcode(Opcode::SetField);
         self.emit_byte(const_idx);
     }
 
     pub fn emit_closure(&mut self, const_idx: u16) {
         self.emit_opcode(Opcode::Closure);
-        self.emit_byte(const_idx);
-    }
-
-    pub fn emit_struct(&mut self, const_idx: u16) {
-        self.emit_opcode(Opcode::Struct);
         self.emit_byte(const_idx);
     }
 

@@ -5,7 +5,9 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use crate::as_obj::{self, ASErreurType};
 use crate::ast::CallRust;
-use crate::compiler::value::{ASStructure, BaseType, Closure, Function, NativeFunction};
+use crate::compiler::value::{
+    ASObjet, ASStructure, ArcStructure, BaseType, Closure, Function, NativeFunction,
+};
 use crate::runtime::err::RuntimeError;
 use crate::runtime::vm::VM;
 
@@ -24,7 +26,8 @@ pub enum Value {
     NativeFunction(NativeFunction),
     Liste(Arc<RwLock<Vec<Value>>>),
     TypeObj(BaseType),
-    Structure(Arc<RwLock<ASStructure>>),
+    Structure(ArcStructure),
+    Objet(Arc<RwLock<ASObjet>>),
 }
 
 impl Value {
@@ -51,8 +54,11 @@ impl Value {
             )),
             V::Closure(..) => BaseType::Fonction,
             V::NativeFunction(..) => BaseType::Fonction,
-            V::TypeObj(t) => BaseType::Type,
-            as_type => todo!("Type inconnue {:?}", as_type),
+            V::TypeObj(..) => BaseType::Type,
+            V::Structure(..) => BaseType::Type,
+            V::Objet(o) => {
+                BaseType::Objet(o.read().unwrap().structure.read().unwrap().name.clone())
+            }
         }
     }
 
@@ -172,6 +178,24 @@ impl Value {
             _ => None,
         }
     }
+
+    pub fn repr(&self) -> String {
+        match self {
+            Value::Nul => String::from("nul"),
+            Value::Texte(t) => format!("{:?}", t),
+            Value::Liste(rw_lock) => format!(
+                "[{}]",
+                rw_lock
+                    .read()
+                    .unwrap()
+                    .iter()
+                    .map(|el| el.repr())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            _ => self.to_string(),
+        }
+    }
 }
 
 impl Display for Value {
@@ -183,7 +207,7 @@ impl Display for Value {
             Value::Booleen(b) => if *b { "vrai" } else { "faux" }.into(),
             Value::Nul => "nul".into(),
             Value::TypeObj(t) => t.to_string(),
-            Value::Structure(s) => format!("{:?}", s),
+            Value::Structure(s) => s.read().unwrap().to_string(),
             Value::Liste(vals) => format!(
                 "[{}]",
                 vals.read()
@@ -201,6 +225,7 @@ impl Display for Value {
                     .as_ref()
                     .unwrap_or(&"anonyme".to_string())
             ),
+            Value::Objet(o) => o.read().unwrap().to_string(),
             Value::NativeFunction(native_function) => {
                 format!("fonction native {}()", native_function.name)
             }

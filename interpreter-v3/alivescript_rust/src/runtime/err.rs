@@ -5,6 +5,12 @@ use crate::{Rule, compiler::value::BaseType};
 
 #[derive(Debug, Error)]
 pub enum RuntimeError {
+    #[error("Erreur de champs: {0}")]
+    FieldError(String),
+
+    #[error("Erreur de valeur: {0}")]
+    ValueError(String),
+
     #[error("Erreur type: {0}")]
     TypeError(String),
 
@@ -13,6 +19,35 @@ pub enum RuntimeError {
 }
 
 impl RuntimeError {
+    pub fn value_error(msg: impl ToString) -> Self {
+        Self::ValueError(msg.to_string())
+    }
+
+    pub fn type_error(msg: impl ToString) -> Self {
+        Self::ValueError(msg.to_string())
+    }
+
+    pub fn invalid_field(obj_str: &str, field_name: &str) -> Self {
+        Self::FieldError(format!(
+            "le champs {} n'existe pas dans l'objet {}",
+            field_name, obj_str
+        ))
+    }
+
+    pub fn invalid_struct(ty: BaseType) -> Self {
+        Self::ValueError(format!(
+            "impossible de construire une valeur de type '{}'. Seule les structures peuvent être construite",
+            ty
+        ))
+    }
+
+    pub fn missing_struct_fields(struct_name: &str, missing_fields: &[String]) -> Self {
+        Self::ValueError(format!(
+            "lors de la construction de la structure '{}', certains champs n'ont pas reçu de valeurs: {:?}. Spécifiez une valeur dans la construction ou ajoutez une valeur par défaut à ces champs",
+            struct_name, missing_fields
+        ))
+    }
+
     pub fn invalid_op(op: &str, lhs: BaseType, rhs: BaseType) -> Self {
         Self::TypeError(format!(
             "opération '{}' non supporté pour les opérandes: {} et {}",

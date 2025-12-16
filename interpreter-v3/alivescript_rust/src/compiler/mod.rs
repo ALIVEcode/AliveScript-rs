@@ -1,8 +1,6 @@
 use std::{
     cell::{RefCell, RefMut},
     collections::HashMap,
-    hash::Hash,
-    iter,
     rc::Rc,
     str::FromStr,
     sync::{Arc, RwLock},
@@ -16,21 +14,16 @@ use pest::{
 
 use crate::{
     AlivescriptParser, Rule,
-    as_obj::{ASErreur, ASErreurType},
-    ast::{
-        AssignVar, BinCompcode, BinLogiccode, BinOpcode, DeclVar, DefFn, Expr, FnParam, Stmt, Type,
-        UnaryOpcode,
-    },
+    as_obj::ASErreurType,
+    ast::{BinCompcode, BinLogiccode, BinOpcode, UnaryOpcode},
     compiler::{
         bytecode::{Instructions, JUMP_OFFSET, Opcode, instructions_to_string_debug},
         err::CompilationError,
-        obj::{ArcClosure, Upvalue, UpvalueSpec, Value},
+        obj::{ArcClosure, UpvalueSpec, Value},
         parser::{PRATT_EXPR_PARSER, PRATT_TYPE_PARSER},
-        utils::format_table,
-        value::{ASStructure, BaseType, Closure, Function, StructType, TypeSpec},
+        value::{ASFieldInfo, ASStructure, BaseType, Closure, Function, StructType, TypeSpec},
     },
     utils::Invert,
-    visitor::{Visitable, Visitor},
 };
 
 mod bitmasks;
@@ -38,6 +31,7 @@ pub(crate) mod bytecode;
 mod err;
 pub mod obj;
 mod parser;
+mod serializer;
 mod utils;
 pub mod value;
 
@@ -59,8 +53,14 @@ pub struct Local {
 
 #[derive(Debug)]
 pub struct LocalType {
+    name: String,
     spec: TypeSpec,
     depth: i32,
+}
+
+#[derive(Debug)]
+pub struct CompilerDebug {
+    debug_level: u8
 }
 
 #[derive(Debug)]
@@ -155,6 +155,68 @@ impl<'a> Compiler<'a> {
         rc_self.borrow_mut().code.emit_return();
 
         rc_self.borrow_mut().finish();
+        println!("FUNCTION:");
+        println!(
+            "| ----INSTRUCTIONS----\n| {}",
+            instructions_to_string_debug(
+                &rc_self.borrow().function.borrow().code,
+                Rc::clone(&rc_self)
+            )
+            .join("\n| ")
+        );
+        println!(
+            "| ----LOCALS----\n| {}",
+            format!("{:#?}", rc_self.borrow().locals).replace("\n", "\n| ")
+        );
+        println!(
+            "| ----CONSTANTS----\n| {}",
+            format!("{:#?}", rc_self.borrow().function.borrow().constants).replace("\n", "\n| ")
+        );
+        println!(
+            "| ----UPVALUES----\n| {}",
+            format!("{:#?}", rc_self.borrow().function.borrow().upvalue_specs).replace("\n", "\n| ")
+        );
+        println!();
+
+        let x = Closure {
+            function: Arc::new(rc_self.borrow().function.borrow().clone()),
+            upvalues: vec![],
+        };
+
+        Ok(x)
+    }
+
+    fn compile_lambda_expr(self, pairs: Pairs<'a, Rule>) -> Result<Closure, CompilationError> {
+        let mut rc_self = Rc::new(RefCell::new(self));
+
+        rc_self.parse_expr(pairs)?;
+
+        rc_self.borrow_mut().code.emit_return();
+
+        rc_self.borrow_mut().finish();
+
+        println!("CLOSURE:");
+        println!(
+            "| ----INSTRUCTIONS----\n| {}",
+            instructions_to_string_debug(
+                &rc_self.borrow().function.borrow().code,
+                Rc::clone(&rc_self)
+            )
+            .join("\n| ")
+        );
+        println!(
+            "| ----LOCALS----\n| {}",
+            format!("{:#?}", rc_self.borrow().locals).replace("\n", "\n| ")
+        );
+        println!(
+            "| ----CONSTANTS----\n| {}",
+            format!("{:#?}", rc_self.borrow().function.borrow().constants).replace("\n", "\n| ")
+        );
+        println!(
+            "| ----UPVALUES----\n| {}",
+            format!("{:#?}", rc_self.borrow().function.borrow().upvalue_specs).replace("\n", "\n| ")
+        );
+        println!();
 
         let x = Closure {
             function: Arc::new(rc_self.borrow().function.borrow().clone()),
@@ -211,8 +273,8 @@ impl<'a> Compiler<'a> {
             .constants
             .iter()
             .enumerate()
-            .find(|(i, o)| **o == obj)
-            .map(|(i, o)| i);
+            .find(|(_, o)| **o == obj)
+            .map(|(i, _)| i);
         if let Some(idx) = idx {
             return idx as u16;
         }
@@ -220,6 +282,14 @@ impl<'a> Compiler<'a> {
         let mut f = self.function.borrow_mut();
         f.constants.push(obj);
         f.constants.len() as u16 - 1
+    }
+
+    /// Like `get_or_add_const`, but emits an Opcode::Const
+    fn push_const(&mut self, obj: Value) -> u16 {
+        let c_idx = self.get_or_add_const(obj);
+        self.code.emit_const(c_idx);
+
+        c_idx
     }
 
     fn func(&mut self) -> RefMut<'_, Function> {
@@ -294,6 +364,7 @@ impl<'a> Compiler<'a> {
 
     fn declare_local_type(&mut self, name: &str, spec: TypeSpec) -> u16 {
         self.local_types.push(LocalType {
+            name: name.to_string(),
             spec,
             depth: self.scope_depth as i32,
         });
@@ -359,11 +430,7 @@ impl<'a> Compiler<'a> {
         Ok(None)
     }
 
-    fn resolve_local(
-        &mut self,
-        name: &str,
-        allow_uninit: bool,
-    ) -> Result<Option<usize>, ASErreurType> {
+    fn resolve_local(&self, name: &str, allow_uninit: bool) -> Result<Option<usize>, ASErreurType> {
         for (i, local) in self.locals.iter().enumerate().rev() {
             if local.name == name {
                 if local.depth == -1 && !allow_uninit {
@@ -421,6 +488,23 @@ impl<'a> Compiler<'a> {
         let glob_name_idx = self.get_or_add_const(Value::Texte(ident.to_string()));
         self.code.emit_get_global(glob_name_idx);
     }
+
+    fn get_var_type(&self, ident: &str) -> Option<TypeSpec> {
+        // 1. Try to resolve as a LOCAL
+        for local in self.local_types.iter().rev() {
+            if local.name == ident {
+                return Some(local.spec.clone());
+            }
+        }
+
+        // 2. Try to resolve as an UPVALUE
+        if let Some(parent) = &self.parent {
+            let p = parent.borrow();
+            return p.get_var_type(ident);
+        }
+
+        None
+    }
 }
 
 trait Parser<'a> {
@@ -432,6 +516,7 @@ trait Parser<'a> {
     ) -> Result<(), CompilationError>;
 
     fn parse_fn_params(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError>;
+    fn parse_fn_expr(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
     fn parse_assign_vars(
         &mut self,
@@ -490,9 +575,38 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             Rule::StructInit => {
                 let mut inner = primary.into_inner();
 
-                let struct_name = inner.next().unwrap().as_str();
+                let struct_pair = inner.next().unwrap();
+                let struct_name = struct_pair.as_str();
+                self.parse_top_expr(struct_pair)?;
 
-                while let Some(field) = inner.next() {}
+                let Some(s_type) = self.borrow().get_var_type(struct_name) else {
+                    panic!("Unknown struct {}", struct_name)
+                };
+
+                let s_c = s_type.clone();
+                let BaseType::Struct(s_type) = s_type.as_base_type()? else {
+                    return Err(CompilationError::generic_error(format!(
+                        "Impossible de construire un type '{:?}'. Seule une structure peut être construite.",
+                        s_c,
+                    )));
+                };
+
+                let mut nb_fields = 0;
+                while let Some(field) = inner.next() {
+                    let mut field_inner = field.into_inner();
+                    let field_name = field_inner.next().expect("A name for the field").as_str();
+                    self.parse_expr(
+                        field_inner
+                            .next()
+                            .expect("Value for the field")
+                            .into_inner(),
+                    )?;
+                    self.borrow_mut()
+                        .push_const(Value::Texte(field_name.to_string()));
+                    nb_fields += 1;
+                }
+
+                self.borrow_mut().code.emit_new_struct(nb_fields);
             }
 
             Rule::FnCall => {
@@ -542,43 +656,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             }
 
             Rule::FnExpr => {
-                let inner = primary.into_inner();
-
-                let params = inner.find_first_tagged("params").unwrap().into_inner();
-
-                let closure = {
-                    let body = inner.find_first_tagged("body").unwrap();
-                    let return_type = inner
-                        .find_first_tagged("return_type")
-                        .map(|te| self.parse_type(te.into_inner()))
-                        .invert()?;
-
-                    let mut c = Rc::new(RefCell::new(Compiler::new_closure(
-                        body.as_str(),
-                        None,
-                        Rc::clone(self),
-                        0,
-                        return_type.unwrap_or(BaseType::Tout.into()),
-                    )));
-                    c.parse_fn_params(params)?;
-
-                    let inner_body = match body.as_rule() {
-                        Rule::Expr => body.into_inner(),
-                        Rule::StmtBody => body.into_inner(),
-                        _ => unreachable!(),
-                    };
-
-                    Rc::try_unwrap(c)
-                        .unwrap()
-                        .into_inner()
-                        .compile(inner_body)?
-                };
-
-                let idx = self
-                    .borrow_mut()
-                    .get_or_add_const(Value::Closure(Arc::new(closure)));
-
-                self.borrow_mut().code.emit_closure(idx);
+                self.parse_fn_expr(primary)?;
             }
             rule => Err(PestError::new_from_span(
                 PestErrorVariant::ParsingError {
@@ -687,6 +765,50 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 Ok(())
             })
             .parse(pairs)?;
+        Ok(())
+    }
+
+    fn parse_fn_expr(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError> {
+        let inner = pair.into_inner();
+
+        let params = inner.find_first_tagged("params").unwrap().into_inner();
+
+        let closure = {
+            let body = inner.find_first_tagged("body").unwrap();
+            let return_type = inner
+                .find_first_tagged("return_type")
+                .map(|te| self.parse_type(te.into_inner()))
+                .invert()?;
+
+            let mut c = Rc::new(RefCell::new(Compiler::new_closure(
+                body.as_str(),
+                None,
+                Rc::clone(self),
+                0,
+                return_type.unwrap_or(BaseType::Tout.into()),
+            )));
+            c.parse_fn_params(params)?;
+
+            match body.as_rule() {
+                Rule::Expr => Rc::try_unwrap(c)
+                    .unwrap()
+                    .into_inner()
+                    .compile_lambda_expr(body.into_inner())?,
+                Rule::StmtBody => Rc::try_unwrap(c)
+                    .unwrap()
+                    .into_inner()
+                    .compile(body.into_inner())?,
+
+                _ => unreachable!(),
+            }
+        };
+
+        let idx = self
+            .borrow_mut()
+            .get_or_add_const(Value::Closure(Arc::new(closure)));
+
+        self.borrow_mut().code.emit_closure(idx);
+
         Ok(())
     }
 
@@ -1093,7 +1215,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 // func
                 self.parse_top_expr(inner.next().unwrap())?;
                 // arg
-                self.parse_top_expr(inner.next().unwrap())?;
+                self.parse_expr(inner)?;
                 self.borrow_mut().code.emit_call(1);
             }
             Rule::PubStmt => {
@@ -1168,29 +1290,92 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     .unwrap();
 
                 // let mut struct_fields = HashMap::new();
-                let fields_token = inner
+                let mut fields_token = inner
                     .find(|node| node.as_rule() == Rule::StructureBody)
                     .unwrap()
                     .into_inner();
 
-                let mut field_types = HashMap::new();
-                for field in fields_token {}
+                // remove the "finStructure" token from the list
+                fields_token.next_back();
 
-                let structure = ASStructure::new(name.clone(), HashMap::new());
+                let mut field_types = HashMap::new();
+                let mut fields = Vec::new();
+
+                for field in fields_token {
+                    let mut f_inner = field.into_inner();
+                    let mut is_const = false;
+                    let mut value = None;
+                    match f_inner.peek().unwrap().as_rule() {
+                        Rule::Const => {
+                            f_inner.next();
+                            is_const = true;
+                        }
+                        Rule::Var => {
+                            f_inner.next();
+                        }
+                        _ => {}
+                    }
+                    let field_name = f_inner.next().unwrap().as_str().to_string();
+                    let mut static_type = BaseType::Tout.into();
+                    if let Some(static_type_pair) = f_inner.peek().and_then(|pair| {
+                        if pair.as_rule() == Rule::TypeExpr {
+                            Some(pair)
+                        } else {
+                            None
+                        }
+                    }) {
+                        f_inner.next();
+                        static_type = self.parse_type(static_type_pair.into_inner())?;
+                    }
+
+                    if let Some(_) = f_inner.next() {
+                        let default_val = f_inner.next().unwrap();
+
+                        let cmp = Compiler::new_closure(
+                            default_val.as_str(),
+                            None,
+                            Rc::clone(self),
+                            0,
+                            static_type.clone(),
+                        );
+
+                        value = Some(Value::Closure(
+                            cmp.compile_lambda_expr(default_val.into_inner())?.into(),
+                        ));
+                    }
+
+                    field_types.insert(field_name.clone(), static_type.clone());
+
+                    fields.push(ASFieldInfo {
+                        name: field_name,
+                        field_type: static_type,
+                        is_const,
+                        is_private: false,
+                        value,
+                    });
+                }
+
+                let structure = ASStructure::new(name.clone(), fields);
 
                 let idx = self
                     .borrow_mut()
                     .get_or_add_const(Value::Structure(Arc::new(RwLock::new(structure))));
 
-                self.borrow_mut().declare_local_type(
-                    &name,
-                    TypeSpec::new_simple(
-                        name.clone(),
-                        BaseType::Struct(StructType::new(name.clone(), field_types)),
-                    ),
+                let struct_type = TypeSpec::new_simple(
+                    name.clone(),
+                    BaseType::Struct(StructType::new(name.clone(), field_types)),
                 );
 
-                self.borrow_mut().code.emit_struct(idx as u16);
+                let s_idx = self
+                    .borrow_mut()
+                    .declare_local(&name, struct_type.clone(), true);
+
+                self.borrow_mut().mark_initialized(s_idx);
+
+                self.borrow_mut().declare_local_type(&name, struct_type);
+
+                self.borrow_mut().code.emit_const(idx);
+                self.borrow_mut().code.emit_set_local(s_idx);
             }
 
             Rule::SiStmt => self.parse_if(pair)?,

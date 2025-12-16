@@ -1,5 +1,3 @@
-#![allow(dead_code, unused_variables, unused_imports)]
-
 pub mod as_modules;
 pub mod as_obj_utils;
 #[cfg(feature = "py")]
@@ -9,7 +7,6 @@ pub mod visitor;
 pub mod as_obj;
 pub mod ast;
 
-pub mod lexer;
 pub mod parser;
 pub mod token;
 
@@ -25,12 +22,8 @@ pub mod runtime;
 
 pub mod cli;
 
-use std::rc::Rc;
 
-use as_obj::ASErreur;
-use ast::{Expr, Stmt};
 use parser::build_ast_stmts;
-use pest::pratt_parser::PrattParser;
 use pest::Parser;
 use pest_derive::Parser;
 

@@ -1,18 +1,14 @@
 use std::{
-    cell::RefCell,
     collections::{HashMap, VecDeque},
-    rc::Rc,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
 };
 
 use crate::{
-    as_modules::ASModuleBuiltin,
-    as_obj::{ASEnv, ASType},
-    ast::{BinCompcode, BinOpcode, CallRust},
+    ast::{BinCompcode, BinOpcode},
     compiler::{
         bytecode::{JUMP_OFFSET, Opcode},
         obj::{ArcClosure, ArcUpvalue, CallFrame, Upvalue, UpvalueLocation, UpvalueSpec, Value},
-        value::{Closure, NativeFunction},
+        value::{ASObjet, ArcStructure, Closure},
     },
     runtime::{err::RuntimeError, module::BUILTIN_MOD},
 };
@@ -90,16 +86,128 @@ impl VM {
         }
     }
 
-    pub fn run(&mut self, closure: Closure) -> Result<Value, RuntimeError> {
-        self.run_shared_closure(Arc::new(closure))
+    fn finish_init_struct(
+        &mut self,
+        structure: ArcStructure,
+        mut new_s_fields: HashMap<String, Value>,
+    ) -> Result<HashMap<String, Value>, RuntimeError> {
+        let struct_name = structure.read().unwrap().name.clone();
+        let mut missing = vec![];
+        for field_info in structure.read().unwrap().fields.iter() {
+            if new_s_fields.contains_key(&field_info.name) {
+                continue;
+            }
+
+            if let Some(ref default_val) = field_info.value {
+                // we don't eval if we will throw an error after anyway
+                if !missing.is_empty() {
+                    continue;
+                }
+
+                let Value::Closure(factory) = default_val else {
+                    panic!(
+                        "Dans la structure '{}'. La valeur par défaut du champs '{}' doit être une closure",
+                        struct_name, field_info.name
+                    )
+                };
+
+                let new_closure = self.resolve_proto_closure_upvalues(Arc::clone(factory))?;
+                let base = self.stack.len() - 1;
+                self.frames.push(CallFrame {
+                    closure: new_closure,
+                    ip: 0,
+                    base,
+                });
+                let value = self.run_frame(self.frames.len() - 1)?;
+
+                new_s_fields.insert(field_info.name.clone(), value);
+            } else {
+                missing.push(field_info.name.clone());
+            }
+        }
+
+        if !missing.is_empty() {
+            return Err(RuntimeError::missing_struct_fields(&struct_name, &missing));
+        }
+
+        Ok(new_s_fields)
     }
 
-    pub fn run_shared_closure(&mut self, closure: ArcClosure) -> Result<Value, RuntimeError> {
+    fn resolve_proto_closure_upvalues(
+        &mut self,
+        proto_closure: ArcClosure,
+    ) -> Result<ArcClosure, RuntimeError> {
+        let frame = self.get_frame()?;
+        let function = proto_closure.function.clone();
+        // build real closure and wire upvalues according to function.upvalue_specs
+        let mut closure_upvalues: Vec<ArcUpvalue> = Vec::with_capacity(function.upvalue_count);
+
+        let frame_base = frame.base;
+
+        for spec in function.upvalue_specs.iter() {
+            match spec {
+                UpvalueSpec::Local(slot_idx) => {
+                    // locate existing open upvalue for this exact stack slot (base + slot_idx)
+                    let target_stack_idx = frame_base + slot_idx;
+
+                    let existing = self.open_upvalues.iter().find(|uv| {
+                        if let UpvalueLocation::Open(idx) = uv.read().unwrap().location {
+                            idx == target_stack_idx
+                        } else {
+                            false
+                        }
+                    });
+
+                    let rc_up = match existing {
+                        Some(e) => e.clone(),
+                        None => {
+                            let uv = Upvalue {
+                                location: UpvalueLocation::Open(target_stack_idx),
+                            };
+                            let rc = Arc::new(RwLock::new(uv));
+                            self.open_upvalues.push(rc.clone());
+                            rc
+                        }
+                    };
+                    closure_upvalues.push(rc_up);
+                }
+                UpvalueSpec::Upvalue(parent_index) => {
+                    // inherit parent's upvalue: parent's closure is frame.closure
+                    let parent_uv = self
+                        .get_frame()
+                        .unwrap()
+                        .closure
+                        .upvalues
+                        .get(*parent_index)
+                        .ok_or(RuntimeError::generic_err(
+                            "parent upvalue index out of range",
+                        ))?;
+                    closure_upvalues.push(parent_uv.clone());
+                }
+            }
+        }
+        let new_closure = Arc::new(Closure {
+            function: function.clone(),
+            upvalues: closure_upvalues,
+        });
+
+        Ok(new_closure)
+    }
+
+    pub fn run(&mut self, closure: Closure) -> Result<Value, RuntimeError> {
+        self.run_main(Arc::new(closure))
+    }
+
+    pub fn run_main(&mut self, closure: ArcClosure) -> Result<Value, RuntimeError> {
         self.frames.push(CallFrame {
-            closure: closure.clone(),
+            closure,
             ip: 0,
             base: 0,
         });
+        self.run_frame(0)
+    }
+
+    fn run_frame(&mut self, until_depth: usize) -> Result<Value, RuntimeError> {
         loop {
             let frame = self.get_frame()?;
             let fnc = &frame.closure.function;
@@ -209,10 +317,43 @@ impl VM {
                 Opcode::SetItem => {
                     todo!()
                 }
-                Opcode::GetAttr => {
-                    todo!()
+                Opcode::GetField => {
+                    let field_const_idx = fnc.code[frame.ip] as usize;
+                    frame.ip += 1;
+
+                    let field_name = match &fnc.constants[field_const_idx] {
+                        Value::Texte(t) => t.clone(),
+                        f => {
+                            return Err(RuntimeError::generic_err(format!(
+                                "field name must be a string, got {}",
+                                f
+                            )));
+                        }
+                    };
+
+                    match self.pop().expect("Object") {
+                        Value::Objet(o) => {
+                            let o = o.read().unwrap();
+                            let fields = &o.fields;
+                            let val = fields.get(&field_name);
+                            if let Some(val) = val {
+                                self.push(val.clone());
+                            } else {
+                                return Err(RuntimeError::invalid_field(
+                                    &o.to_string(),
+                                    &field_name,
+                                ));
+                            }
+                        }
+                        o => {
+                            return Err(RuntimeError::type_error(format!(
+                                "impossible d'accéder à un champs sur une valeur de type '{}'",
+                                o.get_type()
+                            )));
+                        }
+                    }
                 }
-                Opcode::SetAttr => {
+                Opcode::SetField => {
                     todo!()
                 }
                 Opcode::Closure => {
@@ -229,75 +370,38 @@ impl VM {
                             ));
                         }
                     };
-                    let function = proto_closure.function.clone();
-                    // build real closure and wire upvalues according to function.upvalue_specs
-                    let mut closure_upvalues: Vec<ArcUpvalue> =
-                        Vec::with_capacity(function.upvalue_count);
 
-                    let frame_base = frame.base;
-
-                    for spec in function.upvalue_specs.iter() {
-                        match spec {
-                            UpvalueSpec::Local(slot_idx) => {
-                                // locate existing open upvalue for this exact stack slot (base + slot_idx)
-                                let target_stack_idx = frame_base + slot_idx;
-
-                                let existing = self.open_upvalues.iter().find(|uv| {
-                                    if let UpvalueLocation::Open(idx) = uv.read().unwrap().location
-                                    {
-                                        idx == target_stack_idx
-                                    } else {
-                                        false
-                                    }
-                                });
-
-                                let rc_up = match existing {
-                                    Some(e) => e.clone(),
-                                    None => {
-                                        let uv = Upvalue {
-                                            location: UpvalueLocation::Open(target_stack_idx),
-                                        };
-                                        let rc = Arc::new(RwLock::new(uv));
-                                        self.open_upvalues.push(rc.clone());
-                                        rc
-                                    }
-                                };
-                                closure_upvalues.push(rc_up);
-                            }
-                            UpvalueSpec::Upvalue(parent_index) => {
-                                // inherit parent's upvalue: parent's closure is frame.closure
-                                let parent_uv = self
-                                    .get_frame()
-                                    .unwrap()
-                                    .closure
-                                    .upvalues
-                                    .get(*parent_index)
-                                    .ok_or(RuntimeError::generic_err(
-                                        "parent upvalue index out of range",
-                                    ))?;
-                                closure_upvalues.push(parent_uv.clone());
-                            }
-                        }
-                    }
-                    let new_closure = Arc::new(Closure {
-                        function: function.clone(),
-                        upvalues: closure_upvalues,
-                    });
+                    let new_closure = self.resolve_proto_closure_upvalues(proto_closure)?;
                     self.push(Value::Closure(new_closure));
                 }
-                Opcode::Struct => {
-                    let const_idx = fnc.code[frame.ip] as usize;
+                Opcode::NewStruct => {
+                    let nb_fields = fnc.code[frame.ip];
                     frame.ip += 1;
 
-                    let structure = match &fnc.constants[const_idx] {
-                        Value::Structure(rc_cl) => rc_cl.clone(),
-                        _ => {
-                            return Err(RuntimeError::generic_err(
-                                "STRUCTURE constant must be a Structure",
-                            ));
-                        }
+                    let mut fields = HashMap::with_capacity(nb_fields as usize);
+                    for _ in 0..nb_fields {
+                        let field_name = self
+                            .pop()
+                            .unwrap()
+                            .as_texte()
+                            .expect("Field name must be a string")
+                            .to_string();
+                        let field_value = self.pop().unwrap();
+                        fields.insert(field_name, field_value);
+                    }
+
+                    let maybe_struct = self.pop().expect("A struct");
+                    let Value::Structure(struct_const) = maybe_struct else {
+                        return Err(RuntimeError::invalid_struct(maybe_struct.get_type()));
                     };
+
+                    let fields = self.finish_init_struct(Arc::clone(&struct_const), fields)?;
+
+                    self.push(Value::Objet(
+                        RwLock::new(ASObjet::new(struct_const, fields)).into(),
+                    ));
                 }
+
                 Opcode::GetUpvalue => {
                     let idx = fnc.code[frame.ip] as usize;
                     frame.ip += 1;
@@ -437,7 +541,7 @@ impl VM {
                     // remove stack entries above base (leave space where callee was)
                     self.stack.truncate(frame.base);
 
-                    if self.frames.is_empty() {
+                    if self.frames.is_empty() || self.frames.len() == until_depth {
                         return Ok(ret);
                     }
 

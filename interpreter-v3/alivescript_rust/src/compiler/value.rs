@@ -1,29 +1,28 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
-use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub};
 use std::rc::Rc;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
-use crate::as_obj::{self, ASErreurType};
-use crate::ast::CallRust;
-use crate::compiler::bytecode::{Instructions, instructions_to_string};
+use crate::as_obj::ASErreurType;
+use crate::compiler::bytecode::instructions_to_string;
 use crate::compiler::err::CompilationError;
-use crate::compiler::obj::{ArcClosure, Upvalue, UpvalueSpec, Value};
+use crate::compiler::obj::{Upvalue, UpvalueSpec, Value};
 use crate::runtime::err::RuntimeError;
 use crate::runtime::vm::VM;
+
+pub type ArcStructure = Arc<RwLock<ASStructure>>;
 
 #[derive(Debug)]
 pub struct ASStructure {
     pub name: String,
 
-    pub fields: HashMap<String, ASFieldInfo>,
-    pub methods: HashMap<String, NativeFunction>,
+    pub fields: Vec<ASFieldInfo>,
+    pub methods: HashMap<String, ClosureMethod>,
 }
 
 impl ASStructure {
-    pub fn new(name: String, fields: HashMap<String, ASFieldInfo>) -> Self {
+    pub fn new(name: String, fields: Vec<ASFieldInfo>) -> Self {
         Self {
             name,
             fields,
@@ -32,18 +31,75 @@ impl ASStructure {
     }
 }
 
+impl Display for ASStructure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "structure {} {{ {} }}",
+            self.name,
+            self.fields
+                .iter()
+                .map(|field| format!("{}: {}", field.name, field.field_type.name))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+}
+
 #[derive(Debug)]
 pub struct ASFieldInfo {
-    pub field_type: BaseType,
+    pub name: String,
+    pub field_type: TypeSpec,
     pub is_const: bool,
     pub is_private: bool,
-    pub value: Value,
+    pub value: Option<Value>,
 }
 
 #[derive(Debug)]
 pub struct ClosureMethod {
     pub function: Arc<Function>,
-    pub upvalues: Vec<Upvalue>,
+    pub upvalues: Vec<Arc<RwLock<Upvalue>>>,
+}
+
+#[derive(Debug)]
+pub struct ASObjet {
+    pub structure: ArcStructure,
+    pub fields: HashMap<String, Value>,
+}
+
+impl Display for ASObjet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut fields_to_string = self.fields.iter().collect::<Vec<_>>();
+
+        let structure_names = self
+            .structure
+            .read()
+            .unwrap()
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(i, f)| (f.name.clone(), i))
+            .collect::<HashMap<_, _>>();
+
+        fields_to_string.sort_by_key(|(name, _)| structure_names[*name]);
+
+        write!(
+            f,
+            "{} {{\n  {}\n}}",
+            self.structure.read().unwrap().name,
+            fields_to_string
+                .into_iter()
+                .map(|(k, v)| format!("{}: {}", k, v.repr()))
+                .collect::<Vec<_>>()
+                .join(",\n  ")
+        )
+    }
+}
+
+impl ASObjet {
+    pub fn new(structure: ArcStructure, fields: HashMap<String, Value>) -> Self {
+        Self { structure, fields }
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -280,11 +336,11 @@ pub enum BaseType {
 #[derive(Debug, PartialEq, Clone)]
 pub struct StructType {
     pub name: String,
-    pub fields: HashMap<String, BaseType>,
+    pub fields: HashMap<String, TypeSpec>,
 }
 
 impl StructType {
-    pub fn new(name: String, fields: HashMap<String, BaseType>) -> Self {
+    pub fn new(name: String, fields: HashMap<String, TypeSpec>) -> Self {
         Self { name, fields }
     }
 }
