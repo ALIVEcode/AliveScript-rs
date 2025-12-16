@@ -338,17 +338,19 @@ impl VM {
                         Value::Objet(o) => {
                             let val = ASObjet::get_field(o, &field_name)?;
                             self.push(val);
-                            // let o = o.read().unwrap();
-                            // let fields = &o.fields;
-                            // let val = fields.get(&field_name);
-                            // if let Some(val) = val {
-                            //     self.push(val.clone());
-                            // } else {
-                            //     return Err(RuntimeError::invalid_field(
-                            //         &o.to_string(),
-                            //         &field_name,
-                            //     ));
-                            // }
+                        }
+                        Value::Structure(s) => {
+                            let structure = s.read().unwrap();
+                            if let Some(method) = structure.struct_methods.get(&field_name) {
+                                let new_method =
+                                    self.resolve_proto_closure_upvalues(Arc::clone(method))?;
+                                self.push(Value::Function(Function::Closure(new_method)));
+                            } else {
+                                return Err(RuntimeError::invalid_field(
+                                    &structure.to_string(),
+                                    &field_name,
+                                ));
+                            }
                         }
                         o => {
                             return Err(RuntimeError::type_error(format!(
