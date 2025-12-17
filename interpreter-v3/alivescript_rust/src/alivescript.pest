@@ -49,7 +49,7 @@ CommandStmt = {
 
 UtiliserStmt    = { "utiliser" ~ ((#module = Ident | #path = Text)) ~ ModuleAlias? ~ UtiliserMembers? }
 ModuleAlias     = { "alias" ~ Ident | Ident ~ "." }
-UtiliserMembers = { "{" ~ ((#member = Mul) | (((#member = Ident) ~ ",")* ~ (#member = Ident)?)) ~ "}" }
+UtiliserMembers = { "{" ~ ((#member = Ident) ~ ",")* ~ (#member = Ident)? ~ "}" }
 
 TypeStmt = { "type" ~ typeTerm ~ Assign ~ TypeExpr }
 

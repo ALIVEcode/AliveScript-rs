@@ -53,6 +53,7 @@ pub struct Local {
     is_captured: bool, // Set to true if an inner function captures this variable.
     var_type: TypeSpec,
     is_const: bool,
+    is_inner: bool,
 }
 
 #[derive(Debug)]
@@ -162,6 +163,9 @@ impl<'a> Compiler<'a> {
 
         let mut exported = HashMap::new();
         for local in rc_self.borrow().locals.iter() {
+            if local.is_inner {
+                continue;
+            }
             exported.insert(
                 local.name.clone(),
                 rc_self
@@ -419,6 +423,7 @@ impl<'a> Compiler<'a> {
             is_captured: false,
             var_type: Type::Tout.into(),
             is_const: false,
+            is_inner: true,
         });
         self.locals.len() as u16 - 1
     }
@@ -430,6 +435,7 @@ impl<'a> Compiler<'a> {
             is_captured: false,
             var_type: var_type,
             is_const,
+            is_inner: false,
         });
         self.locals.len() as u16 - 1
     }
@@ -1376,25 +1382,39 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 let module_var = if let Some(alias) = alias {
                     self.borrow_mut()
                         .declare_local(&alias, module_type.into(), true)
-                } else {
+                } else if vars.is_none() {
                     let module_file = module_name.rsplit_once("/").unwrap_or(("", &module_name)).1;
                     self.borrow_mut().declare_local(
                         &module_file.strip_suffix(".as").unwrap_or(module_file),
                         module_type.into(),
                         true,
                     )
+                } else {
+                    let module_file = module_name.rsplit_once("/").unwrap_or(("", &module_name)).1;
+                    self.borrow_mut().declare_inner_local(
+                        &module_file.strip_suffix(".as").unwrap_or(module_file),
+                    )
                 };
 
                 self.borrow_mut().mark_initialized(module_var);
                 self.borrow_mut().code.emit_set_local(module_var);
+                if let Some(vars) = vars {
+                    for var in vars {
+                        let var_idx =
+                            self.borrow_mut()
+                                .declare_local(&var, Type::Tout.into(), true);
 
-                // Stmt::Utiliser {
-                //     module: module_name.as_str().trim_matches('"').to_string(),
-                //     alias,
-                //     vars,
-                //     is_path: module_name.as_node_tag().is_some_and(|node| node == "path"),
-                //     public: false,
-                // }
+                        self.borrow_mut().mark_initialized(var_idx);
+
+                        let var_name_idx = self
+                            .borrow_mut()
+                            .get_or_add_const(Value::Texte(var.clone()));
+
+                        self.borrow_mut().code.emit_get_local(module_var);
+                        self.borrow_mut().code.emit_get_attr(var_name_idx);
+                        self.borrow_mut().code.emit_set_local(var_idx);
+                    }
+                }
             }
             Rule::DeclStmt => {
                 self.parse_declare(pair.into_inner())?;

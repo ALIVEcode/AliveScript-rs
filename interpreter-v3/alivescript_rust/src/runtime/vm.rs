@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, VecDeque},
     fs,
+    path::{self, Path},
     sync::{Arc, RwLock},
 };
 
@@ -104,20 +105,22 @@ impl VM {
             return Ok(module.clone());
         }
 
-        let module_file = format!(
-            "{}/{module_name}.as",
-            self.file.rsplit_once("/").unwrap_or(("", "")).0
-        );
+        let module_file = Path::new(&self.file)
+            .parent()
+            .unwrap()
+            .join(format!("{}.as", module_name));
 
-        let module_file_content = fs::read_to_string(&module_file)
+        let abs_module_file = fs::canonicalize(&module_file)
+            .map_err(|io_err| RuntimeError::module_load_error(module_name, io_err))?;
+        let module_file_content = fs::read_to_string(&abs_module_file)
             .map_err(|io_err| RuntimeError::module_load_error(module_name, io_err))?;
 
-        let compiler = Compiler::new(&module_file_content, module_file.to_string());
+        let compiler = Compiler::new(&module_file_content, module_file.display().to_string());
         let module_closure = compiler
             .parse_and_compile_to_module()
             .map_err(|err| RuntimeError::module_load_error(module_name, err))?;
 
-        let mut other_vm = VM::new(module_file);
+        let mut other_vm = VM::new(module_file.display().to_string());
         other_vm.run(module_closure.load_fn)?;
 
         let mut members = HashMap::new();
@@ -126,10 +129,15 @@ impl VM {
             members.insert(member_name, value);
         }
 
-        Ok(Value::Module(Arc::new(RwLock::new(ASModule {
+        let module = Arc::new(RwLock::new(ASModule {
             name: module_name.to_string(),
             members,
-        }))))
+        }));
+
+        self.loaded_modules
+            .insert(module_name.to_string(), Value::Module(Arc::clone(&module)));
+
+        Ok(Value::Module(module))
     }
 
     fn finish_init_struct(

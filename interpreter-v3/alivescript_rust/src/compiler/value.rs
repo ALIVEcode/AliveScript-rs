@@ -604,7 +604,7 @@ impl Display for Type {
                     .join(", ")
             ),
             B::Type => "type".into(),
-            B::Module(name) => name.clone(),
+            B::Module(name) => format!("module '{}'", name.clone()),
             B::Objet(s) => s.clone(),
             B::Struct(struct_type) => struct_type.name.clone(),
         };
