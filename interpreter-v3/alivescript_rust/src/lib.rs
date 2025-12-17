@@ -22,16 +22,15 @@ pub mod runtime;
 
 pub mod cli;
 
-
 use parser::build_ast_stmts;
 use pest::Parser;
 use pest_derive::Parser;
 
-use crate::runtime::vm::VM;
 use crate::compiler::Compiler;
 use crate::data::Data;
 use crate::io::InterpretorIO;
 use crate::runner::Runner;
+use crate::runtime::vm::VM;
 
 #[derive(Parser)]
 #[grammar = "./alivescript.pest"]
@@ -135,7 +134,7 @@ pub fn compile_script_from_file2<'a, IO: InterpretorIO + 'a>(
     match result_stmts {
         Ok(stmts) => {
             // let mut visitor = Runner::new_with_file(interpretor_io, script_file);
-            let compiler = Compiler::new(script);
+            let compiler = Compiler::new(script, script_file);
             let closure = compiler.compile(stmts).unwrap();
             let mut vm = VM::new();
             let result = vm.run(closure).unwrap();

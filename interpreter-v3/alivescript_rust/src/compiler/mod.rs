@@ -63,6 +63,8 @@ pub struct LocalType {
 
 #[derive(Debug)]
 pub struct Compiler<'a> {
+    pub source_name: String,
+
     pub input: &'a str,
 
     // Current function being built
@@ -89,9 +91,10 @@ pub struct Compiler<'a> {
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new(input: &'a str) -> Self {
+    pub fn new(input: &'a str, source_name: String) -> Self {
         Self {
             input,
+            source_name,
             function: Rc::new(RefCell::new(ASFunction::new_anonymous(0))),
             code: Instructions::new(),
             parent: None,
@@ -115,6 +118,7 @@ impl<'a> Compiler<'a> {
     ) -> Self {
         Self {
             input,
+            source_name: { parent.borrow().source_name.clone() },
             function: Rc::new(RefCell::new(ASFunction::new(name, nb_params))),
             code: Instructions::new(),
             parent: Some(parent),
@@ -144,9 +148,13 @@ impl<'a> Compiler<'a> {
     }
 
     pub fn compile(self, pairs: Pairs<'a, Rule>) -> Result<ClosureProto, CompilationError> {
+        let source = self.source_name.clone();
+
         let mut rc_self = Rc::new(RefCell::new(self));
 
-        rc_self.build_ast_stmts(pairs)?;
+        rc_self
+            .build_ast_stmts(pairs)
+            .map_err(|err| err.set_source_if_none(source))?;
 
         rc_self.borrow_mut().code.pop_if_op_is(Opcode::Pop);
 
@@ -160,9 +168,13 @@ impl<'a> Compiler<'a> {
     }
 
     fn compile_lambda_expr(self, pairs: Pairs<'a, Rule>) -> Result<ClosureProto, CompilationError> {
+        let source = self.source_name.clone();
+
         let mut rc_self = Rc::new(RefCell::new(self));
 
-        rc_self.parse_expr(pairs)?;
+        rc_self
+            .parse_expr(pairs)
+            .map_err(|err| err.set_source_if_none(source))?;
 
         rc_self.borrow_mut().code.emit_return();
 
@@ -197,9 +209,13 @@ impl<'a> Compiler<'a> {
     }
 
     pub fn compile_debug(self, pairs: Pairs<'a, Rule>) -> Result<ClosureProto, CompilationError> {
+        let source = self.source_name.clone();
+
         let mut rc_self = Rc::new(RefCell::new(self));
 
-        rc_self.build_ast_stmts(pairs)?;
+        rc_self
+            .build_ast_stmts(pairs)
+            .map_err(|err| err.set_source_if_none(source))?;
 
         rc_self.borrow_mut().code.pop_if_op_is(Opcode::Pop);
 

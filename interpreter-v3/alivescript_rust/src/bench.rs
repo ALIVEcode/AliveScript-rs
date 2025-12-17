@@ -9,7 +9,14 @@ use pest::Parser;
 
 // Assuming you have a core module that exposes the VM/Compiler logic
 use crate::{
-    AlivescriptParser, Rule, compiler::{Compiler, obj::Value}, data::{Data, Response}, io::InterpretorIO, parser::{build_ast_stmt, build_ast_stmts}, runner::Runner, runtime::vm::VM, visitor::Visitor
+    AlivescriptParser, Rule,
+    compiler::{Compiler, obj::Value},
+    data::{Data, Response},
+    io::InterpretorIO,
+    parser::{build_ast_stmt, build_ast_stmts},
+    runner::Runner,
+    runtime::vm::VM,
+    visitor::Visitor,
 };
 
 // --- Configuration Constants ---
@@ -62,9 +69,9 @@ impl InterpretorIO for IO {
 //     let mut vm = VM::new();
 //     vm.run(Rc::new(closure)).unwrap();
 // }
-fn execute_alive_script_a(source_code: &str) {
+fn execute_alive_script_a(source_code: &str, filename: String) {
     // 1. Compile the source code
-    let compiler = Compiler::new(source_code);
+    let compiler = Compiler::new(source_code, filename);
     let result_stmts = AlivescriptParser::parse(Rule::script, source_code).unwrap();
     let closure = compiler.compile(result_stmts).unwrap();
 
@@ -73,7 +80,7 @@ fn execute_alive_script_a(source_code: &str) {
     vm.run(closure).unwrap();
 }
 
-fn execute_alive_script_b(source_code: &str) {
+fn execute_alive_script_b(source_code: &str, _filename: String) {
     // 1. Compile the source code
     let result_stmts = AlivescriptParser::parse(Rule::script, source_code).unwrap();
     let mut io = IO {};
@@ -83,12 +90,17 @@ fn execute_alive_script_b(source_code: &str) {
 }
 
 /// Executes the benchmark and returns a vector of measured durations.
-fn run_benchmark(source_code: &str, impl_name: &str, func: fn(&str)) -> Vec<Duration> {
+fn run_benchmark(
+    filename: String,
+    source_code: &str,
+    impl_name: &str,
+    func: fn(&str, String),
+) -> Vec<Duration> {
     println!("\n--- Benchmarking {} ---", impl_name);
 
     // 1. WARMUP PHASE (Discarded)
     for i in 0..WARMUP_RUNS {
-        func(source_code);
+        func(source_code, filename.clone());
         if i == 0 {
             println!("Warming up ({} runs)...", WARMUP_RUNS);
         }
@@ -102,7 +114,7 @@ fn run_benchmark(source_code: &str, impl_name: &str, func: fn(&str)) -> Vec<Dura
         let start = Instant::now();
 
         // Ensure the result is used to prevent compiler optimization
-        let _result = func(source_code);
+        let _result = func(source_code, filename.clone());
 
         let duration = start.elapsed();
         times.push(duration);
@@ -206,6 +218,7 @@ pub fn main_benchmark() {
 
     // --- Run and Analyze Impl A ---
     let mut times_a = run_benchmark(
+        BENCHMARK_FILE.to_string(),
         &source_code,
         "Implementation A (Current VM)",
         execute_alive_script_a,
@@ -219,6 +232,7 @@ pub fn main_benchmark() {
 
     // For a simple test, we run the same implementation again to check consistency:
     let mut times_b = run_benchmark(
+        BENCHMARK_FILE.to_string(),
         &source_code,
         "Implementation B (Hypothetical Optimized VM)",
         execute_alive_script_b,

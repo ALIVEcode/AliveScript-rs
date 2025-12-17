@@ -17,11 +17,16 @@ fn start_repl() {
 // Helper function to handle the unimplemented file execution.
 fn run_file(path: &PathBuf, debug_infos: Option<&DebugInfo>, run: bool) {
     let script = std::fs::read_to_string(path).unwrap();
-    evaluate_string(&script, debug_infos, run);
+    evaluate_string(
+        &script,
+        debug_infos,
+        run,
+        path.to_str().unwrap().to_string(),
+    );
 }
 
 // Helper function to handle the unimplemented string evaluation.
-fn evaluate_string(code: &str, debug_infos: Option<&DebugInfo>, run: bool) {
+fn evaluate_string(code: &str, debug_infos: Option<&DebugInfo>, run: bool, source: String) {
     let result_stmts = AlivescriptParser::parse(Rule::script, &code);
 
     match result_stmts {
@@ -30,7 +35,7 @@ fn evaluate_string(code: &str, debug_infos: Option<&DebugInfo>, run: bool) {
                 println!("{:#?}", stmts);
             }
 
-            let compiler = Compiler::new(&code);
+            let compiler = Compiler::new(&code, source);
             let closure = if debug_infos.is_some_and(|di| di.show_bytecode()) {
                 compiler.compile_debug(stmts)
             } else {
@@ -158,7 +163,7 @@ pub fn run_cli() {
         // Case: alive -e <STR>
         None if cli.evaluate.is_some() => {
             let code = cli.evaluate.as_ref().unwrap();
-            evaluate_string(code, None, true);
+            evaluate_string(code, None, true, "stdin".to_string());
         }
 
         // Case: alive <FILE>

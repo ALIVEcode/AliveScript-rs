@@ -1,4 +1,4 @@
-const x = 255
+var x = 255
 
 var y = x * 2
 var w = x * 2
