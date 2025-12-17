@@ -1,4 +1,4 @@
-use crate::compiler::{obj::Value, value::BaseType};
+use crate::compiler::{obj::Value, value::Type};
 
 #[macro_export]
 macro_rules! as_fonction_native {
@@ -16,14 +16,14 @@ macro_rules! as_fonction_native {
                 //     default_value: $crate::default_value!($($default)?),
                 // },
                 // )*],
-                func: std::sync::Arc::new(move |vm: &mut $crate::runtime::vm::VM, args: std::vec::Vec<Value>| {
+                func: std::sync::Arc::new(move |_vm: &mut $crate::runtime::vm::VM, args: std::vec::Vec<Value>| {
                     let mut args = std::collections::VecDeque::from_iter(args.iter());
                     $(
                     let $param_name = {
                         let p = args.pop_front();
                         $crate::optional_body!($($default)?, {p.unwrap_or_else(|| $($default)?)}, {p.unwrap()})
                     };
-                    if !$crate::compiler::value::BaseType::type_match(&$param_type, &$param_name.get_type()) {
+                    if !$crate::compiler::value::Type::type_match(&$param_type, &$param_name.get_type()) {
                         return Err($crate::runtime::err::RuntimeError::invalid_arg_type(
                             std::stringify!($name),
                             std::stringify!($param_name),
@@ -32,7 +32,7 @@ macro_rules! as_fonction_native {
                          ));
                     }
                     )*
-                    $(let $vm = vm;)?
+                    $(let $vm = _vm;)?
                     $body
                 }),
                 // $return_type,
@@ -58,24 +58,24 @@ macro_rules! as_mod_native {
 as_mod_native! {
     BUILTIN_MOD,
     as_fonction_native! {
-        afficherErr(msg: BaseType::any()): ASType::Nul => {
+        afficherErr(msg: Type::any()): ASType::Nul => {
             eprintln!("{}", msg);
             Ok(Some(Value::Nul))
         }
     },
     as_fonction_native! {
-        afficher(msg: BaseType::any()): ASType::Nul => {
+        afficher(msg: Type::any()): ASType::Nul => {
             println!("{}", msg);
             Ok(Some(Value::Nul))
         }
     },
     as_fonction_native! {
-        typeDe(obj: BaseType::any()): ASType::Type => {
+        typeDe(obj: Type::any()): ASType::Type => {
             Ok(Some(Value::TypeObj(obj.get_type())))
         }
     },
     as_fonction_native! {
-        tailleDe(obj: BaseType::iterable()): ASType::Entier => {
+        tailleDe(obj: Type::iterable()): ASType::Entier => {
             Ok(Some(Value::Entier(match obj {
                 Value::Texte(t) => t.len(),
                 Value::Liste(l) => l.read().unwrap().len(),

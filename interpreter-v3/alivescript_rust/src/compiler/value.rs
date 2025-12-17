@@ -1,27 +1,38 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
+use std::marker::PhantomData;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
 use crate::as_obj::ASErreurType;
 use crate::compiler::bytecode::instructions_to_string;
-use crate::compiler::err::CompilationError;
-use crate::compiler::obj::{ArcClosure, ArcUpvalue, Function, UpvalueSpec, Value};
+use crate::compiler::err::CompilationErrorKind;
+use crate::compiler::obj::{ArcUpvalue, Function, UpvalueSpec, Value};
 use crate::runtime::err::RuntimeError;
 use crate::runtime::vm::VM;
 
+pub type ArcClosureProto = Arc<ClosureProto>;
+pub type ArcClosureInst = Arc<ClosureInst>;
+pub type ArcFunction = Arc<ASFunction>;
 pub type ArcStructure = Arc<RwLock<ASStructure>>;
 pub type ArcObjet = Arc<RwLock<ASObjet>>;
 pub type ArcClosureMethod = Arc<RwLock<ClosureMethod>>;
+pub type ArcModule = Arc<RwLock<ASModule>>;
+
+#[derive(Debug)]
+pub struct ASModule {
+    pub name: String,
+    pub members: HashMap<String, Value>,
+}
 
 #[derive(Debug)]
 pub struct ASStructure {
     pub name: String,
 
     pub fields: Vec<ASFieldInfo>,
-    pub inst_methods: HashMap<String, ArcClosure>,
-    pub struct_methods: HashMap<String, ArcClosure>,
+    pub inst_methods: HashMap<String, ArcClosureProto>,
+    pub struct_methods: HashMap<String, ArcClosureProto>,
 }
 
 impl ASStructure {
@@ -61,7 +72,7 @@ pub struct ASFieldInfo {
 
 #[derive(Debug)]
 pub struct ClosureMethod {
-    pub closure: ArcClosure,
+    pub closure: ArcClosureInst,
     pub inst_value: Value,
 }
 
@@ -72,7 +83,11 @@ pub struct ASObjet {
 }
 
 impl ASObjet {
-    pub fn get_field(obj: Arc<RwLock<Self>>, attr: &str) -> Result<Value, RuntimeError> {
+    pub fn get_field(
+        vm: &mut VM,
+        obj: Arc<RwLock<Self>>,
+        attr: &str,
+    ) -> Result<Value, RuntimeError> {
         // its a field
         if let Some(val) = obj.read().unwrap().fields.get(attr) {
             return Ok(val.clone());
@@ -82,9 +97,10 @@ impl ASObjet {
         // its a method
         let structure = obj_val.structure.read().unwrap();
         if let Some(method) = structure.inst_methods.get(attr) {
+            let closure = vm.resolve_proto_closure_upvalues(Arc::clone(method))?;
             return Ok(Value::Function(Function::ClosureMethod(Arc::new(
                 RwLock::new(ClosureMethod {
-                    closure: Arc::clone(method),
+                    closure,
                     inst_value: Value::Objet(Arc::clone(&obj)),
                 }),
             ))));
@@ -177,13 +193,44 @@ impl Debug for ASFunction {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Closure {
-    pub function: Arc<ASFunction>,
-    pub upvalues: Vec<ArcUpvalue>,
+pub mod closure_state {
+    #[derive(Debug, Clone)]
+    pub struct Proto;
+    #[derive(Debug, Clone)]
+    pub struct Inst;
 }
 
-impl PartialEq for Closure {
+#[derive(Debug, Clone)]
+pub struct Closure<T> {
+    pub function: Arc<ASFunction>,
+    pub upvalues: Vec<ArcUpvalue>,
+    pub phantom: PhantomData<T>,
+}
+
+impl ClosureProto {
+    pub fn new(function: Arc<ASFunction>) -> Self {
+        Self {
+            function,
+            upvalues: vec![],
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl ClosureInst {
+    pub fn new(function: Arc<ASFunction>, upvalues: Vec<ArcUpvalue>) -> Self {
+        Self {
+            function,
+            upvalues,
+            phantom: PhantomData,
+        }
+    }
+}
+
+pub type ClosureInst = Closure<closure_state::Inst>;
+pub type ClosureProto = Closure<closure_state::Proto>;
+
+impl<T> PartialEq for Closure<T> {
     fn eq(&self, other: &Self) -> bool {
         self.function == other.function
             && self
@@ -228,7 +275,7 @@ impl TypeSpec {
     pub fn new_computed(
         name: String,
         args: Vec<ArgParam>,
-        value: Rc<dyn FnMut(Vec<TypeSpec>) -> BaseType>,
+        value: Rc<dyn FnMut(Vec<TypeSpec>) -> Type>,
     ) -> Self {
         Self {
             name,
@@ -239,24 +286,24 @@ impl TypeSpec {
         }
     }
 
-    pub fn new_simple(name: String, value: BaseType) -> Self {
+    pub fn new_simple(name: String, value: Type) -> Self {
         Self {
             name,
             value: TypeSpecValue::BaseType(value),
         }
     }
 
-    pub fn as_base_type(self) -> Result<BaseType, CompilationError> {
+    pub fn as_base_type(self) -> Result<Type, CompilationErrorKind> {
         match self.value {
             TypeSpecValue::Computed {
                 type_params,
                 compute_type,
-            } => Err(CompilationError::generic_error("Expected base type")),
+            } => Err(CompilationErrorKind::generic_error("Expected base type")),
             TypeSpecValue::BaseType(base_type) => Ok(base_type),
         }
     }
 
-    pub fn compute(self, args: Vec<TypeSpec>) -> Result<BaseType, CompilationError> {
+    pub fn compute(self, args: Vec<TypeSpec>) -> Result<Type, CompilationErrorKind> {
         match self.value {
             TypeSpecValue::Computed {
                 type_params,
@@ -271,8 +318,8 @@ impl TypeSpec {
     }
 }
 
-impl From<BaseType> for TypeSpec {
-    fn from(value: BaseType) -> Self {
+impl From<Type> for TypeSpec {
+    fn from(value: Type) -> Self {
         Self::new_simple(value.to_string(), value.into())
     }
 }
@@ -287,9 +334,9 @@ pub struct ArgParam {
 pub enum TypeSpecValue {
     Computed {
         type_params: Vec<ArgParam>,
-        compute_type: Rc<dyn FnMut(Vec<TypeSpec>) -> BaseType>,
+        compute_type: Rc<dyn FnMut(Vec<TypeSpec>) -> Type>,
     },
-    BaseType(BaseType),
+    BaseType(Type),
 }
 impl PartialEq for TypeSpecValue {
     fn eq(&self, other: &Self) -> bool {
@@ -324,14 +371,14 @@ impl Debug for TypeSpecValue {
     }
 }
 
-impl From<BaseType> for TypeSpecValue {
-    fn from(value: BaseType) -> Self {
+impl From<Type> for TypeSpecValue {
+    fn from(value: Type) -> Self {
         Self::BaseType(value)
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum BaseType {
+pub enum Type {
     /// Type englobant tous les autres types, sauf [`ASType::Rien`] et [`ASType::Nul`]
     Tout,
     /// Type de retour d'une fonction qui ne retourne rien.
@@ -346,7 +393,7 @@ pub enum BaseType {
     Booleen,
     Texte,
 
-    Liste(Box<BaseType>),
+    Liste(Box<Type>),
 
     Fonction,
 
@@ -354,9 +401,9 @@ pub enum BaseType {
     Objet(String),
     Struct(StructType),
 
-    Union(Vec<BaseType>),
-    Array(Vec<BaseType>),
-    Optional(Box<BaseType>),
+    Union(Vec<Type>),
+    Array(Vec<Type>),
+    Optional(Box<Type>),
 
     Type,
 }
@@ -372,16 +419,16 @@ impl StructType {
     }
 }
 
-impl BaseType {
+impl Type {
     pub fn liste_tout() -> Self {
-        Self::Liste(Box::new(BaseType::Tout))
+        Self::Liste(Box::new(Type::Tout))
     }
 
-    pub fn with_type_args(&self, args: Vec<BaseType>) -> Result<BaseType, CompilationError> {
+    pub fn with_type_args(&self, args: Vec<Type>) -> Result<Type, CompilationErrorKind> {
         match self {
-            BaseType::Liste(astype) => Ok(BaseType::Liste(Box::new(Self::union(args)))),
-            BaseType::Objet(_) => todo!(),
-            _ => Err(CompilationError::generic_error(format!(
+            Type::Liste(astype) => Ok(Type::Liste(Box::new(Self::union(args)))),
+            Type::Objet(_) => todo!(),
+            _ => Err(CompilationErrorKind::generic_error(format!(
                 "Le type {} ne prend pas d'arguments",
                 self
             ))),
@@ -389,27 +436,27 @@ impl BaseType {
     }
 }
 
-impl BaseType {
-    pub fn nombre() -> BaseType {
-        BaseType::Union(vec![Self::Entier, Self::Decimal])
+impl Type {
+    pub fn nombre() -> Type {
+        Type::Union(vec![Self::Entier, Self::Decimal])
     }
 
-    pub fn iterable() -> BaseType {
-        BaseType::Union(vec![Self::Liste(Box::new(Self::Tout)), Self::Texte])
+    pub fn iterable() -> Type {
+        Type::Union(vec![Self::Liste(Box::new(Self::Tout)), Self::Texte])
     }
 
-    pub fn iterable_ordonne() -> BaseType {
-        BaseType::Union(vec![Self::Liste(Box::new(Self::Tout)), Self::Texte])
+    pub fn iterable_ordonne() -> Type {
+        Type::Union(vec![Self::Liste(Box::new(Self::Tout)), Self::Texte])
     }
 
-    pub fn union(types: Vec<BaseType>) -> BaseType {
+    pub fn union(types: Vec<Type>) -> Type {
         if types.len() == 1 {
             types.into_iter().nth(0).unwrap()
         } else {
-            let mut types: Vec<BaseType> = types
+            let mut types: Vec<Type> = types
                 .into_iter()
                 .flat_map(|t| match t {
-                    BaseType::Union(as_types) => as_types,
+                    Type::Union(as_types) => as_types,
                     t => vec![t],
                 })
                 .collect();
@@ -418,83 +465,88 @@ impl BaseType {
 
             types.dedup();
 
-            BaseType::Union(types)
+            Type::Union(types)
         }
     }
 
-    pub fn union_of(type1: BaseType, type2: BaseType) -> BaseType {
-        BaseType::union(vec![type1, type2])
+    pub fn union_of(type1: Type, type2: Type) -> Type {
+        Type::union(vec![type1, type2])
     }
 
-    pub fn optional(type1: BaseType) -> BaseType {
-        BaseType::Optional(Box::new(type1))
+    pub fn optional(type1: Type) -> Type {
+        Type::Optional(Box::new(type1))
     }
 
-    pub fn any() -> BaseType {
-        BaseType::optional(BaseType::Tout)
+    pub fn any() -> Type {
+        Type::optional(Type::Tout)
     }
 
     pub fn is_tout(&self) -> bool {
-        use BaseType::*;
-
         match self {
-            Union(types) => types.contains(&BaseType::Tout),
-            Optional(t) => t.is_tout(),
-            _ => self == &BaseType::Tout,
+            Type::Union(types) => types.contains(&Type::Tout),
+            Type::Optional(t) => t.is_tout(),
+            _ => self == &Type::Tout,
         }
     }
 
     pub fn is_primitif(&self) -> bool {
-        use BaseType::*;
-        matches!(self, Entier | Decimal | Texte | Booleen | Nul | Optional(_))
+        matches!(
+            self,
+            Type::Entier
+                | Type::Decimal
+                | Type::Texte
+                | Type::Booleen
+                | Type::Nul
+                | Type::Optional(_)
+        )
     }
 
-    pub fn type_match(type1: &BaseType, type2: &BaseType) -> bool {
-        use BaseType::*;
-
+    pub fn type_match(type1: &Type, type2: &Type) -> bool {
         match (type1, type2) {
             (t1, t2) if t1 == t2 => true,
 
-            (Tout, other) | (other, Tout) => other != &Rien && other != &Nul,
+            (Type::Tout, other) | (other, Type::Tout) => {
+                other != &Type::Rien && other != &Type::Nul
+            }
 
             // (Lit(o1), Lit(o2)) => o1 == o2,
-            (Optional(t), other) | (other, Optional(t)) => {
-                other == &Nul || BaseType::type_match(t.as_ref(), other)
+            (Type::Optional(t), other) | (other, Type::Optional(t)) => {
+                other == &Type::Nul || Type::type_match(t.as_ref(), other)
             }
 
-            (Union(types), other) | (other, Union(types)) => {
-                types.iter().any(|t| BaseType::type_match(t, &other))
+            (Type::Union(types), other) | (other, Type::Union(types)) => {
+                types.iter().any(|t| Type::type_match(t, &other))
             }
 
-            (Liste(t1), Liste(t2)) => Self::type_match(t1, t2),
+            (Type::Liste(t1), Type::Liste(t2)) => Self::type_match(t1, t2),
 
-            (Liste(t), Array(arr)) | (Array(arr), Liste(t)) => {
+            (Type::Liste(t), Type::Array(arr)) | (Type::Array(arr), Type::Liste(t)) => {
                 arr.iter().all(|el| Self::type_match(el, t))
             }
 
-            (Array(types1), Array(types2)) => {
+            (Type::Array(types1), Type::Array(types2)) => {
                 if types1.len() != types2.len() {
                     return false;
                 }
                 return types1
                     .iter()
                     .zip(types2)
-                    .all(|(t1, t2)| BaseType::type_match(t1, t2));
+                    .all(|(t1, t2)| Type::type_match(t1, t2));
             }
 
-            (Decimal, Entier) => true,
+            (Type::Decimal, Type::Entier) => true,
             _ => false,
         }
     }
 }
 
-impl From<Option<BaseType>> for BaseType {
-    fn from(value: Option<BaseType>) -> Self {
-        value.unwrap_or(BaseType::any())
+impl From<Option<Type>> for Type {
+    fn from(value: Option<Type>) -> Self {
+        value.unwrap_or(Type::any())
     }
 }
 
-impl FromStr for BaseType {
+impl FromStr for Type {
     type Err = ASErreurType;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -505,7 +557,7 @@ impl FromStr for BaseType {
             "nombre" => Ok(Self::nombre()),
             "iterable" | "itérable" => Ok(Self::iterable()),
             "texte" => Ok(Self::Texte),
-            "liste" => Ok(Self::Liste(Box::new(BaseType::Tout))),
+            "liste" => Ok(Self::Liste(Box::new(Type::Tout))),
             "rien" => Ok(Self::Nul),
             "nul" => Ok(Self::Nul),
             "tout" => Ok(Self::Tout),
@@ -516,9 +568,9 @@ impl FromStr for BaseType {
     }
 }
 
-impl Display for BaseType {
+impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use BaseType as B;
+        use Type as B;
 
         let to_string = match self {
             B::Tout => "tout".into(),

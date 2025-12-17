@@ -1,5 +1,5 @@
 use std::{
-    cell::{RefCell, RefMut},
+    cell::RefCell,
     collections::HashMap,
     rc::Rc,
     str::FromStr,
@@ -18,12 +18,12 @@ use crate::{
     ast::{BinCompcode, BinLogiccode, BinOpcode, UnaryOpcode},
     compiler::{
         bytecode::{Instructions, JUMP_OFFSET, Opcode, instructions_to_string_debug},
-        err::CompilationError,
-        obj::{ArcClosure, UpvalueSpec, Value},
+        err::{CompilationError, CompilationErrorKind},
+        obj::{UpvalueSpec, Value},
         parser::{PRATT_EXPR_PARSER, PRATT_TYPE_PARSER},
         value::{
-            ASFieldInfo, ASFunction, ASStructure, ArcStructure, BaseType, Closure, StructType,
-            TypeSpec,
+            ASFieldInfo, ASFunction, ASStructure, ArcClosureProto, ArcStructure, ClosureProto,
+            StructType, Type, TypeSpec,
         },
     },
     utils::Invert,
@@ -59,11 +59,6 @@ pub struct LocalType {
     name: String,
     spec: TypeSpec,
     depth: i32,
-}
-
-#[derive(Debug)]
-pub struct CompilerDebug {
-    debug_level: u8,
 }
 
 #[derive(Debug)]
@@ -107,7 +102,7 @@ impl<'a> Compiler<'a> {
             had_error: false,
             panic_mode: false,
             jump_stack: vec![],
-            return_type: BaseType::Tout.into(),
+            return_type: Type::Tout.into(),
         }
     }
 
@@ -134,13 +129,13 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    pub fn parse_and_compile(self) -> Result<ArcClosure, CompilationError> {
+    pub fn parse_and_compile(self) -> Result<ArcClosureProto, CompilationError> {
         let stmts = AlivescriptParser::parse(Rule::script, self.input)?;
 
-        Ok(ArcClosure::new(self.compile(stmts)?))
+        Ok(ArcClosureProto::new(self.compile(stmts)?))
     }
 
-    pub fn parse_and_compile_debug(self) -> Result<Closure, CompilationError> {
+    pub fn parse_and_compile_debug(self) -> Result<ClosureProto, CompilationError> {
         let stmts = AlivescriptParser::parse(Rule::script, self.input)?;
 
         println!("{:#?}", &stmts);
@@ -148,7 +143,7 @@ impl<'a> Compiler<'a> {
         self.compile_debug(stmts)
     }
 
-    pub fn compile(self, pairs: Pairs<'a, Rule>) -> Result<Closure, CompilationError> {
+    pub fn compile(self, pairs: Pairs<'a, Rule>) -> Result<ClosureProto, CompilationError> {
         let mut rc_self = Rc::new(RefCell::new(self));
 
         rc_self.build_ast_stmts(pairs)?;
@@ -159,15 +154,12 @@ impl<'a> Compiler<'a> {
 
         rc_self.borrow_mut().finish();
 
-        let x = Closure {
-            function: Arc::new(rc_self.borrow().function.borrow().clone()),
-            upvalues: vec![],
-        };
+        let x = ClosureProto::new(Arc::new(rc_self.borrow().function.borrow().clone()));
 
         Ok(x)
     }
 
-    fn compile_lambda_expr(self, pairs: Pairs<'a, Rule>) -> Result<Closure, CompilationError> {
+    fn compile_lambda_expr(self, pairs: Pairs<'a, Rule>) -> Result<ClosureProto, CompilationError> {
         let mut rc_self = Rc::new(RefCell::new(self));
 
         rc_self.parse_expr(pairs)?;
@@ -199,15 +191,12 @@ impl<'a> Compiler<'a> {
         // );
         // println!();
 
-        let x = Closure {
-            function: Arc::new(rc_self.borrow().function.borrow().clone()),
-            upvalues: vec![],
-        };
+        let x = ClosureProto::new(Arc::new(rc_self.borrow().function.borrow().clone()));
 
         Ok(x)
     }
 
-    pub fn compile_debug(self, pairs: Pairs<'a, Rule>) -> Result<Closure, CompilationError> {
+    pub fn compile_debug(self, pairs: Pairs<'a, Rule>) -> Result<ClosureProto, CompilationError> {
         let mut rc_self = Rc::new(RefCell::new(self));
 
         rc_self.build_ast_stmts(pairs)?;
@@ -242,10 +231,7 @@ impl<'a> Compiler<'a> {
         );
         println!();
 
-        let x = Closure {
-            function: Arc::new(rc_self.borrow().function.borrow().clone()),
-            upvalues: vec![],
-        };
+        let x = ClosureProto::new(Arc::new(rc_self.borrow().function.borrow().clone()));
 
         Ok(x)
     }
@@ -310,10 +296,6 @@ impl<'a> Compiler<'a> {
         c_idx
     }
 
-    fn func(&mut self) -> RefMut<'_, ASFunction> {
-        self.function.borrow_mut()
-    }
-
     fn begin_scope(&mut self) {
         self.scope_depth += 1;
     }
@@ -358,7 +340,7 @@ impl<'a> Compiler<'a> {
             name: format!("(({}))", debug_name),
             depth: -1, // not initialized yet
             is_captured: false,
-            var_type: BaseType::Tout.into(),
+            var_type: Type::Tout.into(),
             is_const: false,
         });
         self.locals.len() as u16 - 1
@@ -406,7 +388,7 @@ impl<'a> Compiler<'a> {
         self.upvalues.len() - 1
     }
 
-    fn resolve_upval(&mut self, name: &str) -> Result<Option<usize>, ASErreurType> {
+    fn resolve_upval(&mut self, name: &str) -> Result<Option<(usize, Local)>, ASErreurType> {
         // 1. Check if we have a parent compiler
         let parent_rc = match &self.parent {
             Some(p) => Rc::clone(p),
@@ -417,7 +399,7 @@ impl<'a> Compiler<'a> {
         let mut parent = parent_rc.borrow_mut();
 
         // 2. Try to resolve as a LOCAL in the PARENT
-        if let Some(local_idx) = parent.resolve_local(name, true)? {
+        if let Some((local_idx, local)) = parent.resolve_local(name, true)? {
             // FOUND: It's a local in the parent (Direct Capture)
 
             // Mark the local in the parent as captured.
@@ -428,12 +410,12 @@ impl<'a> Compiler<'a> {
             let upval_idx = self.add_upvalue(true, local_idx);
 
             // Return the index of the newly created upvalue in *this* function's upvalues array.
-            return Ok(Some(upval_idx));
+            return Ok(Some((upval_idx, local)));
         }
 
         // 3. Try to resolve as an UPVALUE in the PARENT (Indirect Capture)
         // Note: This is a recursive call!
-        if let Some(upval_idx_in_parent) = parent.resolve_upval(name)? {
+        if let Some((upval_idx_in_parent, local)) = parent.resolve_upval(name)? {
             // FOUND: It's already an upvalue in the parent's closure (Inherited Upvalue)
 
             // Record it as a new upvalue in THIS compiler.
@@ -441,14 +423,18 @@ impl<'a> Compiler<'a> {
             let upval_idx = self.add_upvalue(false, upval_idx_in_parent);
 
             // Return the index of the newly created upvalue in *this* function's upvalues array.
-            return Ok(Some(upval_idx));
+            return Ok(Some((upval_idx, local)));
         }
 
         // 4. Not found in the entire ancestry.
         Ok(None)
     }
 
-    fn resolve_local(&self, name: &str, allow_uninit: bool) -> Result<Option<usize>, ASErreurType> {
+    fn resolve_local(
+        &self,
+        name: &str,
+        allow_uninit: bool,
+    ) -> Result<Option<(usize, Local)>, ASErreurType> {
         for (i, local) in self.locals.iter().enumerate().rev() {
             if local.name == name {
                 if local.depth == -1 && !allow_uninit {
@@ -457,7 +443,7 @@ impl<'a> Compiler<'a> {
                         "Impossible de lire une variable dans son propre initialiseur.".into(),
                     ))?;
                 }
-                return Ok(Some(i));
+                return Ok(Some((i, local.clone())));
             }
         }
         Ok(None)
@@ -490,13 +476,13 @@ impl<'a> Compiler<'a> {
 
     fn load_var(&mut self, ident: &str) {
         // 1. Try to resolve as a LOCAL
-        if let Ok(Some(local_idx)) = self.resolve_local(ident, false) {
+        if let Ok(Some((local_idx, _))) = self.resolve_local(ident, false) {
             self.code.emit_get_local(local_idx as u16);
             return;
         }
 
         // 2. Try to resolve as an UPVALUE
-        if let Ok(Some(upval_idx)) = self.resolve_upval(ident) {
+        if let Ok(Some((upval_idx, _))) = self.resolve_upval(ident) {
             self.code.emit_get_upvalue(upval_idx as u16);
             return;
         }
@@ -549,7 +535,7 @@ trait Parser<'a> {
         public: Option<bool>,
     ) -> Result<(), PestError<Rule>>;
 
-    fn parse_assign(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError>;
+    fn parse_assign(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
     fn parse_declare(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError>;
 
@@ -597,6 +583,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             }
 
             Rule::StructInit => {
+                let span = primary.as_span();
                 let mut inner = primary.into_inner();
 
                 let struct_pair = inner.next().unwrap();
@@ -608,12 +595,16 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 };
 
                 let s_c = s_type.clone();
-                let BaseType::Struct(s_type) = s_type.as_base_type()? else {
-                    return Err(CompilationError::generic_error(format!(
+                let Type::Struct(..) = s_type
+                    .as_base_type()
+                    .map_err(|compilation_error_kind| compilation_error_kind.to_error(span))?
+                else {
+                    return Err(CompilationErrorKind::generic_error(format!(
                         "Impossible de construire un type '{:?}'. Seule une structure peut être construite.",
                         s_c,
-                    )));
+                    )).to_error(span));
                 };
+                // TODO: check the fields are the correct types
 
                 let mut nb_fields = 0;
                 while let Some(field) = inner.next() {
@@ -701,7 +692,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         PRATT_EXPR_PARSER
             .map_primary(|pair| Rc::clone(self).parse_top_expr(pair))
             .map_prefix(|prefix, rhs| {
-                let rhs = rhs?;
+                rhs?;
 
                 if let Ok(op) = UnaryOpcode::try_from(&prefix) {
                     match op {
@@ -722,8 +713,8 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 }
             })
             .map_infix(|lhs, infix, rhs| {
-                let lhs = lhs?;
-                let rhs = rhs?;
+                lhs?;
+                rhs?;
 
                 if let Ok(op) = BinOpcode::try_from(&infix) {
                     self.borrow_mut().code.emit_binop(op);
@@ -733,13 +724,13 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     self.borrow_mut().code.emit_bincomp(op);
                     return Ok(());
                 }
-                if let Ok(op) = BinLogiccode::try_from(&infix) {
+                if let Ok(..) = BinLogiccode::try_from(&infix) {
                     todo!();
                 }
                 todo!();
             })
             .map_postfix(|lhs, postfix| {
-                let lhs = lhs?;
+                lhs?;
 
                 match postfix.as_rule() {
                     Rule::AccessProp => {
@@ -809,7 +800,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 None,
                 Rc::clone(self),
                 0,
-                return_type.unwrap_or(BaseType::Tout.into()),
+                return_type.unwrap_or(Type::Tout.into()),
             )));
             c.parse_fn_params(params)?;
 
@@ -853,7 +844,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 .into());
             };
 
-            let mut static_type = BaseType::Tout.into();
+            let mut static_type = Type::Tout.into();
             if let Some(static_type_pair) = inner.find_first_tagged("p_type") {
                 static_type = self.parse_type(static_type_pair.into_inner())?;
             }
@@ -912,7 +903,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 Some(name.clone()),
                 Rc::clone(self),
                 0,
-                return_type.unwrap_or(BaseType::Tout.into()),
+                return_type.unwrap_or(Type::Tout.into()),
             )));
 
             if params
@@ -923,7 +914,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 params.next();
                 let inst_idx = c
                     .borrow_mut()
-                    .declare_local("inst", BaseType::Tout.into(), true);
+                    .declare_local("inst", Type::Tout.into(), true);
                 c.borrow_mut().mark_initialized(inst_idx);
 
                 is_static_method = false;
@@ -962,16 +953,19 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
     fn parse_assign_vars(
         &mut self,
-        pairs: Pairs<Rule>,
-        is_const: Option<bool>,
-        public: Option<bool>,
+        _pairs: Pairs<Rule>,
+        _is_const: Option<bool>,
+        _public: Option<bool>,
     ) -> Result<(), PestError<Rule>> {
         todo!()
     }
 
-    fn parse_assign(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError> {
+    fn parse_assign(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError> {
+        let span = pair.as_span();
+        let pairs = pair.into_inner();
+
         let mut name = None;
-        let mut static_type = BaseType::Tout.into();
+        let mut static_type = Type::Tout.into();
         let mut op = None;
         // let mut var_list = None;
 
@@ -1019,19 +1013,25 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         let name = name.unwrap();
 
         // 1. Try to resolve as a LOCAL
-        if let Ok(Some(local_idx)) = compiler.resolve_local(name, false) {
+        if let Ok(Some((local_idx, local))) = compiler.resolve_local(name, false) {
+            if local.is_const {
+                return Err(CompilationErrorKind::assign_to_const(name).to_error(span));
+            }
             compiler.code.emit_set_local(local_idx as u16);
             return Ok(());
         }
 
         // 2. Try to resolve as an UPVALUE
-        if let Ok(Some(upval_idx)) = compiler.resolve_upval(name) {
+        if let Ok(Some((upval_idx, local))) = compiler.resolve_upval(name) {
+            if local.is_const {
+                return Err(CompilationErrorKind::assign_to_const(name).to_error(span));
+            }
             compiler.code.emit_set_upvalue(upval_idx as u16);
             return Ok(());
         }
 
         // 3. It defines a new local variable
-        let local_idx = compiler.declare_local(name, BaseType::Tout.into(), false);
+        let local_idx = compiler.declare_local(name, static_type, false);
 
         compiler.mark_initialized(local_idx);
         compiler.code.emit_set_local(local_idx);
@@ -1041,16 +1041,16 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
     fn parse_declare(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError> {
         let mut name = None;
-        let mut static_type = BaseType::Tout.into();
+        let mut static_type = Type::Tout.into();
         let mut is_const = false;
-        let mut public = false;
+        // let mut public = false;
         // let mut var_list = None;
 
         for pair in pairs {
             match pair.as_rule() {
                 Rule::Const => is_const = true,
                 Rule::Var | Rule::Assign => {}
-                Rule::Pub => public = true,
+                Rule::Pub => {} //public = true,
                 Rule::Expr => {
                     self.parse_expr(pair.into_inner())?;
                 }
@@ -1125,8 +1125,8 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         PRATT_TYPE_PARSER
             .map_primary(|primary| match primary.as_rule() {
                 Rule::TypeExpr => Rc::clone(self).parse_type(primary.into_inner()),
-                Rule::Ident => Ok(BaseType::from_str(primary.as_str())
-                    .map_err(|e| {
+                Rule::Ident => Ok(Type::from_str(primary.as_str())
+                    .map_err(|_| {
                         PestError::new_from_span(
                             PestErrorVariant::CustomError {
                                 message: format!("Unknown type {}", primary.as_str()),
@@ -1294,7 +1294,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 // Stmt::Decl { var, val }
             }
             Rule::AssignStmt => {
-                self.parse_assign(pair.into_inner())?;
+                self.parse_assign(pair)?;
                 // match  {
                 //     (
                 //         DeclVar::Var {
@@ -1339,7 +1339,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
                 let local_idx = self.borrow_mut().declare_local(
                     name.as_ref().unwrap(),
-                    BaseType::Fonction.into(),
+                    Type::Fonction.into(),
                     false,
                 );
 
@@ -1361,7 +1361,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                         name.clone(),
                         Rc::clone(self),
                         0,
-                        return_type.unwrap_or(BaseType::Tout.into()),
+                        return_type.unwrap_or(Type::Tout.into()),
                     )));
                     c.parse_fn_params(params)?;
 
@@ -1418,7 +1418,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                         _ => {}
                     }
                     let field_name = f_inner.next().unwrap().as_str().to_string();
-                    let mut static_type = BaseType::Tout.into();
+                    let mut static_type = Type::Tout.into();
                     if let Some(static_type_pair) = f_inner.peek().and_then(|pair| {
                         if pair.as_rule() == Rule::TypeExpr {
                             Some(pair)
@@ -1465,7 +1465,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
                 let struct_type = TypeSpec::new_simple(
                     name.clone(),
-                    BaseType::Struct(StructType::new(name.clone(), field_types)),
+                    Type::Struct(StructType::new(name.clone(), field_types)),
                 );
 
                 let s_idx = self
@@ -1481,6 +1481,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             }
 
             Rule::ImplDef => {
+                let span = pair.as_span();
                 let mut inner = pair.into_inner();
 
                 let name = inner.next().map(|node| node.as_str().to_string()).unwrap();
@@ -1488,10 +1489,9 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 // remove the "finImpl" token from the list
                 inner.next_back();
 
-                let structure = self
-                    .borrow_mut()
-                    .get_struct_const(&name)
-                    .ok_or(CompilationError::generic_error("Needs to be a struct"))?;
+                let structure = self.borrow_mut().get_struct_const(&name).ok_or(
+                    CompilationErrorKind::generic_error("Needs to be a struct").to_error(span),
+                )?;
 
                 for methode in inner {
                     self.parse_methode_def(Arc::clone(&structure), methode)?;
@@ -1555,7 +1555,8 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 let inner = pair.into_inner();
                 let before_cond = self.borrow().code.inner().len();
 
-                let cond = self.parse_expr(
+                // cond
+                self.parse_expr(
                     inner
                         .clone()
                         .find(|p| matches!(p.as_node_tag(), Some("cond")))

@@ -1,6 +1,6 @@
 use clap::{Args, Parser, Subcommand};
 use pest::Parser as _;
-use std::{path::PathBuf, rc::Rc};
+use std::path::PathBuf;
 
 use crate::{AlivescriptParser, Rule, compiler::Compiler, runtime::vm::VM};
 

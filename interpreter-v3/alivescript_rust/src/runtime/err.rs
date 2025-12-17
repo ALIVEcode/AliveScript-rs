@@ -1,7 +1,6 @@
-use pest::error::{Error as PestError, ErrorVariant as PestErrorVariant};
 use thiserror::Error;
 
-use crate::{Rule, compiler::value::BaseType};
+use crate::compiler::value::Type;
 
 #[derive(Debug, Error)]
 pub enum RuntimeError {
@@ -34,7 +33,7 @@ impl RuntimeError {
         ))
     }
 
-    pub fn invalid_struct(ty: BaseType) -> Self {
+    pub fn invalid_struct(ty: Type) -> Self {
         Self::ValueError(format!(
             "impossible de construire une valeur de type '{}'. Seule les structures peuvent être construite",
             ty
@@ -48,7 +47,7 @@ impl RuntimeError {
         ))
     }
 
-    pub fn invalid_op(op: &str, lhs: BaseType, rhs: BaseType) -> Self {
+    pub fn invalid_op(op: &str, lhs: Type, rhs: Type) -> Self {
         Self::TypeError(format!(
             "opération '{}' non supporté pour les opérandes: {} et {}",
             op, lhs, rhs,
@@ -58,8 +57,8 @@ impl RuntimeError {
     pub fn invalid_arg_type(
         func: &str,
         param_name: &str,
-        param_type: BaseType,
-        arg_type: BaseType,
+        param_type: Type,
+        arg_type: Type,
     ) -> Self {
         Self::TypeError(format!(
             "dans la fonction '{func}', le paramètre '{param_name}' est de type '{param_type}', mais l'argument passé est de type '{arg_type}'",

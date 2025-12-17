@@ -3,14 +3,13 @@ use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub};
 use std::sync::{Arc, RwLock};
 
 use crate::compiler::value::{
-    ArcClosureMethod, ArcObjet, ArcStructure, BaseType, Closure, ClosureMethod, NativeFunction,
+    ArcClosureInst, ArcClosureMethod, ArcClosureProto, ArcModule, ArcObjet, ArcStructure, Closure,
+    NativeFunction, Type,
 };
 use crate::runtime::err::RuntimeError;
 use crate::runtime::vm::VM;
 
 pub type ArcUpvalue = Arc<RwLock<Upvalue>>;
-pub type ArcClosure = Arc<Closure>;
-pub type ArcFunction = Arc<Function>;
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -21,50 +20,51 @@ pub enum Value {
     Texte(String),
     Function(Function),
     Liste(Arc<RwLock<Vec<Value>>>),
-    TypeObj(BaseType),
+    TypeObj(Type),
     Structure(ArcStructure),
     Objet(ArcObjet),
+    Module(ArcModule),
 }
 
 #[derive(Debug, Clone)]
 pub enum Function {
-    Closure(ArcClosure),
+    ClosureProto(ArcClosureProto),
+    ClosureInst(ArcClosureInst),
     NativeFunction(NativeFunction),
     ClosureMethod(ArcClosureMethod),
 }
 
 impl Value {
-    pub fn closure(closure: impl Into<ArcClosure>) -> Self {
-        Self::Function(Function::Closure(closure.into()))
+    pub fn closure(closure: impl Into<ArcClosureProto>) -> Self {
+        Self::Function(Function::ClosureProto(closure.into()))
     }
 
     pub fn liste(values: Vec<Value>) -> Self {
         Self::Liste(Arc::new(RwLock::new(values)))
     }
 
-    pub fn get_type(&self) -> BaseType {
+    pub fn get_type(&self) -> Type {
         use Value as V;
 
         match self {
-            V::Entier(..) => BaseType::Entier,
-            V::Decimal(..) => BaseType::Decimal,
-            V::Texte(..) => BaseType::Texte,
-            V::Nul => BaseType::Nul,
-            V::Booleen(..) => BaseType::Booleen,
-            V::Liste(lst) => BaseType::Liste(Box::new(
+            V::Entier(..) => Type::Entier,
+            V::Decimal(..) => Type::Decimal,
+            V::Texte(..) => Type::Texte,
+            V::Nul => Type::Nul,
+            V::Booleen(..) => Type::Booleen,
+            V::Liste(lst) => Type::Liste(Box::new(
                 lst.read()
                     .unwrap()
                     .iter()
                     .map(|v| v.get_type())
-                    .reduce(|t1, t2| BaseType::union_of(t1, t2))
-                    .unwrap_or(BaseType::Tout),
+                    .reduce(|t1, t2| Type::union_of(t1, t2))
+                    .unwrap_or(Type::Tout),
             )),
-            V::Function(..) => BaseType::Fonction,
-            V::TypeObj(..) => BaseType::Type,
-            V::Structure(..) => BaseType::Type,
-            V::Objet(o) => {
-                BaseType::Objet(o.read().unwrap().structure.read().unwrap().name.clone())
-            }
+            V::Function(..) => Type::Fonction,
+            V::TypeObj(..) => Type::Type,
+            V::Structure(..) => Type::Type,
+            V::Objet(o) => Type::Objet(o.read().unwrap().structure.read().unwrap().name.clone()),
+            V::Module(m) => Type::Module(m.read().unwrap().name.clone()),
         }
     }
 
@@ -115,8 +115,6 @@ impl Value {
     }
 
     pub fn extend(&self, rhs: Self) -> Result<Value, RuntimeError> {
-        use Value as V;
-
         match (self, rhs) {
             (Value::Texte(s), rhs @ Value::Texte(..)) => self.clone() + rhs,
             (Value::Liste(l), Value::Liste(l2)) => {
@@ -145,8 +143,6 @@ impl Value {
     }
 
     pub fn contains(&self, rhs: &Self) -> Result<bool, RuntimeError> {
-        use Value as V;
-
         match (self, rhs) {
             (Value::Texte(s), Value::Texte(sub_s)) => Ok(s.contains(sub_s)),
             (Value::Liste(l), rhs) => Ok(l.read().unwrap().contains(rhs)),
@@ -224,7 +220,15 @@ impl Display for Value {
                     .join(", ")
             ),
             Value::Objet(o) => o.read().unwrap().to_string(),
-            Value::Function(Function::Closure(closure)) => format!(
+            Value::Function(Function::ClosureProto(closure)) => format!(
+                "fonction {}()",
+                closure
+                    .function
+                    .name
+                    .as_ref()
+                    .unwrap_or(&"anonyme".to_string())
+            ),
+            Value::Function(Function::ClosureInst(closure)) => format!(
                 "fonction {}()",
                 closure
                     .function
@@ -246,6 +250,7 @@ impl Display for Value {
                     .as_ref()
                     .unwrap_or(&"anonyme".to_string())
             ),
+            Value::Module(m) => format!("module {}", m.read().unwrap().name),
         };
 
         write!(f, "{}", to_str)
@@ -311,7 +316,7 @@ impl Upvalue {
 
 #[derive(Debug)]
 pub struct CallFrame {
-    pub closure: Arc<Closure>,
+    pub closure: ArcClosureInst,
     pub ip: usize,
     pub base: usize, // where this frame's locals start in VM.stack
 }
