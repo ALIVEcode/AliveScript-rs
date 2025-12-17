@@ -1355,7 +1355,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 let alias = inner
                     .clone()
                     .find(|node| node.as_rule() == Rule::ModuleAlias)
-                    .map(|alias| alias.as_str().to_string());
+                    .map(|alias| alias.into_inner().next().unwrap().as_str().to_string());
                 let vars = inner
                     .clone()
                     .find(|node| node.as_rule() == Rule::UtiliserMembers)

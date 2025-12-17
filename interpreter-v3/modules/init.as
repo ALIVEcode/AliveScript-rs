@@ -1,6 +1,6 @@
-utiliser "inner/module.as"
+utiliser "inner/module.as" alias m
 
 
-afficher module
-afficher module.somme(1, 2)
+afficher m
+afficher m.somme(1, 2)
 
