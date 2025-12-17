@@ -250,7 +250,7 @@ impl Display for Value {
                     .as_ref()
                     .unwrap_or(&"anonyme".to_string())
             ),
-            Value::Module(m) => format!("module {}", m.read().unwrap().name),
+            Value::Module(m) => format!("module '{}.as'", m.read().unwrap().name),
         };
 
         write!(f, "{}", to_str)

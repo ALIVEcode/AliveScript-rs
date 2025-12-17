@@ -618,19 +618,19 @@ impl VM {
                         .pop()
                         .ok_or(RuntimeError::generic_err("return with no frame"))?;
 
-                    let ret = if self.stack.len() > frame.base {
-                        self.pop().unwrap_or(Value::Nul)
-                    } else {
-                        Value::Nul
-                    };
-
                     self.close_upvalues(frame.base);
 
                     // we don't truncate if self.frames is empty to allow for
                     // this vm to become a module
                     if self.frames.is_empty() {
-                        return Ok(ret);
+                        return Ok(Value::Nul);
                     }
+
+                    let ret = if self.stack.len() > frame.base {
+                        self.pop().unwrap_or(Value::Nul)
+                    } else {
+                        Value::Nul
+                    };
 
                     // remove stack entries above base (leave space where callee was)
                     self.stack.truncate(frame.base);

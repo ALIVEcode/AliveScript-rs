@@ -1377,8 +1377,12 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     self.borrow_mut()
                         .declare_local(&alias, module_type.into(), true)
                 } else {
-                    self.borrow_mut()
-                        .declare_local(&module_name, module_type.into(), true)
+                    let module_file = module_name.rsplit_once("/").unwrap_or(("", &module_name)).1;
+                    self.borrow_mut().declare_local(
+                        &module_file.strip_suffix(".as").unwrap_or(module_file),
+                        module_type.into(),
+                        true,
+                    )
                 };
 
                 self.borrow_mut().mark_initialized(module_var);
