@@ -36,6 +36,8 @@ pub enum Opcode {
     NewStruct,
     GetField,
     SetField,
+
+    LoadModule,
 }
 
 impl Opcode {
@@ -63,6 +65,7 @@ impl Opcode {
             Opcode::NewStruct => "NEW_STRUCT",
             Opcode::GetField => "GET_ATTR",
             Opcode::SetField => "SET_ATTR",
+            Opcode::LoadModule => "LOAD_MODULE",
         }
     }
 
@@ -93,6 +96,8 @@ impl Opcode {
 
             Opcode::GetField => 1,
             Opcode::SetField => 1,
+
+            Opcode::LoadModule => 1,
         }
     }
 }
@@ -398,6 +403,11 @@ impl Instructions {
     pub fn emit_jump_if_false(&mut self, target: i16) {
         self.emit_opcode(Opcode::JumpIfFalse);
         self.emit_byte((target + JUMP_OFFSET) as u16);
+    }
+
+    pub fn emit_load_module(&mut self, module_name_const: u16) {
+        self.emit_opcode(Opcode::LoadModule);
+        self.emit_byte(module_name_const);
     }
 }
 

@@ -36,7 +36,7 @@ fn evaluate_string(code: &str, debug_infos: Option<&DebugInfo>, run: bool, sourc
                 println!("{:#?}", stmts);
             }
 
-            let compiler = Compiler::new(&code, source);
+            let compiler = Compiler::new(&code, source.clone());
             let closure = if debug_infos.is_some_and(|di| di.show_bytecode()) {
                 compiler.compile_debug(stmts)
             } else {
@@ -52,7 +52,7 @@ fn evaluate_string(code: &str, debug_infos: Option<&DebugInfo>, run: bool, sourc
             };
 
             if run {
-                let mut vm = VM::new();
+                let mut vm = VM::new(source);
                 match vm.run(closure) {
                     Ok(_) => {}
                     Err(err) => eprintln!("{}", err.to_string().bright_red().bold()),

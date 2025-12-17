@@ -5,6 +5,7 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
+use crate::compiler::Local;
 use crate::compiler::bytecode::instructions_to_string;
 use crate::compiler::err::CompilationErrorKind;
 use crate::compiler::obj::{ArcUpvalue, Function, UpvalueSpec, Value};
@@ -23,6 +24,13 @@ pub type ArcModule = Arc<RwLock<ASModule>>;
 pub struct ASModule {
     pub name: String,
     pub members: HashMap<String, Value>,
+}
+
+#[derive(Debug)]
+pub struct ModuleProto {
+    pub name: String,
+    pub load_fn: ClosureProto,
+    pub exported_members: HashMap<String, usize>,
 }
 
 #[derive(Debug)]

@@ -53,13 +53,10 @@ UtiliserMembers = { "{" ~ ((#member = Mul) | (((#member = Ident) ~ ",")* ~ (#mem
 
 TypeStmt = { "type" ~ typeTerm ~ Assign ~ TypeExpr }
 
-FnDef  =  {
-    Docs? ~ eos* ~ "fonction" ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ FnBody
+FnDef =  {
+    Docs? ~ eos* ~ "fonction" ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ (":" ~ (#body = Expr) | eos ~ (#body = StmtBody)? ~ finFn)
 }
-FnBody =  {
-    (":" ~ Expr | eos ~ StmtBody? ~ finFn)
-}
-finFn  = @{ "fin" ~ WHITESPACE+ ~ "fonction" }
+finFn = @{ "fin" ~ WHITESPACE+ ~ "fonction" }
 
 StructureDef  =  {
     Docs? ~ eos* ~ "structure" ~ (#name = Ident) ~ eos+ ~ StructureBody

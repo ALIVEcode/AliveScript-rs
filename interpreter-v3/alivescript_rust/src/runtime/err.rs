@@ -13,11 +13,24 @@ pub enum RuntimeError {
     #[error("Erreur type: {0}")]
     TypeError(String),
 
+    #[error("Erreur lors du chargement du module {module_name}: {message}")]
+    ModuleLoadError {
+        module_name: String,
+        message: String,
+    },
+
     #[error("Erreur lors de l'exécution: {0}")]
     RuntimeError(String),
 }
 
 impl RuntimeError {
+    pub fn module_load_error(module_name: impl ToString, msg: impl ToString) -> Self {
+        Self::ModuleLoadError {
+            module_name: module_name.to_string(),
+            message: msg.to_string(),
+        }
+    }
+
     pub fn value_error(msg: impl ToString) -> Self {
         Self::ValueError(msg.to_string())
     }

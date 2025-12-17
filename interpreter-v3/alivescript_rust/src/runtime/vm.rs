@@ -1,35 +1,45 @@
 use std::{
     collections::{HashMap, VecDeque},
+    fs,
     sync::{Arc, RwLock},
 };
 
 use crate::{
     compiler::{
+        Compiler,
         bytecode::{BinCompcode, BinOpcode, JUMP_OFFSET, Opcode},
         obj::{ArcUpvalue, CallFrame, Function, Upvalue, UpvalueLocation, UpvalueSpec, Value},
         value::{
-            ASObjet, ArcClosureInst, ArcClosureProto, ArcStructure, ClosureInst, ClosureProto,
+            ASModule, ASObjet, ArcClosureInst, ArcClosureProto, ArcStructure, ClosureInst,
+            ClosureProto,
         },
     },
-    runtime::{err::RuntimeError, module::BUILTIN_MOD},
+    runtime::{
+        err::RuntimeError,
+        module::{self, BUILTIN_MOD},
+    },
 };
 
 pub struct VM {
+    file: String,
     pub stack: Vec<Value>,
     frames: Vec<CallFrame>,
     open_upvalues: Vec<ArcUpvalue>, // track upvalues that point to stack slots
     global_table: HashMap<String, Value>,
+    loaded_modules: HashMap<String, Value>,
 }
 
 impl VM {
-    pub fn new() -> Self {
+    pub fn new(file: String) -> Self {
         let builtin = BUILTIN_MOD.borrow().clone();
 
         Self {
+            file,
             stack: Vec::new(),
             frames: Vec::new(),
             open_upvalues: Vec::new(),
             global_table: builtin,
+            loaded_modules: HashMap::new(),
         }
     }
 
@@ -85,6 +95,41 @@ impl VM {
                 i += 1;
             }
         }
+    }
+
+    fn load_module(&mut self, module_name: &str) -> Result<Value, RuntimeError> {
+        let module_name = module_name.strip_suffix(".as").unwrap_or(module_name);
+
+        if let Some(module) = self.loaded_modules.get(module_name) {
+            return Ok(module.clone());
+        }
+
+        let module_file = format!(
+            "{}/{module_name}.as",
+            self.file.rsplit_once("/").unwrap_or(("", "")).0
+        );
+
+        let module_file_content = fs::read_to_string(&module_file)
+            .map_err(|io_err| RuntimeError::module_load_error(module_name, io_err))?;
+
+        let compiler = Compiler::new(&module_file_content, module_file.to_string());
+        let module_closure = compiler
+            .parse_and_compile_to_module()
+            .map_err(|err| RuntimeError::module_load_error(module_name, err))?;
+
+        let mut other_vm = VM::new(module_file);
+        other_vm.run(module_closure.load_fn)?;
+
+        let mut members = HashMap::new();
+        for (member_name, member_idx) in module_closure.exported_members {
+            let value = other_vm.stack[member_idx].clone();
+            members.insert(member_name, value);
+        }
+
+        Ok(Value::Module(Arc::new(RwLock::new(ASModule {
+            name: module_name.to_string(),
+            members,
+        }))))
     }
 
     fn finish_init_struct(
@@ -568,17 +613,29 @@ impl VM {
                     }
                 }
                 Opcode::Return => {
-                    let ret = self.pop().unwrap_or(Value::Nul);
-
                     let frame = self
                         .frames
                         .pop()
                         .ok_or(RuntimeError::generic_err("return with no frame"))?;
+
+                    let ret = if self.stack.len() > frame.base {
+                        self.pop().unwrap_or(Value::Nul)
+                    } else {
+                        Value::Nul
+                    };
+
                     self.close_upvalues(frame.base);
+
+                    // we don't truncate if self.frames is empty to allow for
+                    // this vm to become a module
+                    if self.frames.is_empty() {
+                        return Ok(ret);
+                    }
+
                     // remove stack entries above base (leave space where callee was)
                     self.stack.truncate(frame.base);
 
-                    if self.frames.is_empty() || self.frames.len() == until_depth {
+                    if self.frames.len() == until_depth {
                         return Ok(ret);
                     }
 
@@ -662,6 +719,20 @@ impl VM {
                     if !val.to_bool() {
                         self.get_frame().unwrap().ip = (ip as i16 + dist) as usize;
                     }
+                }
+                Opcode::LoadModule => {
+                    let module_name_idx = fnc.code[frame.ip];
+                    frame.ip += 1;
+
+                    let Value::Texte(module_name) = fnc.constants[module_name_idx as usize].clone()
+                    else {
+                        return Err(RuntimeError::type_error(
+                            "le nom d'un module doit être un texte",
+                        ));
+                    };
+
+                    let module = self.load_module(&module_name)?;
+                    self.push(module);
                 }
             }
         }

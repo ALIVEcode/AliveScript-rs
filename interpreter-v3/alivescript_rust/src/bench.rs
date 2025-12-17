@@ -67,12 +67,12 @@ impl InterpretorIO for IO {
 // }
 fn execute_alive_script_a(source_code: &str, filename: String) {
     // 1. Compile the source code
-    let compiler = Compiler::new(source_code, filename);
+    let compiler = Compiler::new(source_code, filename.clone());
     let result_stmts = AlivescriptParser::parse(Rule::script, source_code).unwrap();
     let closure = compiler.compile(result_stmts).unwrap();
 
     // 2. Execute the closure
-    let mut vm = VM::new();
+    let mut vm = VM::new(filename);
     vm.run(closure).unwrap();
 }
 

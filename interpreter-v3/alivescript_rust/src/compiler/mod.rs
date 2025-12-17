@@ -24,7 +24,7 @@ use crate::{
         parser::{PRATT_EXPR_PARSER, PRATT_TYPE_PARSER},
         value::{
             ASFieldInfo, ASFunction, ASModule, ASStructure, ArcClosureProto, ArcStructure,
-            ClosureProto, StructType, Type, TypeSpec,
+            ClosureProto, ModuleProto, StructType, Type, TypeSpec,
         },
     },
     utils::Invert,
@@ -134,20 +134,23 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    pub fn parse_and_compile_to_module(self) -> Result<ArcClosureProto, CompilationError> {
+    pub fn parse_and_compile_to_module(self) -> Result<ModuleProto, CompilationError> {
         let stmts = AlivescriptParser::parse(Rule::script, self.input)?;
 
-        Ok(ArcClosureProto::new(self.compile(stmts)?))
+        self.compile_to_module(stmts)
     }
 
-    pub fn compile_to_module(self, pairs: Pairs<'a, Rule>) -> Result<ASModule, CompilationError> {
+    pub fn compile_to_module(
+        self,
+        pairs: Pairs<'a, Rule>,
+    ) -> Result<ModuleProto, CompilationError> {
         let source = self.source_name.clone();
 
         let mut rc_self = Rc::new(RefCell::new(self));
 
         rc_self
             .build_ast_stmts(pairs)
-            .map_err(|err| err.set_source_if_none(source))?;
+            .map_err(|err| err.set_source_if_none(source.clone()))?;
 
         rc_self.borrow_mut().code.pop_if_op_is(Opcode::Pop);
 
@@ -155,15 +158,32 @@ impl<'a> Compiler<'a> {
 
         rc_self.borrow_mut().finish();
 
-        let x = ClosureProto::new(Arc::new(rc_self.borrow().function.borrow().clone()));
+        let closure = ClosureProto::new(Arc::new(rc_self.borrow().function.borrow().clone()));
 
-        todo!()
+        let mut exported = HashMap::new();
+        for local in rc_self.borrow().locals.iter() {
+            exported.insert(
+                local.name.clone(),
+                rc_self
+                    .borrow()
+                    .resolve_local(&local.name, true)
+                    .expect("Valid local variable")
+                    .expect("Valid local variable")
+                    .0,
+            );
+        }
+
+        Ok(ModuleProto {
+            name: source,
+            load_fn: closure,
+            exported_members: exported,
+        })
     }
 
-    pub fn parse_and_compile(self) -> Result<ArcClosureProto, CompilationError> {
+    pub fn parse_and_compile(self) -> Result<ClosureProto, CompilationError> {
         let stmts = AlivescriptParser::parse(Rule::script, self.input)?;
 
-        Ok(ArcClosureProto::new(self.compile(stmts)?))
+        self.compile(stmts)
     }
 
     pub fn parse_and_compile_debug(self) -> Result<ClosureProto, CompilationError> {
@@ -229,6 +249,20 @@ impl<'a> Compiler<'a> {
         //     format!("{:#?}", rc_self.borrow().function.borrow().upvalue_specs).replace("\n", "\n| ")
         // );
         // println!();
+
+        let x = ClosureProto::new(Arc::new(rc_self.borrow().function.borrow().clone()));
+
+        Ok(x)
+    }
+
+    fn compile_empty(self) -> Result<ClosureProto, CompilationError> {
+        let source = self.source_name.clone();
+
+        let mut rc_self = Rc::new(RefCell::new(self));
+
+        rc_self.borrow_mut().code.emit_return();
+
+        rc_self.borrow_mut().finish();
 
         let x = ClosureProto::new(Arc::new(rc_self.borrow().function.borrow().clone()));
 
@@ -566,7 +600,11 @@ trait Parser<'a> {
     ) -> Result<(), CompilationError>;
 
     fn parse_fn_params(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError>;
-    fn parse_fn_expr(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
+    fn parse_fn(
+        &mut self,
+        inner: Pairs<'a, Rule>,
+        fn_name: Option<String>,
+    ) -> Result<(), CompilationError>;
 
     fn parse_methode_def(
         &mut self,
@@ -717,7 +755,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             }
 
             Rule::FnExpr => {
-                self.parse_fn_expr(primary)?;
+                self.parse_fn(primary.into_inner(), None)?;
             }
             rule => Err(PestError::new_from_span(
                 PestErrorVariant::ParsingError {
@@ -829,38 +867,43 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         Ok(())
     }
 
-    fn parse_fn_expr(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError> {
-        let inner = pair.into_inner();
-
+    fn parse_fn(
+        &mut self,
+        inner: Pairs<'a, Rule>,
+        fn_name: Option<String>,
+    ) -> Result<(), CompilationError> {
         let params = inner.find_first_tagged("params").unwrap().into_inner();
 
         let closure = {
-            let body = inner.find_first_tagged("body").unwrap();
+            let body = inner.find_first_tagged("body");
             let return_type = inner
                 .find_first_tagged("return_type")
                 .map(|te| self.parse_type(te.into_inner()))
                 .invert()?;
 
             let mut c = Rc::new(RefCell::new(Compiler::new_closure(
-                body.as_str(),
-                None,
+                body.as_ref().map(|b| b.as_str()).unwrap_or(""),
+                fn_name,
                 Rc::clone(self),
                 0,
                 return_type.unwrap_or(Type::Tout.into()),
             )));
             c.parse_fn_params(params)?;
 
-            match body.as_rule() {
-                Rule::Expr => Rc::try_unwrap(c)
-                    .unwrap()
-                    .into_inner()
-                    .compile_lambda_expr(body.into_inner())?,
-                Rule::StmtBody => Rc::try_unwrap(c)
-                    .unwrap()
-                    .into_inner()
-                    .compile(body.into_inner())?,
+            match body {
+                Some(body) => match body.as_rule() {
+                    Rule::Expr => Rc::try_unwrap(c)
+                        .unwrap()
+                        .into_inner()
+                        .compile_lambda_expr(body.into_inner())?,
+                    Rule::StmtBody => Rc::try_unwrap(c)
+                        .unwrap()
+                        .into_inner()
+                        .compile(body.into_inner())?,
 
-                _ => unreachable!(),
+                    b => unreachable!("{:?}", b),
+                },
+                None => Rc::try_unwrap(c).unwrap().into_inner().compile_empty()?,
             }
         };
 
@@ -1322,6 +1365,25 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                             .map(|node| node.as_str().to_string())
                             .collect::<Vec<String>>()
                     });
+
+                let module_name = module_name.as_str().trim_matches('"').to_string();
+                let module_type = Type::Module(module_name.clone());
+                let module_name_const = self
+                    .borrow_mut()
+                    .get_or_add_const(Value::Texte(module_name.clone()));
+                self.borrow_mut().code.emit_load_module(module_name_const);
+
+                let module_var = if let Some(alias) = alias {
+                    self.borrow_mut()
+                        .declare_local(&alias, module_type.into(), true)
+                } else {
+                    self.borrow_mut()
+                        .declare_local(&module_name, module_type.into(), true)
+                };
+
+                self.borrow_mut().mark_initialized(module_var);
+                self.borrow_mut().code.emit_set_local(module_var);
+
                 // Stmt::Utiliser {
                 //     module: module_name.as_str().trim_matches('"').to_string(),
                 //     alias,
@@ -1365,58 +1427,60 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 self.borrow_mut().code.emit_call(1);
             }
             Rule::FnDef => {
-                let mut inner = pair.into_inner();
+                // let params = inner.find_first_tagged("params").unwrap().into_inner();
+                //
+                //
+                // let closure = {
+                //     let return_type = inner
+                //         .find_first_tagged("return_type")
+                //         .map(|te| self.parse_type(te.into_inner()))
+                //         .invert()?;
+                //
+                //     let body = inner
+                //         .find(|node| node.as_rule() == Rule::FnBody)
+                //         .unwrap()
+                //         .into_inner()
+                //         .next()
+                //         .unwrap();
+                //
+                //     let mut c = Rc::new(RefCell::new(Compiler::new_closure(
+                //         body.as_str(),
+                //         name.clone(),
+                //         Rc::clone(self),
+                //         0,
+                //         return_type.unwrap_or(Type::Tout.into()),
+                //     )));
+                //     c.parse_fn_params(params)?;
+                //
+                //     let inner_body = match body.as_rule() {
+                //         Rule::Expr => body.into_inner(),
+                //         Rule::StmtBody => body.into_inner(),
+                //         _ => unreachable!(),
+                //     };
+                //
+                //     Rc::try_unwrap(c)
+                //         .unwrap()
+                //         .into_inner()
+                //         .compile(inner_body)?
+                // };
 
+                // let idx = self.borrow_mut().get_or_add_const(Value::closure(closure));
+                //
+                // self.borrow_mut().code.emit_closure(idx as u16);
+
+                let mut inner = pair.into_inner();
                 let name = inner
                     .find_first_tagged("name")
                     .map(|node| node.as_str().to_string());
-
-                let params = inner.find_first_tagged("params").unwrap().into_inner();
 
                 let local_idx = self.borrow_mut().declare_local(
                     name.as_ref().unwrap(),
                     Type::Fonction.into(),
                     false,
                 );
-
-                let closure = {
-                    let return_type = inner
-                        .find_first_tagged("return_type")
-                        .map(|te| self.parse_type(te.into_inner()))
-                        .invert()?;
-
-                    let body = inner
-                        .find(|node| node.as_rule() == Rule::FnBody)
-                        .unwrap()
-                        .into_inner()
-                        .next()
-                        .unwrap();
-
-                    let mut c = Rc::new(RefCell::new(Compiler::new_closure(
-                        body.as_str(),
-                        name.clone(),
-                        Rc::clone(self),
-                        0,
-                        return_type.unwrap_or(Type::Tout.into()),
-                    )));
-                    c.parse_fn_params(params)?;
-
-                    let inner_body = match body.as_rule() {
-                        Rule::Expr => body.into_inner(),
-                        Rule::StmtBody => body.into_inner(),
-                        _ => unreachable!(),
-                    };
-
-                    Rc::try_unwrap(c)
-                        .unwrap()
-                        .into_inner()
-                        .compile(inner_body)?
-                };
-
-                let idx = self.borrow_mut().get_or_add_const(Value::closure(closure));
-
-                self.borrow_mut().code.emit_closure(idx as u16);
+                self.parse_fn(inner, name.clone())?;
                 self.borrow_mut().mark_initialized(local_idx);
+                self.borrow_mut().code.emit_set_local(local_idx);
             }
 
             Rule::StructureDef => {

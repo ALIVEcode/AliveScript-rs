@@ -4,7 +4,6 @@
 pub mod as_obj_utils;
 #[cfg(feature = "py")]
 mod as_py;
-pub mod token;
 
 pub mod data;
 pub mod io;
@@ -43,9 +42,9 @@ pub fn compile_script_from_file2<'a, IO: InterpretorIO + 'a>(
     match result_stmts {
         Ok(stmts) => {
             // let mut visitor = Runner::new_with_file(interpretor_io, script_file);
-            let compiler = Compiler::new(script, script_file);
+            let compiler = Compiler::new(script, script_file.clone());
             let closure = compiler.compile(stmts).unwrap();
-            let mut vm = VM::new();
+            let mut vm = VM::new(script_file);
             let result = vm.run(closure).unwrap();
             // println!("{:#?}", vm.stack);
             // println!("{:?}", result);

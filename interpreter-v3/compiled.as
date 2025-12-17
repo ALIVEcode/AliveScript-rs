@@ -37,7 +37,6 @@ sinon
 fin si
 
 afficher "end"
-
 tant que x > 0
   x = x - 1
   afficher x
@@ -91,4 +90,10 @@ afficher p
 var p3 = Point.creer_vide()
 afficher p3
 
+
+fonction abc()
+fin fonction
+
+afficher abc
+afficher abc()
 
