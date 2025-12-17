@@ -5,7 +5,6 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
-use crate::as_obj::ASErreurType;
 use crate::compiler::bytecode::instructions_to_string;
 use crate::compiler::err::CompilationErrorKind;
 use crate::compiler::obj::{ArcUpvalue, Function, UpvalueSpec, Value};
@@ -547,7 +546,7 @@ impl From<Option<Type>> for Type {
 }
 
 impl FromStr for Type {
-    type Err = ASErreurType;
+    type Err = RuntimeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {

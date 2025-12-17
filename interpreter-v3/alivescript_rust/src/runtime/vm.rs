@@ -4,9 +4,8 @@ use std::{
 };
 
 use crate::{
-    ast::{BinCompcode, BinOpcode},
     compiler::{
-        bytecode::{JUMP_OFFSET, Opcode},
+        bytecode::{BinCompcode, BinOpcode, JUMP_OFFSET, Opcode},
         obj::{ArcUpvalue, CallFrame, Function, Upvalue, UpvalueLocation, UpvalueSpec, Value},
         value::{
             ASObjet, ArcClosureInst, ArcClosureProto, ArcStructure, ClosureInst, ClosureProto,

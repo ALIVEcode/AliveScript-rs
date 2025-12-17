@@ -14,16 +14,17 @@ use pest::{
 
 use crate::{
     AlivescriptParser, Rule,
-    as_obj::ASErreurType,
-    ast::{BinCompcode, BinLogiccode, BinOpcode, UnaryOpcode},
     compiler::{
-        bytecode::{Instructions, JUMP_OFFSET, Opcode, instructions_to_string_debug},
+        bytecode::{
+            BinCompcode, BinLogiccode, BinOpcode, Instructions, JUMP_OFFSET, Opcode, UnaryOpcode,
+            instructions_to_string_debug,
+        },
         err::{CompilationError, CompilationErrorKind},
         obj::{UpvalueSpec, Value},
         parser::{PRATT_EXPR_PARSER, PRATT_TYPE_PARSER},
         value::{
-            ASFieldInfo, ASFunction, ASStructure, ArcClosureProto, ArcStructure, ClosureProto,
-            StructType, Type, TypeSpec,
+            ASFieldInfo, ASFunction, ASModule, ASStructure, ArcClosureProto, ArcStructure,
+            ClosureProto, StructType, Type, TypeSpec,
         },
     },
     utils::Invert,
@@ -131,6 +132,32 @@ impl<'a> Compiler<'a> {
             jump_stack: vec![],
             return_type,
         }
+    }
+
+    pub fn parse_and_compile_to_module(self) -> Result<ArcClosureProto, CompilationError> {
+        let stmts = AlivescriptParser::parse(Rule::script, self.input)?;
+
+        Ok(ArcClosureProto::new(self.compile(stmts)?))
+    }
+
+    pub fn compile_to_module(self, pairs: Pairs<'a, Rule>) -> Result<ASModule, CompilationError> {
+        let source = self.source_name.clone();
+
+        let mut rc_self = Rc::new(RefCell::new(self));
+
+        rc_self
+            .build_ast_stmts(pairs)
+            .map_err(|err| err.set_source_if_none(source))?;
+
+        rc_self.borrow_mut().code.pop_if_op_is(Opcode::Pop);
+
+        rc_self.borrow_mut().code.emit_return();
+
+        rc_self.borrow_mut().finish();
+
+        let x = ClosureProto::new(Arc::new(rc_self.borrow().function.borrow().clone()));
+
+        todo!()
     }
 
     pub fn parse_and_compile(self) -> Result<ArcClosureProto, CompilationError> {
@@ -404,7 +431,10 @@ impl<'a> Compiler<'a> {
         self.upvalues.len() - 1
     }
 
-    fn resolve_upval(&mut self, name: &str) -> Result<Option<(usize, Local)>, ASErreurType> {
+    fn resolve_upval(
+        &mut self,
+        name: &str,
+    ) -> Result<Option<(usize, Local)>, CompilationErrorKind> {
         // 1. Check if we have a parent compiler
         let parent_rc = match &self.parent {
             Some(p) => Rc::clone(p),
@@ -450,14 +480,14 @@ impl<'a> Compiler<'a> {
         &self,
         name: &str,
         allow_uninit: bool,
-    ) -> Result<Option<(usize, Local)>, ASErreurType> {
+    ) -> Result<Option<(usize, Local)>, CompilationErrorKind> {
         for (i, local) in self.locals.iter().enumerate().rev() {
             if local.name == name {
                 if local.depth == -1 && !allow_uninit {
-                    Err(ASErreurType::new_erreur(
-                        Some("ErreurAccesVariableLocale".into()),
-                        "Impossible de lire une variable dans son propre initialiseur.".into(),
-                    ))?;
+                    Err(CompilationErrorKind::generic_error(format!(
+                        "Impossible de lire la variable '{}' dans son propre initialiseur",
+                        name
+                    )))?;
                 }
                 return Ok(Some((i, local.clone())));
             }
@@ -1059,14 +1089,11 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         let mut name = None;
         let mut static_type = Type::Tout.into();
         let mut is_const = false;
-        // let mut public = false;
-        // let mut var_list = None;
 
         for pair in pairs {
             match pair.as_rule() {
                 Rule::Const => is_const = true,
                 Rule::Var | Rule::Assign => {}
-                Rule::Pub => {} //public = true,
                 Rule::Expr => {
                     self.parse_expr(pair.into_inner())?;
                 }
@@ -1279,7 +1306,6 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
     fn build_ast_stmt(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError> {
         match pair.as_rule() {
-            Rule::AfficherStmt => self.parse_expr(pair.into_inner().skip(1))?,
             Rule::UtiliserStmt => {
                 let inner = pair.into_inner();
                 let module_name = inner.clone().next().unwrap();
@@ -1337,12 +1363,6 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 // arg
                 self.parse_expr(inner)?;
                 self.borrow_mut().code.emit_call(1);
-            }
-            Rule::PubStmt => {
-                let mut inner = pair.into_inner();
-                self.build_ast_stmt(inner.nth(1).unwrap())?;
-                // result.mk_public();
-                // *result
             }
             Rule::FnDef => {
                 let mut inner = pair.into_inner();

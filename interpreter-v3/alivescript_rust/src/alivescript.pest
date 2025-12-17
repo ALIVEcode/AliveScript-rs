@@ -31,8 +31,7 @@ stmtBloc = _{
 }
 
 stmt = _{
-    PubStmt
-  | stmtBloc
+    stmtBloc
 }
 
 subStmt = _{
@@ -47,10 +46,6 @@ CommandStmt = {
     Ident ~ !"(" ~ term ~ postfix?
 }
 // (Lit | FnCall | DebutBloc | List | Dict | Ident | FnExpr)}
-
-PubStmt = {
-    Pub ~ (UtiliserStmt | DeclStmt | FnDef)
-}
 
 UtiliserStmt    = { "utiliser" ~ ((#module = Ident | #path = Text)) ~ ModuleAlias? ~ UtiliserMembers? }
 ModuleAlias     = { "alias" ~ Ident | Ident ~ "." }
@@ -96,31 +91,6 @@ MethodeBody  =  {
 }
 finMethode   = @{ "fin" ~ WHITESPACE+ ~ POP }
 // "methode" | "méthode"
-
-ClasseDef           =  {
-    Docs? ~ eos* ~ "classe" ~ (#name = Ident) ~ eos+ ~ ClasseBody
-}
-ClasseBody          =  {
-    (ClasseFields ~ eos+)* ~ ClasseInit? ~ finClasse
-}
-finClasse           = @{ "fin" ~ WHITESPACE+ ~ "classe" }
-ClasseFields        =  {
-    ClasseStatiqueField
-  | ClasseField
-}
-ClasseStatiqueField =  {
-    "statique" ~ ClasseField
-}
-ClasseField         =  {
-    (Const ~ Ident | Var? ~ Ident) ~ (":" ~ TypeExpr)? ~ (Assign ~ Expr)?
-}
-ClasseInit          =  {
-    "init" ~ (#params = FnParams) ~ eos ~ StmtBody? ~ finInit
-}
-finInit             = @{ "fin" ~ WHITESPACE+ ~ "init" }
-ClasseMethode       =  { ("methode" | "méthode") }
-
-Pub = @{ "pub" }
 
 SiStmt = {
     "si" ~ (#cond = Expr) ~ siInner // "alors"? ~ eos+ ~ thenBr ~ sinonSiBr* ~ sinonBr? ~ finSi
@@ -210,9 +180,7 @@ DeclIdentList = {
     ("[" ~ ((declIdent | DeclIdentList) ~ ",")* ~ (declIdent | DeclIdentList)? ~ "]")
 }
 
-AfficherStmt  =  { afficher ~ Expr }
 RetournerStmt =  { retourner ~ (Expr ~ ",")* ~ Expr? }
-afficher      = @{ "pasdutoutafficher" ~ !IdentChar }
 retourner     = @{ "retourner" ~ !IdentChar }
 
 FnParams = {
@@ -381,7 +349,6 @@ keyword = @{
   | "methode"
   | "méthode" // Combined variants
 
-  | "pub"
   | "si"
   | "alors"
   | "sinon"

@@ -3,10 +3,7 @@ use std::{cell::RefCell, fmt::Debug, rc::Rc};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use thiserror::Error;
 
-use crate::{
-    ast::{BinCompcode, BinOpcode},
-    compiler::{Compiler, bitmasks::BitArray, utils::format_table},
-};
+use crate::compiler::{Compiler, bitmasks::BitArray, utils::format_table};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
 #[repr(u16)]
@@ -410,4 +407,49 @@ pub const JUMP_OFFSET: i16 = (1 << 8) - 1;
 pub enum InstructionError {
     #[error("Invalid opcode: {0}")]
     InvalidOpcode(u16),
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum UnaryOpcode {
+    Pas,
+    Negate,
+    Positive,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy, TryFromPrimitive)]
+#[repr(u16)]
+pub enum BinOpcode {
+    Mul,
+    Div,
+    DivInt,
+    Add,
+    Sub,
+    Exp,
+    Mod,
+    Extend,
+    BitwiseOr,
+    BitwiseAnd,
+    BitwiseXor,
+    ShiftLeft,
+    ShiftRight,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy, TryFromPrimitive)]
+#[repr(u16)]
+pub enum BinCompcode {
+    Eq,
+    NotEq,
+    Lth,
+    Gth,
+    Geq,
+    Leq,
+    Dans,
+    PasDans,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum BinLogiccode {
+    Et,
+    Ou,
+    NonNul,
 }

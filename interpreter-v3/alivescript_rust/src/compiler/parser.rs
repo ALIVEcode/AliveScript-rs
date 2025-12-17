@@ -1,5 +1,8 @@
-use crate::Rule;
-use pest::pratt_parser::PrattParser;
+use crate::{
+    Rule,
+    compiler::bytecode::{BinCompcode, BinLogiccode, BinOpcode, UnaryOpcode},
+};
+use pest::{iterators::Pair, pratt_parser::PrattParser};
 
 lazy_static::lazy_static! {
     pub static ref PRATT_EXPR_PARSER: PrattParser<Rule> = {
@@ -53,4 +56,71 @@ lazy_static::lazy_static! {
         // Precedence is defined lowest to highest
         PrattParser::new().op(Op::postfix(Rule::TypeArgs))
     };
+}
+
+impl TryFrom<&Pair<'_, Rule>> for BinOpcode {
+    type Error = ();
+
+    fn try_from(pair: &Pair<Rule>) -> Result<Self, Self::Error> {
+        use BinOpcode as B;
+        Ok(match pair.as_rule() {
+            Rule::Add => B::Add,
+            Rule::Sub => B::Sub,
+            Rule::Mul => B::Mul,
+            Rule::Div => B::Div,
+            Rule::DivInt => B::DivInt,
+            Rule::Pow => B::Exp,
+            Rule::Pipe => B::BitwiseOr,
+            Rule::Ampersant => B::BitwiseAnd,
+            Rule::Modulo => B::Mod,
+            _ => Err(())?,
+        })
+    }
+}
+
+impl TryFrom<&Pair<'_, Rule>> for BinCompcode {
+    type Error = ();
+
+    fn try_from(pair: &Pair<Rule>) -> Result<Self, Self::Error> {
+        use BinCompcode as B;
+        Ok(match pair.as_rule() {
+            Rule::Eq => B::Eq,
+            Rule::Neq => B::NotEq,
+            Rule::Lt => B::Lth,
+            Rule::Gt => B::Gth,
+            Rule::Lte => B::Leq,
+            Rule::Gte => B::Geq,
+            Rule::In => B::Dans,
+            Rule::NotIn => B::PasDans,
+            _ => Err(())?,
+        })
+    }
+}
+
+impl TryFrom<&Pair<'_, Rule>> for UnaryOpcode {
+    type Error = ();
+
+    fn try_from(pair: &Pair<Rule>) -> Result<Self, Self::Error> {
+        use UnaryOpcode as U;
+        Ok(match pair.as_rule() {
+            Rule::Neg => U::Negate,
+            Rule::Not => U::Pas,
+            Rule::Pos => U::Positive,
+            _ => Err(())?,
+        })
+    }
+}
+
+impl TryFrom<&Pair<'_, Rule>> for BinLogiccode {
+    type Error = ();
+
+    fn try_from(pair: &Pair<Rule>) -> Result<Self, Self::Error> {
+        use BinLogiccode as B;
+        Ok(match pair.as_rule() {
+            Rule::And => B::Et,
+            Rule::Or => B::Ou,
+            Rule::NonNull => B::NonNul,
+            _ => Err(())?,
+        })
+    }
 }

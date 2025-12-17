@@ -74,7 +74,7 @@ implémentation Point
     retourner Point {x: 0, y: 0}
   fin methode
 
-  méthode getX(inst)
+  méthode getX(inst) -> texte
     retourner "from getX: " + inst.x + " " + x
   fin méthode
 fin implémentation

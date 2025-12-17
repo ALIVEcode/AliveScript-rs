@@ -1,14 +1,12 @@
 #![allow(dead_code, unused_variables)]
 // use lalrpop_util::ParseError;
 
-use std::{cell::RefCell, env, io::Write, rc::Rc};
+use std::{cell::RefCell, io::Write, rc::Rc};
 
 use alivescript_rust::{
-    bench::main_benchmark,
-    cli, compile_script_from_file2,
+    cli,
     data::{Data, Response},
     io::InterpretorIO,
-    run_script_from_file, run_script_with_runner,
 };
 
 const ALIVESCRIPT_VERSION: &'static str = "0.10.0";

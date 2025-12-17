@@ -1,7 +1,6 @@
 use std::{
     fs,
     io::Write,
-    rc::Rc,
     time::{Duration, Instant},
 };
 
@@ -10,13 +9,10 @@ use pest::Parser;
 // Assuming you have a core module that exposes the VM/Compiler logic
 use crate::{
     AlivescriptParser, Rule,
-    compiler::{Compiler, obj::Value},
+    compiler::Compiler,
     data::{Data, Response},
     io::InterpretorIO,
-    parser::{build_ast_stmt, build_ast_stmts},
-    runner::Runner,
     runtime::vm::VM,
-    visitor::Visitor,
 };
 
 // --- Configuration Constants ---
@@ -80,14 +76,14 @@ fn execute_alive_script_a(source_code: &str, filename: String) {
     vm.run(closure).unwrap();
 }
 
-fn execute_alive_script_b(source_code: &str, _filename: String) {
-    // 1. Compile the source code
-    let result_stmts = AlivescriptParser::parse(Rule::script, source_code).unwrap();
-    let mut io = IO {};
-    let mut visitor = Runner::new(&mut io);
-    let stmts = build_ast_stmts(result_stmts).unwrap();
-    visitor.visit_body(&stmts);
-}
+// fn execute_alive_script_b(source_code: &str, _filename: String) {
+//     // 1. Compile the source code
+//     let result_stmts = AlivescriptParser::parse(Rule::script, source_code).unwrap();
+//     let mut io = IO {};
+//     let mut visitor = Runner::new(&mut io);
+//     let stmts = build_ast_stmts(result_stmts).unwrap();
+//     visitor.visit_body(&stmts);
+// }
 
 /// Executes the benchmark and returns a vector of measured durations.
 fn run_benchmark(
@@ -231,15 +227,15 @@ pub fn main_benchmark() {
     // Since you only provided one compiler structure, we'll simulate the call.
 
     // For a simple test, we run the same implementation again to check consistency:
-    let mut times_b = run_benchmark(
-        BENCHMARK_FILE.to_string(),
-        &source_code,
-        "Implementation B (Hypothetical Optimized VM)",
-        execute_alive_script_b,
-    );
-    let median_b = analyze_results(&mut times_b, "Implementation B").unwrap();
-
-    // --- Final Comparison ---
-    // You can compare average times here to summarize the performance gain/loss.
-    compare_results(median_a, median_b);
+    // let mut times_b = run_benchmark(
+    //     BENCHMARK_FILE.to_string(),
+    //     &source_code,
+    //     "Implementation B (Hypothetical Optimized VM)",
+    //     execute_alive_script_b,
+    // );
+    // let median_b = analyze_results(&mut times_b, "Implementation B").unwrap();
+    //
+    // // --- Final Comparison ---
+    // // You can compare average times here to summarize the performance gain/loss.
+    // compare_results(median_a, median_b);
 }

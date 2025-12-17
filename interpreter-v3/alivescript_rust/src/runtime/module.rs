@@ -1,6 +1,26 @@
 use crate::compiler::{obj::Value, value::Type};
 
 #[macro_export]
+macro_rules! opt_value {
+    () => {
+        None
+    };
+    ($value:expr) => {
+        Some($value)
+    };
+}
+
+#[macro_export]
+macro_rules! optional_body {
+    ($value:tt, $body:tt $(, $else:tt)?) => {
+        $body
+    };
+    (, $body:tt $(, $else:tt)?) => {
+        $($else)?
+    };
+}
+
+#[macro_export]
 macro_rules! as_fonction_native {
     ($($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
      : $return_type:expr => $body:block) => {

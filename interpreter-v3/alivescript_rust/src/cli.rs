@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand};
+use colored::Colorize;
 use pest::Parser as _;
 use std::path::PathBuf;
 
@@ -54,7 +55,7 @@ fn evaluate_string(code: &str, debug_infos: Option<&DebugInfo>, run: bool, sourc
                 let mut vm = VM::new();
                 match vm.run(closure) {
                     Ok(_) => {}
-                    Err(err) => eprint!("{}", err),
+                    Err(err) => eprintln!("{}", err.to_string().bright_red().bold()),
                 }
             }
             // println!("{:#?}", vm.stack);
