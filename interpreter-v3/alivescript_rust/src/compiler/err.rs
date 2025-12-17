@@ -54,16 +54,15 @@ impl Display for CompilationError {
 
         write!(
             f,
-            "{}{}{}{}{}",
-            "erreur".red().bold(),
-            " : ".bold(),
-            format!("{}\n", self.kind.to_string()).bold(),
+            "{}{}{}{}",
+            "erreur de compilation".red().bold(),
+            format!(": {}\n", self.kind.to_string()).bold(),
             "  --> ".blue().bold(),
             format!(
                 "{}:{}:{}\n",
                 self.path.as_ref().unwrap_or(&"script".to_string()),
                 start_ln,
-                start_col
+                start_col + 1
             )
         )?;
 

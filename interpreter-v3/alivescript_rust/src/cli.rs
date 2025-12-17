@@ -44,12 +44,18 @@ fn evaluate_string(code: &str, debug_infos: Option<&DebugInfo>, run: bool, sourc
 
             let closure = match closure {
                 Ok(c) => c,
-                Err(err) => panic!("{}", err),
+                Err(err) => {
+                    eprint!("{}", err);
+                    return;
+                }
             };
 
             if run {
                 let mut vm = VM::new();
-                let result = vm.run(closure).unwrap();
+                match vm.run(closure) {
+                    Ok(_) => {}
+                    Err(err) => eprint!("{}", err),
+                }
             }
             // println!("{:#?}", vm.stack);
             // println!("{:?}", result);
