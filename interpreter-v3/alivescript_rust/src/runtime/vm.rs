@@ -11,8 +11,8 @@ use crate::{
         bytecode::{BinCompcode, BinOpcode, JUMP_OFFSET, Opcode},
         obj::{ArcUpvalue, CallFrame, Function, Upvalue, UpvalueLocation, UpvalueSpec, Value},
         value::{
-            ASModule, ASObjet, ArcClosureInst, ArcClosureProto, ArcStructure, ClosureInst,
-            ClosureProto,
+            ASModule, ASObjet, ArcClosureInst, ArcClosureProto, ArcModule, ArcStructure,
+            ClosureInst, ClosureProto,
         },
     },
     runtime::{
@@ -27,7 +27,7 @@ pub struct VM {
     frames: Vec<CallFrame>,
     open_upvalues: Vec<ArcUpvalue>, // track upvalues that point to stack slots
     global_table: HashMap<String, Value>,
-    loaded_modules: HashMap<String, Value>,
+    loaded_modules: HashMap<String, ArcModule>,
 }
 
 impl VM {
@@ -42,6 +42,10 @@ impl VM {
             global_table: builtin,
             loaded_modules: HashMap::new(),
         }
+    }
+
+    pub fn insert_module(&mut self, name: impl ToString, module: ArcModule) {
+        self.loaded_modules.insert(name.to_string(), module);
     }
 
     pub fn dump_stack(&self) -> String {
@@ -102,7 +106,7 @@ impl VM {
         let module_name = module_name.strip_suffix(".as").unwrap_or(module_name);
 
         if let Some(module) = self.loaded_modules.get(module_name) {
-            return Ok(module.clone());
+            return Ok(Value::Module(Arc::clone(&module)));
         }
 
         let module_file = Path::new(&self.file)
@@ -135,7 +139,7 @@ impl VM {
         }));
 
         self.loaded_modules
-            .insert(module_name.to_string(), Value::Module(Arc::clone(&module)));
+            .insert(module_name.to_string(), Arc::clone(&module));
 
         Ok(Value::Module(module))
     }

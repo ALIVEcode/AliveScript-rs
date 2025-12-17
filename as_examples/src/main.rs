@@ -1,5 +1,6 @@
 use macroquad::{miniquad::window::screen_size, prelude::*};
 use std::{
+    collections::HashMap,
     fs,
     sync::{Arc, RwLock},
     thread,
@@ -10,8 +11,12 @@ use anyhow::{Result, anyhow};
 
 use alivescript_rust::{
     as_fonction_native,
-    as_obj::ASType,
-    compiler::{Compiler, obj::Value, vm::VM},
+    compiler::{
+        Compiler,
+        obj::Value,
+        value::{ASModule, ArcModule, Type},
+    },
+    runtime::vm::VM,
 };
 
 #[derive(Debug, Default)]
@@ -34,7 +39,7 @@ enum Instruction {
 
 fn add_macroquad_func(vm: &mut VM, ctx: Arc<RwLock<AppState>>) {
     let sin_func = as_fonction_native! {
-        sin(x: ASType::nombre()): ASType::Nul => {
+        sin(x: Type::nombre()): Type::Nul => {
             let val = x.as_decimal().unwrap();
 
             Ok(Some(Value::Decimal(val.sin())))
@@ -42,7 +47,7 @@ fn add_macroquad_func(vm: &mut VM, ctx: Arc<RwLock<AppState>>) {
     };
 
     let attendre = as_fonction_native! {
-        attendre(ms: ASType::Entier): ASType::Nul => {
+        attendre(ms: Type::Entier): Type::Nul => {
             thread::sleep(Duration::from_millis(ms.as_entier().unwrap() as u64));
             Ok(None)
         }
@@ -50,7 +55,7 @@ fn add_macroquad_func(vm: &mut VM, ctx: Arc<RwLock<AppState>>) {
 
     let app = Arc::clone(&ctx);
     let set_background = as_fonction_native! {
-        changerFond(couleur: ASType::Texte): ASType::Nul => {
+        changerFond(couleur: Type::Texte): Type::Nul => {
             let couleur = couleur.as_texte().unwrap();
 
             let color = match couleur {
@@ -70,12 +75,12 @@ fn add_macroquad_func(vm: &mut VM, ctx: Arc<RwLock<AppState>>) {
     let app = Arc::clone(&ctx);
     let draw_rect = as_fonction_native! {
         dessinerRect(
-            x: ASType::Decimal,
-            y: ASType::Decimal,
-            w: ASType::Decimal,
-            h: ASType::Decimal,
-            couleur: ASType::Texte
-        ): ASType::Nul => {
+            x: Type::Decimal,
+            y: Type::Decimal,
+            w: Type::Decimal,
+            h: Type::Decimal,
+            couleur: Type::Texte
+        ): Type::Nul => {
             let couleur = couleur.as_texte().unwrap();
 
             let color = match couleur {
@@ -100,7 +105,7 @@ fn add_macroquad_func(vm: &mut VM, ctx: Arc<RwLock<AppState>>) {
 
     let app = Arc::clone(&ctx);
     let get_screen_size = as_fonction_native! {
-        tailleÉcran(): ASType::Liste => {
+        tailleÉcran(): Type::Liste => {
             let (w, h) = app.read().unwrap().screen;
             Ok(Some(Value::liste(vec![
                 Value::Decimal(w as f64),
@@ -109,25 +114,32 @@ fn add_macroquad_func(vm: &mut VM, ctx: Arc<RwLock<AppState>>) {
         }
     };
 
-    vm.insert_global(get_screen_size);
-    vm.insert_global(draw_rect);
-    vm.insert_global(attendre);
-    vm.insert_global(sin_func);
-    vm.insert_global(set_background);
+    let module = ArcModule::new(RwLock::new(ASModule::new(
+        "Graphique",
+        HashMap::from_iter([get_screen_size, draw_rect, attendre, set_background]),
+    )));
+
+    // vm.insert_global(get_screen_size);
+    // vm.insert_global(draw_rect);
+    // vm.insert_global(attendre);
+    // vm.insert_global(sin_func);
+    // vm.insert_global(set_background);
+    vm.insert_module("Graphique", module);
 }
 
 fn run_in_thread(ctx: Arc<RwLock<AppState>>) {
     thread::spawn(move || {
-        let script = fs::read_to_string("./screen-saver.as").unwrap();
-        let closure = Compiler::new(&script).parse_and_compile().unwrap();
+        let file = "./screen-saver.as".to_string();
+        let script = fs::read_to_string(&file).unwrap();
+        let closure = Compiler::new(&script, file.clone())
+            .parse_and_compile()
+            .unwrap();
 
-        let mut vm = VM::new();
+        let mut vm = VM::new(file);
 
         add_macroquad_func(&mut vm, ctx);
 
-        let result = vm
-            .run_shared_closure(closure)
-            .map_err(|err| anyhow!("{}", err));
+        let result = vm.run(closure).map_err(|err| anyhow!("{}", err));
         if let Err(err) = result {
             println!("{}\n", err);
             println!("--- STACK ---\n{}", vm.dump_stack());

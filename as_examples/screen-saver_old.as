@@ -1,5 +1,3 @@
-utiliser Graphique
-
 var carré_x: entier = 0
 var carré_y: entier = 0
 
@@ -12,7 +10,7 @@ var mov_x: décimal = VEL
 var mov_y: décimal = VEL
 
 répéter
-  var écran: liste = Graphique.tailleÉcran()
+  var écran: liste = tailleÉcran()
   var w: décimal = écran[0]
   var h: décimal = écran[1]
 
@@ -35,6 +33,6 @@ répéter
   carré_x += mov_x
   carré_y += mov_y
 
-  Graphique.dessinerRect(carré_x, carré_y, CARRÉ_W, CARRÉ_H, "blanc")
+  dessinerRect(carré_x, carré_y, CARRÉ_W, CARRÉ_H, "blanc")
 fin répéter
 

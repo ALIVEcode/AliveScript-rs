@@ -26,6 +26,15 @@ pub struct ASModule {
     pub members: HashMap<String, Value>,
 }
 
+impl ASModule {
+    pub fn new(name: impl ToString, members: HashMap<String, Value>) -> Self {
+        Self {
+            name: name.to_string(),
+            members,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ModuleProto {
     pub name: String,
