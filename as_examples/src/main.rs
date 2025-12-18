@@ -119,11 +119,6 @@ fn add_macroquad_func(vm: &mut VM, ctx: Arc<RwLock<AppState>>) {
         HashMap::from_iter([get_screen_size, draw_rect, attendre, set_background]),
     )));
 
-    // vm.insert_global(get_screen_size);
-    // vm.insert_global(draw_rect);
-    // vm.insert_global(attendre);
-    // vm.insert_global(sin_func);
-    // vm.insert_global(set_background);
     vm.insert_module("Graphique", module);
 }
 

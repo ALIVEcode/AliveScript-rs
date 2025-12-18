@@ -47,7 +47,8 @@ CommandStmt = {
 }
 // (Lit | FnCall | DebutBloc | List | Dict | Ident | FnExpr)}
 
-UtiliserStmt    = { "utiliser" ~ ((#module = Ident | #path = Text)) ~ ModuleAlias? ~ UtiliserMembers? }
+UtiliserStmt    = { "utiliser" ~ ((#module = ModuleIdent | #path = Text)) ~ ModuleAlias? ~ UtiliserMembers? }
+ModuleIdent     = { (Ident ~ ("." ~ Ident)*) }
 ModuleAlias     = { "alias" ~ Ident | Ident ~ "." }
 UtiliserMembers = { "{" ~ ((#member = Ident) ~ ",")* ~ (#member = Ident)? ~ "}" }
 

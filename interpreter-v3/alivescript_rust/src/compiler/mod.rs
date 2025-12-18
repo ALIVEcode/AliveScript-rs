@@ -1357,7 +1357,17 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         match pair.as_rule() {
             Rule::UtiliserStmt => {
                 let inner = pair.into_inner();
-                let module_name = inner.clone().next().unwrap();
+                let module_name = inner
+                    .clone()
+                    .find_first_tagged("module")
+                    .map(|m| m.as_str().replace(".", "/"))
+                    .or_else(|| {
+                        inner
+                            .find_first_tagged("path")
+                            .map(|p| p.as_str().to_string())
+                    })
+                    .unwrap();
+
                 let alias = inner
                     .clone()
                     .find(|node| node.as_rule() == Rule::ModuleAlias)
