@@ -626,7 +626,6 @@ trait Parser<'a> {
         &mut self,
         pairs: Pairs<Rule>,
         is_const: Option<bool>,
-        public: Option<bool>,
     ) -> Result<(), PestError<Rule>>;
 
     fn parse_assign(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
@@ -1054,7 +1053,6 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         &mut self,
         _pairs: Pairs<Rule>,
         _is_const: Option<bool>,
-        _public: Option<bool>,
     ) -> Result<(), PestError<Rule>> {
         todo!()
     }
@@ -1169,13 +1167,12 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 //         Some(public),
                 //     )?)
                 // }
-                // Rule::DeclIdentList => {
-                //     var_list = Some(parse_assign_vars(
-                //         pair.into_inner(),
-                //         Some(is_const),
-                //         Some(public),
-                //     )?)
-                // }
+                Rule::DeclIdentList => {
+                    let var_list = Some(self.parse_assign_vars(
+                        pair.into_inner(),
+                        Some(is_const),
+                    )?);
+                }
                 _ => panic!("{:#?}", pair),
             }
         }

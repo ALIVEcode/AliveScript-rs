@@ -1,14 +1,14 @@
-
-
-# weird behaviour
-var age = 0
-tant que age == 0
+age = nul
+tant que age == nul faire
   lire entier dans age, "Ton age: " sinon
     afficher "Ce n'est pas bon ! Recommence"
   fin lire
 fin tant que
 
-afficher age
+si age == 12 alors 
+  afficher age
+fin si
+
 afficher typeDe(age)
 
 afficher (age + 1)

@@ -30,7 +30,7 @@ stmtBloc = _{
   | subStmt // ~ (si ~ Expr)?
 }
 
-si = @{ "si" ~ !IdentChar }
+// si = @{ "si" ~ !IdentChar }
 
 stmt = _{
     stmtBloc
@@ -386,8 +386,8 @@ keyword = @{
   | "non"
   | "jusqu'à"
   | "jusqu'a" // Combined variants
-  | "fin"
 
+  | "fin"
   | "bond"
   | "debut"
   | "début" // Combined variants
