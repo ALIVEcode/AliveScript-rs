@@ -9,6 +9,7 @@ use crate::compiler::value::{
 use crate::runtime::err::RuntimeError;
 use crate::runtime::vm::VM;
 
+pub type ArcValue = Arc<RwLock<Value>>;
 pub type ArcUpvalue = Arc<RwLock<Upvalue>>;
 
 #[derive(Debug, Clone)]

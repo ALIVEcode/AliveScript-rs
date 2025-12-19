@@ -1,7 +1,7 @@
 WHITESPACE = _{ " " | "\t" }
 COMMENT    = _{
     "(:" ~ (!":)" ~ ANY)* ~ ":)"
-  | "#" ~ (!NEWLINE ~ ANY)* ~ NEWLINE
+  | "#" ~ (!NEWLINE ~ ANY)* ~ &NEWLINE
 }
 
 Docs = {
@@ -27,8 +27,10 @@ stmtBloc = _{
   | FnDef
   | StructureDef
   | ImplDef
-  | subStmt ~ ("si" ~ Expr)?
+  | subStmt // ~ (si ~ Expr)?
 }
+
+si = @{ "si" ~ !IdentChar }
 
 stmt = _{
     stmtBloc
@@ -37,6 +39,7 @@ stmt = _{
 subStmt = _{
     RetournerStmt
   | ContinuerStmt
+  | LireStmt
   | SortirStmt
   | CommandStmt
   | Expr
@@ -45,6 +48,18 @@ subStmt = _{
 CommandStmt = {
     Ident ~ !"(" ~ term ~ postfix?
 }
+
+LireStmt    =  {
+    lire ~ (#cast = Callable) ~ In ~ declVarLire ~ ("," ~ #msg = Expr)? ~ LireSinon?
+  | lire ~ declVarLire ~ ("," ~ #msg = Expr)?
+}
+declVarLire =  {
+    (Var? ~ (declIdent | DeclIdentList))
+  | (Const ~ (declIdent | DeclIdentList))
+}
+LireSinon   =  { "sinon" ~ eos+ ~ (#body = StmtBody)? ~ finLire }
+lire        = @{ "lire" ~ !IdentChar }
+finLire     = @{ "fin" ~ WHITESPACE+ ~ "lire" }
 // (Lit | FnCall | DebutBloc | List | Dict | Ident | FnExpr)}
 
 UtiliserStmt    = { "utiliser" ~ ((#module = ModuleIdent | #path = Text)) ~ ModuleAlias? ~ UtiliserMembers? }
@@ -227,33 +242,33 @@ logicInfix   = _{
   | Or
   | NonNull
 }
-Add          =  { "+" }
-Sub          =  { "-" }
-Mul          =  { "*" }
-Div          =  { "/" }
-DivInt       =  { "//" }
-Modulo       =  { "%" }
-BitwiseLeft  =  { "<<" }
-BitwiseRight =  { ">>" }
-Pow          =  { "^" | "**" }
-Ampersant    =  { "&" }
-Pipe         =  { "|" }
-Xor          =  { "xor" }
-Eq           =  { "==" }
-Neq          =  { "!=" }
-In           =  { "dans" }
+Add          = @{ "+" }
+Sub          = @{ "-" }
+Mul          = @{ "*" }
+Div          = @{ "/" }
+DivInt       = @{ "//" }
+Modulo       = @{ "%" }
+BitwiseLeft  = @{ "<<" }
+BitwiseRight = @{ ">>" }
+Pow          = @{ "^" | "**" }
+Ampersant    = @{ "&" }
+Pipe         = @{ "|" }
+Xor          = @{ "xor" }
+Eq           = @{ "==" }
+Neq          = @{ "!=" }
+In           = @{ "dans" ~ !IdentChar }
 NotIn        =  { "pas" ~ In }
-Gt           =  { ">" }
-Lt           =  { "<" }
-Gte          =  { ">=" }
-Lte          =  { "<=" }
-And          =  { "et" }
-Or           =  { "ou" }
-NonNull      =  { "??" }
+Gt           = @{ ">" }
+Lt           = @{ "<" }
+Gte          = @{ ">=" }
+Lte          = @{ "<=" }
+And          = @{ "et" ~ !IdentChar }
+Or           = @{ "ou" ~ !IdentChar }
+NonNull      = @{ "??" }
 prefix       = _{ Neg | Not | Pos }
 Neg          =  { "-" }
 Pos          =  { "+" }
-Not          =  { "pas" | "non" }
+Not          = @{ "pas" ~ !IdentChar | "non" ~ !IdentChar }
 postfix      = _{ Ternary | AccessProp }
 Range        =  { (".." | "..<") ~ ((#end = Expr) ~ "bond")? }
 RangeEq      =  { ("..=" | "jusqu'à" | "jusqu'a") ~ ((#end = Expr) ~ "bond")? }
@@ -371,6 +386,7 @@ keyword = @{
   | "non"
   | "jusqu'à"
   | "jusqu'a" // Combined variants
+  | "fin"
 
   | "bond"
   | "debut"

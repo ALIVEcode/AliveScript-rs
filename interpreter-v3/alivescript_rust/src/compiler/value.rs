@@ -426,11 +426,11 @@ pub enum Type {
 #[derive(Debug, PartialEq, Clone)]
 pub struct StructType {
     pub name: String,
-    pub fields: HashMap<String, TypeSpec>,
+    pub fields: HashMap<String, Type>,
 }
 
 impl StructType {
-    pub fn new(name: String, fields: HashMap<String, TypeSpec>) -> Self {
+    pub fn new(name: String, fields: HashMap<String, Type>) -> Self {
         Self { name, fields }
     }
 }

@@ -1,4 +1,7 @@
-use crate::compiler::{obj::Value, value::Type};
+use crate::{
+    compiler::{obj::Value, value::Type},
+    runtime::err::RuntimeError,
+};
 
 #[macro_export]
 macro_rules! opt_value {
@@ -60,6 +63,7 @@ macro_rules! as_fonction_native {
          )
      };
 }
+
 #[macro_export]
 macro_rules! as_mod_native {
     ($name:ident, $($var:expr),* $(,)?) => {
@@ -78,24 +82,24 @@ macro_rules! as_mod_native {
 as_mod_native! {
     BUILTIN_MOD,
     as_fonction_native! {
-        afficherErr(msg: Type::any()): ASType::Nul => {
-            eprintln!("{}", msg);
-            Ok(Some(Value::Nul))
-        }
-    },
-    as_fonction_native! {
-        afficher(msg: Type::any()): ASType::Nul => {
+        afficher(msg: Type::any()): Type::Nul => {
             println!("{}", msg);
             Ok(Some(Value::Nul))
         }
     },
     as_fonction_native! {
-        typeDe(obj: Type::any()): ASType::Type => {
+        afficherErr(msg: Type::any()): Type::Nul => {
+            eprintln!("{}", msg);
+            Ok(Some(Value::Nul))
+        }
+    },
+    as_fonction_native! {
+        typeDe(obj: Type::any()): Type::Type => {
             Ok(Some(Value::TypeObj(obj.get_type())))
         }
     },
     as_fonction_native! {
-        tailleDe(obj: Type::iterable()): ASType::Entier => {
+        tailleDe(obj: Type::iterable()): Type::Entier => {
             Ok(Some(Value::Entier(match obj {
                 Value::Texte(t) => t.len(),
                 Value::Liste(l) => l.read().unwrap().len(),
@@ -103,17 +107,17 @@ as_mod_native! {
             } as i64)))
         }
     },
-    // as_fonction_native! {
-    //     typeVar[runner](nomVar: ASType::Texte) -> ASType::Texte; {
-    //         let env = runner.get_env_mut();
-    //         as_cast!(ASObj::ASTexte(nom_var) = nomVar);
-    //         let maybe_var = env.get_var(&nom_var).map(|v| v.0);
-    //         Ok(Some(match maybe_var {
-    //             Some(var) => ASObj::ASTexte(var.get_type().to_string()),
-    //             None => ASObj::ASNul,
-    //         }))
-    //     }
-    // },
+    as_fonction_native! {
+        entier(val: Type::Texte): Type::Entier => {
+            let t = val.as_texte().unwrap();
+
+            let i = t.parse::<i64>().map_err(|_| RuntimeError::generic_err(
+                format!("Impossible de convertir {} en entier de base 10.", val.repr())
+            ))?;
+
+            Ok(Some(Value::Entier(i)))
+        }
+    },
     // as_fonction_native! {
     //     format(template: ASType::Texte, attrs: ASType::Liste => ASObj::liste(vec![])) -> ASType::Texte; {
     //         as_cast!(ASObj::ASTexte(template) = template);

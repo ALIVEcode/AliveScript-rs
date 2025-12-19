@@ -91,22 +91,24 @@ fn run_benchmark(
     source_code: &str,
     impl_name: &str,
     func: fn(&str, String),
+    nb_measure: usize,
+    nb_warmup: usize,
 ) -> Vec<Duration> {
     println!("\n--- Benchmarking {} ---", impl_name);
 
     // 1. WARMUP PHASE (Discarded)
-    for i in 0..WARMUP_RUNS {
+    for i in 0..nb_warmup {
         func(source_code, filename.clone());
         if i == 0 {
-            println!("Warming up ({} runs)...", WARMUP_RUNS);
+            println!("Warming up ({} runs)...", nb_warmup);
         }
     }
 
     // 2. MEASUREMENT PHASE
-    let mut times = Vec::with_capacity(MEASUREMENT_RUNS);
-    println!("Measuring ({} runs)...", MEASUREMENT_RUNS);
+    let mut times = Vec::with_capacity(nb_measure);
+    println!("Measuring ({} runs)...", nb_measure);
 
-    for _ in 0..MEASUREMENT_RUNS {
+    for _ in 0..nb_measure {
         let start = Instant::now();
 
         // Ensure the result is used to prevent compiler optimization
@@ -200,8 +202,8 @@ fn compare_results(median_a: Duration, median_b: Duration) {
     println!("==============================================");
 }
 
-pub fn main_benchmark() {
-    let source_code = match fs::read_to_string(BENCHMARK_FILE) {
+pub fn main_benchmark(file: String, nb_measure: usize, nb_warmup: usize) {
+    let source_code = match fs::read_to_string(file) {
         Ok(code) => code,
         Err(_) => {
             eprintln!(
@@ -218,6 +220,8 @@ pub fn main_benchmark() {
         &source_code,
         "Implementation A (Current VM)",
         execute_alive_script_a,
+        nb_measure,
+        nb_warmup,
     );
     let median_a = analyze_results(&mut times_a, "Implementation A").unwrap();
 

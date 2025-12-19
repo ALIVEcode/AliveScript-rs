@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, VecDeque},
     fs,
+    io::{self, Write, stdin},
     path::{self, Path},
     sync::{Arc, RwLock},
 };
@@ -247,6 +248,67 @@ impl VM {
         let new_closure = Arc::new(ClosureInst::new(function.clone(), closure_upvalues));
 
         Ok(new_closure)
+    }
+
+    pub fn call_fn(&mut self, nbargs: usize, func: Value) -> Result<(), RuntimeError> {
+        match func {
+            Value::Function(Function::NativeFunction(f)) => {
+                let mut args = VecDeque::with_capacity(nbargs);
+                let f = f.clone();
+
+                for _ in 0..nbargs {
+                    args.push_front(self.pop().unwrap());
+                }
+
+                // remove the function that is still on the stack
+                self.pop();
+
+                let result = (f.func)(self, args.into())?;
+
+                self.push(result.unwrap_or(Value::Nul));
+            }
+            Value::Function(Function::ClosureInst(closure)) => {
+                // set the base as the first arg of the function
+                let base = self.stack.len() - nbargs;
+                self.frames.push(CallFrame {
+                    closure: Arc::clone(&closure),
+                    ip: 0,
+                    base,
+                });
+            }
+            Value::Function(Function::ClosureProto(closure)) => {
+                let closure = self.resolve_proto_closure_upvalues(closure)?;
+                // set the base as the first arg of the function
+                let base = self.stack.len() - nbargs;
+                self.frames.push(CallFrame {
+                    closure,
+                    ip: 0,
+                    base,
+                });
+            }
+            Value::Function(Function::ClosureMethod(closure)) => {
+                // set the base as the first arg of the function
+                let base = self.stack.len() - nbargs; // - 1 for the 'inst' param
+                let inst_value = closure.read().unwrap().inst_value.clone();
+                let closure = Arc::clone(&closure.read().unwrap().closure);
+
+                self.frames.push(CallFrame {
+                    closure,
+                    ip: 0,
+                    base,
+                });
+
+                // setting the "inst" argument as the first argument
+                self.stack.insert(base, inst_value);
+            }
+            _ => {
+                return Err(RuntimeError::generic_err(format!(
+                    "Cannot call value of type: {}",
+                    func.get_type()
+                )));
+            }
+        };
+        Ok(())
     }
 
     pub fn run(&mut self, closure: ClosureProto) -> Result<Value, RuntimeError> {
@@ -496,6 +558,7 @@ impl VM {
                     let val = self.pop().unwrap_or(Value::Nul);
                     up_rc.write().unwrap().set(self, val);
                 }
+
                 Opcode::GetLocal => {
                     let slot = fnc.code[frame.ip] as usize;
                     frame.ip += 1;
@@ -528,6 +591,7 @@ impl VM {
                     }
                     self.stack[idx] = val;
                 }
+
                 Opcode::GetGlobal => {
                     let slot = fnc.code[frame.ip] as usize;
                     frame.ip += 1;
@@ -558,71 +622,15 @@ impl VM {
 
                     self.global_table.insert(name, val);
                 }
+
                 Opcode::Call => {
                     let nbargs = fnc.code[frame.ip] as usize;
                     frame.ip += 1;
 
                     // get the function
-                    let func = self.peek(nbargs);
+                    let func = self.peek(nbargs).clone();
 
-                    match func {
-                        Value::Function(Function::NativeFunction(f)) => {
-                            let mut args = VecDeque::with_capacity(nbargs);
-                            let f = f.clone();
-
-                            for _ in 0..nbargs {
-                                args.push_front(self.pop().unwrap());
-                            }
-
-                            // remove the function that is still on the stack
-                            self.pop();
-
-                            let result = (f.func)(self, args.into())?;
-
-                            self.push(result.unwrap_or(Value::Nul));
-                        }
-                        Value::Function(Function::ClosureInst(closure)) => {
-                            // set the base as the first arg of the function
-                            let base = self.stack.len() - nbargs;
-                            self.frames.push(CallFrame {
-                                closure: Arc::clone(&closure),
-                                ip: 0,
-                                base,
-                            });
-                        }
-                        Value::Function(Function::ClosureProto(closure)) => {
-                            let closure =
-                                self.resolve_proto_closure_upvalues(Arc::clone(closure))?;
-                            // set the base as the first arg of the function
-                            let base = self.stack.len() - nbargs;
-                            self.frames.push(CallFrame {
-                                closure,
-                                ip: 0,
-                                base,
-                            });
-                        }
-                        Value::Function(Function::ClosureMethod(closure)) => {
-                            // set the base as the first arg of the function
-                            let base = self.stack.len() - nbargs; // - 1 for the 'inst' param
-                            let inst_value = closure.read().unwrap().inst_value.clone();
-                            let closure = Arc::clone(&closure.read().unwrap().closure);
-
-                            self.frames.push(CallFrame {
-                                closure,
-                                ip: 0,
-                                base,
-                            });
-
-                            // setting the "inst" argument as the first argument
-                            self.stack.insert(base, inst_value);
-                        }
-                        _ => {
-                            return Err(RuntimeError::generic_err(format!(
-                                "Cannot call value of type: {}",
-                                func.get_type()
-                            )));
-                        }
-                    }
+                    self.call_fn(nbargs, func)?;
                 }
                 Opcode::Return => {
                     let frame = self
@@ -653,6 +661,7 @@ impl VM {
 
                     self.stack[frame.base - 1] = ret;
                 }
+
                 Opcode::Pop => {
                     self.pop();
                 }
@@ -714,6 +723,7 @@ impl VM {
                         .into(),
                     );
                 }
+
                 Opcode::Jump => {
                     let dist = fnc.code[frame.ip];
                     let dist = dist as i16 - JUMP_OFFSET;
@@ -732,6 +742,7 @@ impl VM {
                         self.get_frame().unwrap().ip = (ip as i16 + dist) as usize;
                     }
                 }
+
                 Opcode::LoadModule => {
                     let module_name_idx = fnc.code[frame.ip];
                     frame.ip += 1;
@@ -745,6 +756,64 @@ impl VM {
 
                     let module = self.load_module(&module_name)?;
                     self.push(module);
+                }
+
+                Opcode::Read | Opcode::ReadWithMsg => {
+                    let msg = if op == Opcode::ReadWithMsg {
+                        let msg = self.pop().expect("A message");
+                        msg.to_string()
+                    } else {
+                        String::from("> ")
+                    };
+
+                    print!("{}", msg);
+                    _ = io::stdout().flush();
+
+                    let mut buf = String::new();
+                    stdin()
+                        .read_line(&mut buf)
+                        .map_err(|err| RuntimeError::generic_err(err.to_string()))?;
+
+                    // remove the \n
+                    _ = buf.pop();
+
+                    self.push(Value::Texte(buf));
+                }
+                Opcode::ReadCall | Opcode::ReadCallWithMsg => {
+                    let lire_sinon_dist = fnc.code[frame.ip] as i16 - JUMP_OFFSET;
+                    frame.ip += 1;
+
+                    let msg = if op == Opcode::ReadCallWithMsg {
+                        let msg = self.pop().expect("A message");
+                        msg.to_string()
+                    } else {
+                        String::from("> ")
+                    };
+
+                    print!("{}", msg);
+                    _ = io::stdout().flush();
+
+                    let mut buf = String::new();
+                    stdin()
+                        .read_line(&mut buf)
+                        .map_err(|err| RuntimeError::generic_err(err.to_string()))?;
+
+                    // remove the \n
+                    _ = buf.pop();
+
+                    let func = self.peek(0).clone();
+
+                    let len = self.stack.len();
+
+                    self.push(Value::Texte(buf));
+                    let result = self.call_fn(1, func);
+
+                    if result.is_err() {
+                        self.stack.truncate(len);
+                        // if the function doesn't work -> go to "sinon"
+                        let frame = self.get_frame().unwrap();
+                        frame.ip = (frame.ip as i16 + lire_sinon_dist) as usize;
+                    }
                 }
             }
         }

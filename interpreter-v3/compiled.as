@@ -97,3 +97,11 @@ fin fonction
 afficher abc
 afficher abc()
 
+lire entier dans age, "Ton âge : " sinon
+    afficher "Erreur : vous devez entrer un nombre entier !"
+    age = 0 # Valeur par défaut
+    afficher 1
+fin lire
+
+afficher 1
+

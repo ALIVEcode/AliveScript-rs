@@ -1,6 +1,7 @@
 use std::{
     cell::RefCell,
     collections::HashMap,
+    fs,
     rc::Rc,
     str::FromStr,
     sync::{Arc, RwLock},
@@ -442,7 +443,10 @@ impl<'a> Compiler<'a> {
 
     fn mark_initialized(&mut self, index: u16) {
         let local = self.locals.get_mut(index as usize).unwrap();
-        local.depth = self.scope_depth as i32;
+        // if not initialized yet
+        if local.depth == -1 {
+            local.depth = self.scope_depth as i32;
+        }
     }
 
     fn declare_local_type(&mut self, name: &str, spec: TypeSpec) -> u16 {
@@ -525,7 +529,7 @@ impl<'a> Compiler<'a> {
             if local.name == name {
                 if local.depth == -1 && !allow_uninit {
                     Err(CompilationErrorKind::generic_error(format!(
-                        "Impossible de lire la variable '{}' dans son propre initialiseur",
+                        "Impossible de lire la variable '{}', car elle n'a pas été initialisée",
                         name
                     )))?;
                 }
@@ -1062,11 +1066,18 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         let mut name = None;
         let mut static_type = Type::Tout.into();
         let mut op = None;
+        let mut new_local = false;
+        let mut is_const = false;
         // let mut var_list = None;
 
         for pair in pairs {
             match pair.as_rule() {
-                Rule::Var | Rule::Assign => {}
+                Rule::Var => new_local = true,
+                Rule::Const => {
+                    new_local = true;
+                    is_const = true;
+                }
+                Rule::Assign => {}
                 Rule::Expr => {
                     self.parse_expr(pair.into_inner())?;
                 }
@@ -1107,26 +1118,29 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
         let name = name.unwrap();
 
-        // 1. Try to resolve as a LOCAL
-        if let Ok(Some((local_idx, local))) = compiler.resolve_local(name, false) {
-            if local.is_const {
-                return Err(CompilationErrorKind::assign_to_const(name).to_error(span));
+        if !new_local {
+            // 1. Try to resolve as a LOCAL
+            if let Ok(Some((local_idx, local))) = compiler.resolve_local(name, false) {
+                if local.is_const {
+                    return Err(CompilationErrorKind::assign_to_const(name).to_error(span));
+                }
+                compiler.mark_initialized(local_idx as u16);
+                compiler.code.emit_set_local(local_idx as u16);
+                return Ok(());
             }
-            compiler.code.emit_set_local(local_idx as u16);
-            return Ok(());
-        }
 
-        // 2. Try to resolve as an UPVALUE
-        if let Ok(Some((upval_idx, local))) = compiler.resolve_upval(name) {
-            if local.is_const {
-                return Err(CompilationErrorKind::assign_to_const(name).to_error(span));
+            // 2. Try to resolve as an UPVALUE
+            if let Ok(Some((upval_idx, local))) = compiler.resolve_upval(name) {
+                if local.is_const {
+                    return Err(CompilationErrorKind::assign_to_const(name).to_error(span));
+                }
+                compiler.code.emit_set_upvalue(upval_idx as u16);
+                return Ok(());
             }
-            compiler.code.emit_set_upvalue(upval_idx as u16);
-            return Ok(());
         }
 
         // 3. It defines a new local variable
-        let local_idx = compiler.declare_local(name, static_type, false);
+        let local_idx = compiler.declare_local(name, static_type, is_const);
 
         compiler.mark_initialized(local_idx);
         compiler.code.emit_set_local(local_idx);
@@ -1355,6 +1369,57 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
     fn build_ast_stmt(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError> {
         match pair.as_rule() {
+            Rule::LireStmt => {
+                let mut inner = pair.into_inner();
+                // skip "lire"
+                inner.next();
+
+                let mut cast = false;
+                let mut with_msg = false;
+
+                if let Some(cast_fn) = inner.find_first_tagged("cast") {
+                    // skip "Callable"
+                    inner.next();
+                    // skip "In"
+                    inner.next();
+
+                    cast = true;
+                    self.parse_expr(cast_fn.into_inner())?;
+                }
+
+                let var = inner.next().unwrap();
+
+                if let Some(msg) = inner.find_first_tagged("msg") {
+                    with_msg = true;
+                    self.parse_top_expr(msg)?;
+                }
+
+                let mut jump_to_sinon = 0;
+                if cast {
+                    let jump_idx = self.borrow_mut().code.inner().len() + 1;
+                    self.borrow_mut().code.emit_read_call(0, with_msg);
+                    self.borrow_mut().jump_stack.push(jump_idx);
+                    jump_to_sinon = self.borrow_mut().jump_stack.len() - 1;
+                } else {
+                    self.borrow_mut().code.emit_read(with_msg);
+                }
+
+                self.parse_assign(var)?;
+
+                if cast {
+                    let skip_sinon_jmp = self.borrow_mut().push_jump();
+                    self.borrow_mut().patch_jump(jump_to_sinon);
+                    if let Some(lire_sinon) = inner.find(|token| token.as_rule() == Rule::LireSinon)
+                    {
+                        if let Some(lire_sinon_body) =
+                            lire_sinon.into_inner().find_first_tagged("body")
+                        {
+                            self.build_ast_stmts(lire_sinon_body.into_inner());
+                        }
+                    }
+                    self.borrow_mut().patch_jump(skip_sinon_jmp);
+                }
+            }
             Rule::UtiliserStmt => {
                 let inner = pair.into_inner();
                 let module_name = inner
@@ -1561,7 +1626,11 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                         }
                     }) {
                         f_inner.next();
-                        static_type = self.parse_type(static_type_pair.into_inner())?;
+                        let static_type_span = static_type_pair.as_span();
+                        static_type = self
+                            .parse_type(static_type_pair.into_inner())?
+                            .as_base_type()
+                            .map_err(|err| err.to_error(static_type_span))?;
                     }
 
                     if let Some(_) = f_inner.next() {
@@ -1572,7 +1641,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                             None,
                             Rc::clone(self),
                             0,
-                            static_type.clone(),
+                            static_type.clone().into(),
                         );
 
                         value = Some(Value::closure(
@@ -1584,7 +1653,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
                     fields.push(ASFieldInfo {
                         name: field_name,
-                        field_type: static_type,
+                        field_type: static_type.into(),
                         is_const,
                         is_private: false,
                         value,

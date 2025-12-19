@@ -3,7 +3,7 @@ use colored::Colorize;
 use pest::Parser as _;
 use std::path::PathBuf;
 
-use crate::{AlivescriptParser, Rule, compiler::Compiler, runtime::vm::VM};
+use crate::{AlivescriptParser, Rule, bench::main_benchmark, compiler::Compiler, runtime::vm::VM};
 
 // --- Utility Functions for Unimplemented Features ---
 
@@ -107,7 +107,7 @@ struct AliveCli {
     /// Evaluate a single string as AliveScript code.
     /// Example: alive -e "var x = 10; afficher x * 2"
     #[arg(short = 'e', long)]
-    evaluate: Option<String>,
+    eval: Option<String>,
 
     /// Optional file path to run if no subcommand is used.
     /// This captures the 'alive <FILE>' case.
@@ -130,6 +130,18 @@ enum AliveCommands {
     /// INFOS is a string with the same flags as -d.
     #[command(name = "-D")]
     DebugOnly(DebugInfo),
+
+    #[command(name = "bench")]
+    Bench {
+        /// The file containing the AliveScript code to debug.
+        file: PathBuf,
+
+        #[arg(short = 'n', default_value = "20")]
+        nb_measure: usize,
+
+        #[arg(short = 'w', default_value = "5")]
+        nb_warmup: usize,
+    },
 }
 
 #[derive(Args, Debug)]
@@ -167,9 +179,17 @@ pub fn run_cli() {
             run_file(&args.file, Some(&args), false);
         }
 
+        Some(AliveCommands::Bench {
+            file,
+            nb_measure,
+            nb_warmup,
+        }) => {
+            main_benchmark(file.display().to_string(), nb_measure, nb_warmup);
+        }
+
         // Case: alive -e <STR>
-        None if cli.evaluate.is_some() => {
-            let code = cli.evaluate.as_ref().unwrap();
+        None if cli.eval.is_some() => {
+            let code = cli.eval.as_ref().unwrap();
             evaluate_string(code, None, true, "stdin".to_string());
         }
 

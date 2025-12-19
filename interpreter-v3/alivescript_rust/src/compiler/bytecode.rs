@@ -11,11 +11,21 @@ pub enum Opcode {
     Constant,
     Closure,
 
+    Read,
+    /// stack: `msg`
+    ReadWithMsg,
+    /// stack: `func`
+    ReadCall,
+    /// stack: `msg, func`
+    ReadCallWithMsg,
+
     GetUpvalue,
     SetUpvalue,
     GetLocal,
+    /// stack: `value`
     SetLocal,
     GetGlobal,
+    /// stack: `value`
     SetGlobal,
     Call,
 
@@ -45,6 +55,10 @@ impl Opcode {
         match self {
             Opcode::Constant => "CONST",
             Opcode::Closure => "CLOSURE",
+            Opcode::Read => "READ",
+            Opcode::ReadWithMsg => "READ_MSG",
+            Opcode::ReadCall => "READ_CALL",
+            Opcode::ReadCallWithMsg => "READ_CALL_MSG",
             Opcode::GetUpvalue => "GET_UPVAL",
             Opcode::SetUpvalue => "SET_UPVAL",
             Opcode::GetLocal => "GET_LOCAL",
@@ -80,6 +94,15 @@ impl Opcode {
             | Opcode::SetGlobal
             | Opcode::NewList
             | Opcode::NewStruct => 1,
+
+            Opcode::Read => 0,
+            // stack: [msg]
+            Opcode::ReadWithMsg => 0,
+
+            // stack: [func]
+            Opcode::ReadCall => 1,
+            // stack: [msg, func]
+            Opcode::ReadCallWithMsg => 1,
 
             Opcode::Jump | Opcode::JumpIfFalse => 1,
 
@@ -131,7 +154,7 @@ pub fn instructions_to_string(insts: &[u16]) -> Vec<String> {
         inst_str.extend(args.iter().map(|arg| arg.to_string()));
 
         match op {
-            Opcode::JumpIfFalse | Opcode::Jump => {
+            Opcode::JumpIfFalse | Opcode::Jump | Opcode::ReadCall | Opcode::ReadCallWithMsg => {
                 let idx = args[0];
 
                 inst_str.push((*idx as i16 - JUMP_OFFSET).to_string());
@@ -204,7 +227,8 @@ pub fn instructions_to_string_debug(insts: &[u16], compiler: Rc<RefCell<Compiler
                 let idx = args[0];
                 inst_str.push(format!("{:?}", compiler.borrow().upvalues[*idx as usize]));
             }
-            Opcode::JumpIfFalse | Opcode::Jump => {
+
+            Opcode::JumpIfFalse | Opcode::Jump | Opcode::ReadCall | Opcode::ReadCallWithMsg => {
                 let idx = args[0];
 
                 inst_str.pop();
@@ -408,6 +432,22 @@ impl Instructions {
     pub fn emit_load_module(&mut self, module_name_const: u16) {
         self.emit_opcode(Opcode::LoadModule);
         self.emit_byte(module_name_const);
+    }
+
+    pub fn emit_read(&mut self, with_msg: bool) {
+        if with_msg {
+            self.emit_opcode(Opcode::ReadWithMsg);
+        } else {
+            self.emit_opcode(Opcode::Read);
+        }
+    }
+    pub fn emit_read_call(&mut self, jmp: u16, with_msg: bool) {
+        if with_msg {
+            self.emit_opcode(Opcode::ReadCallWithMsg);
+        } else {
+            self.emit_opcode(Opcode::ReadCall);
+        }
+        self.emit_byte(jmp);
     }
 }
 
