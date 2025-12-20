@@ -40,12 +40,6 @@ mod serializer;
 mod utils;
 pub mod value;
 
-macro_rules! unpack {
-    ($pat:pat = $expr:expr) => {
-        let $pat = $expr else { unreachable!() };
-    };
-}
-
 #[derive(Debug, Clone)]
 pub struct Local {
     name: String, // Identifier text, needed for shadowing and error reporting.
@@ -1369,6 +1363,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                         )
                     })?
                     .into()),
+                Rule::TypeFonction => Ok(Type::Fonction.into()),
                 // Rule::Lit => Ok(Box::new(Type::Lit(self.parse_lit(
                 //     primary.into_inner().next().unwrap(),
                 // )?))),
@@ -1381,7 +1376,14 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 )
                 .into()),
             })
-            // .map_infix(|lhs, infix, rhs| todo!())
+            .map_infix(|lhs, infix, rhs| match infix.as_rule() {
+                Rule::Pipe => Ok(Type::union_of(
+                    lhs?.as_base_type().unwrap(),
+                    rhs?.as_base_type().unwrap(),
+                )
+                .into()),
+                _ => unreachable!(),
+            })
             .map_postfix(|lhs, postfix| match postfix.as_rule() {
                 Rule::TypeArgs => {
                     let mut type_args = vec![];

@@ -28,6 +28,9 @@ pub enum RuntimeError {
     #[error("Erreur d'affirmation: {0}")]
     AssertionError(String),
 
+    #[error("Explosion de la pile d'appel: {0}")]
+    StackOverflow(String),
+
     #[error("Erreur lors de l'exécution: {0}")]
     RuntimeError(String),
 }
@@ -38,6 +41,10 @@ impl RuntimeError {
             module_name: module_name.to_string(),
             message: msg.to_string(),
         }
+    }
+
+    pub fn stackoverflow_error(msg: impl ToString) -> Self {
+        Self::StackOverflow(msg.to_string())
     }
 
     pub fn value_error(msg: impl ToString) -> Self {

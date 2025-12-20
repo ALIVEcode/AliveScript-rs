@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
-    fs,
+    fs, hint,
     io::{self, Write, stdin},
     path::{self, Path},
     sync::{Arc, LazyLock, RwLock},
@@ -24,6 +24,8 @@ use crate::{
     },
 };
 
+pub const MAX_DEPTH: usize = 2000;
+
 pub struct VM {
     file: String,
     pub stack: Vec<Value>,
@@ -36,15 +38,21 @@ pub struct VM {
 
 impl VM {
     pub fn new(file: String) -> Self {
-        Self {
+        let builtins = BUILTINS.clone();
+        let mut s = Self {
             file,
             stack: Vec::new(),
             frames: Vec::new(),
             open_upvalues: Vec::new(),
-            global_table: BUILTINS.clone(),
+            global_table: builtins,
             loaded_modules: HashMap::new(),
             preloaded_modules: get_stdlib(),
-        }
+        };
+
+        // let texte_module = s.load_module("Texte").expect("The Texte module");
+        // s.global_table.insert(String::from("Texte"), texte_module);
+
+        s
     }
 
     pub fn insert_module(&mut self, name: impl ToString, module: Arc<dyn LazyModule>) {
@@ -86,10 +94,10 @@ impl VM {
             .ok_or(RuntimeError::generic_err("no frame"))
     }
 
-    fn get_texte_std_module(&mut self) -> ArcModule {
-        let _ = self.load_module("Texte");
+    fn get_std_module(&mut self, name: &'static str) -> ArcModule {
+        let _ = self.load_module(name);
 
-        Arc::clone(&self.loaded_modules["Texte"])
+        Arc::clone(&self.loaded_modules[name])
     }
 
     fn close_upvalues(&mut self, frame_base: usize) {
@@ -211,6 +219,7 @@ impl VM {
                     ip: 0,
                     base,
                 });
+                self.check_overflow()?;
                 let value = self.run_frame(self.frames.len() - 1)?;
 
                 final_fields.insert(
@@ -333,6 +342,7 @@ impl VM {
                     ip: 0,
                     base,
                 });
+                self.check_overflow()?;
             }
             Value::Function(Function::ClosureProto(closure)) => {
                 let closure = self.resolve_proto_closure_upvalues(closure)?;
@@ -343,6 +353,7 @@ impl VM {
                     ip: 0,
                     base,
                 });
+                self.check_overflow()?;
             }
             Value::Function(Function::ClosureMethod(closure)) => {
                 // set the base as the first arg of the function
@@ -355,6 +366,7 @@ impl VM {
                     ip: 0,
                     base,
                 });
+                self.check_overflow()?;
 
                 // setting the "inst" argument as the first argument
                 self.stack.insert(base, inst_value);
@@ -412,6 +424,7 @@ impl VM {
                     ip: 0,
                     base,
                 });
+                self.check_overflow()?;
 
                 return self.run_frame(curr_depth);
             }
@@ -426,6 +439,7 @@ impl VM {
                     ip: 0,
                     base,
                 });
+                self.check_overflow()?;
 
                 return self.run_frame(curr_depth);
             }
@@ -442,6 +456,7 @@ impl VM {
                     ip: 0,
                     base,
                 });
+                self.check_overflow()?;
 
                 // setting the "inst" argument as the first argument
                 self.stack.insert(base, inst_value);
@@ -449,6 +464,17 @@ impl VM {
                 return self.run_frame(curr_depth);
             }
         };
+    }
+
+    pub fn check_overflow(&self) -> Result<(), RuntimeError> {
+        if self.frames.len() >= MAX_DEPTH {
+            Err(RuntimeError::stackoverflow_error(format!(
+                "la pile d'appel a dépassé la limite autorisée ({})",
+                MAX_DEPTH
+            )))
+        } else {
+            Ok(())
+        }
     }
 
     pub fn run(&mut self, closure: ClosureProto) -> Result<Value, RuntimeError> {
@@ -670,7 +696,7 @@ impl VM {
                             }
                         }
                         Value::Texte(s) => {
-                            let module = self.get_texte_std_module();
+                            let module = self.get_std_module("Texte");
                             let module = module.read().unwrap();
                             if let Some(ASField {
                                 value: Value::Function(Function::NativeFunction(f)),
@@ -679,7 +705,23 @@ impl VM {
                             {
                                 self.push(Value::Function(Function::NativeMethod(NativeMethod {
                                     func: f.clone(),
-                                    inst_value: Box::new(Value::Texte(s.clone())),
+                                    inst_value: Box::new(Value::Texte(s)),
+                                })))
+                            } else {
+                                return Err(RuntimeError::invalid_field(&module.name, &field_name));
+                            }
+                        }
+                        Value::Liste(lst) => {
+                            let module = self.get_std_module("Liste");
+                            let module = module.read().unwrap();
+                            if let Some(ASField {
+                                value: Value::Function(Function::NativeFunction(f)),
+                                ..
+                            }) = module.members.get(&field_name)
+                            {
+                                self.push(Value::Function(Function::NativeMethod(NativeMethod {
+                                    func: f.clone(),
+                                    inst_value: Box::new(Value::Liste(lst)),
                                 })))
                             } else {
                                 return Err(RuntimeError::invalid_field(&module.name, &field_name));

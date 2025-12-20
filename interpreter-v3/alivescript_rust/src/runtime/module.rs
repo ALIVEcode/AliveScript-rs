@@ -32,6 +32,12 @@ macro_rules! optional_body {
     };
 }
 
+macro_rules! unpack {
+    ($pat:pat = $expr:expr) => {
+        let $pat = $expr else { unreachable!() };
+    };
+}
+
 #[macro_export]
 macro_rules! as_fonction {
     (builtin: $({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
@@ -175,7 +181,52 @@ as_module2! {
     fn load(&self) {
         [
             as_fonction! {
+                taille(inst: Type::Texte): Type::Entier => {
+                    let inst = inst.as_texte().unwrap();
+                    Ok(Some(Value::Entier(inst.len() as i64)))
+                }
+            },
+            as_fonction! {
                 est_numerique(inst: Type::Texte): Type::Booleen => {
+                    let inst = inst.as_texte().unwrap();
+                    Ok(Some(Value::Booleen(inst.chars().all(|c| c.is_ascii_digit()))))
+                }
+            },
+        ]
+    }
+}
+as_module2! {
+    module Liste {}
+
+    fn load(&self) {
+        [
+            as_fonction! {
+                taille(inst: Type::liste_tout()): Type::Entier => {
+                    unpack!(Value::Liste(lst) = inst);
+
+                    Ok(Some(Value::Entier(lst.read().unwrap().len() as i64)))
+                }
+            },
+            as_fonction! {
+                ajouter(inst: Type::liste_tout(), val: Type::Tout): Type::Nul => {
+                    unpack!(Value::Liste(lst) = inst);
+
+                    lst.write().unwrap().push(val.clone());
+
+                    Ok(Some(Value::Nul))
+                }
+            },
+        ]
+    }
+}
+
+as_module2! {
+    module Debug {}
+
+    fn load(&self) {
+        [
+            as_fonction! {
+                nb(inst: Type::Texte): Type::Booleen => {
                     let inst = inst.as_texte().unwrap();
                     Ok(Some(Value::Booleen(inst.chars().all(|c| c.is_ascii_digit()))))
                 }
@@ -188,7 +239,9 @@ pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
     let mut stdlib: HashMap<String, Arc<dyn LazyModule>> = HashMap::new();
 
     stdlib.insert("Texte".to_string(), Arc::new(Texte {}));
+    stdlib.insert("Liste".to_string(), Arc::new(Liste {}));
     stdlib.insert("Test".to_string(), Arc::new(Test {}));
+    stdlib.insert("Debug".to_string(), Arc::new(Debug {}));
 
     stdlib
 }

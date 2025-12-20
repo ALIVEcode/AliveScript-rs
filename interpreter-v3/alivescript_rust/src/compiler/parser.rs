@@ -2,7 +2,10 @@ use crate::{
     Rule,
     compiler::bytecode::{BinCompcode, BinLogiccode, BinOpcode, UnaryOpcode},
 };
-use pest::{iterators::Pair, pratt_parser::PrattParser};
+use pest::{
+    iterators::Pair,
+    pratt_parser::{Assoc, PrattParser},
+};
 
 lazy_static::lazy_static! {
     pub static ref PRATT_EXPR_PARSER: PrattParser<Rule> = {
@@ -54,7 +57,7 @@ lazy_static::lazy_static! {
         use pest::pratt_parser::{Op};
 
         // Precedence is defined lowest to highest
-        PrattParser::new().op(Op::postfix(Rule::TypeArgs))
+        PrattParser::new().op(Op::postfix(Rule::TypeArgs)).op(Op::infix(Rule::Pipe, Assoc::Left))
     };
 }
 

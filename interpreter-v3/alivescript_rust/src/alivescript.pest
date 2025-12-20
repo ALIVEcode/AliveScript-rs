@@ -166,8 +166,8 @@ ListExpr = {
 }
 
 declVar = {
-    (Var? ~  #var = (MultiDeclIdent | DeclIdent | DeclIdentList))
-  | (Const ~ #var =  (MultiDeclIdent | DeclIdent | DeclIdentList))
+    (Var? ~ #var = (MultiDeclIdent | DeclIdent | DeclIdentList))
+  | (Const ~ #var = (MultiDeclIdent | DeclIdent | DeclIdentList))
 }
 
 DeclStmt = {
@@ -294,10 +294,11 @@ AssignOp = ${
 Assign   = @{ ":=" | "=" | "<-" | "←" }
 
 term = _{
-    Lit
+  
   | EssayerExpr
   | FnExpr
   | FnCall
+  | Lit
   | DebutBloc
   | StructInit
   | Ident
@@ -321,7 +322,7 @@ List = { "[" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE*
 Dict = { "{" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE* ~ "}" }
 
 Callable = {
-    (Ident | "(" ~ NEWLINE* ~ Expr ~ NEWLINE* ~ ")") ~ (AccessProp)*
+    (Lit | List | Dict | StructInit | DebutBloc | Ident | "(" ~ NEWLINE* ~ Expr ~ NEWLINE* ~ ")") ~ (AccessProp)*
 }
 
 FnCall = { Callable ~ FunctionArgs }
@@ -338,15 +339,18 @@ Lit = {
   | Null
 }
 
-TypeExpr    =  { typePrefix? ~ typeTerm ~ typePostfix? ~ (typeInfix ~ typePrefix? ~ typeTerm ~ typePostfix?)* }
-typeTerm    = _{
+TypeExpr     =  { typePrefix? ~ typeTerm ~ typePostfix? ~ (typeInfix ~ typePrefix? ~ typeTerm ~ typePostfix?)* }
+typeTerm     = _{
     Ident
+  | TypeFonction
   | Lit
+  | "(" ~ TypeExpr ~ ")"
 }
-typeInfix   = _{ Pipe }
-typePrefix  = _{ "@" }
-typePostfix = _{ TypeArgs }
-TypeArgs    =  { "<" ~ TypeExpr ~ ("," ~ TypeExpr)* ~ ","? ~ ">" }
+TypeFonction =  { fonction ~ ("(" ~ (TypeExpr ~ ",")* ~ TypeExpr? ~ ")" ~ ("->" ~ TypeExpr)?)? }
+typeInfix    = _{ Pipe }
+typePrefix   = _{ "@" }
+typePostfix  = _{ TypeArgs }
+TypeArgs     =  { "<" ~ TypeExpr ~ ("," ~ TypeExpr)* ~ ","? ~ ">" }
 
 Bool      = @{ "vrai" | "faux" }
 Text      = @{ PUSH("\"" | "'") ~ ("\\" ~ PEEK | !PEEK ~ ANY)* ~ POP }
