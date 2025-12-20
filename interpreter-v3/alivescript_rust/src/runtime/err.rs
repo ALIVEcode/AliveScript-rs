@@ -19,6 +19,12 @@ pub enum RuntimeError {
         message: String,
     },
 
+    #[error("Impossibe d'affecter la variable '{var_name}' puisque c'est une constante.")]
+    AssignToConstVar { var_name: String },
+
+    #[error("Impossibe d'affecter le champs '{field_name}' puisque c'est une constante.")]
+    AssignToConstField { field_name: String },
+
     #[error("Erreur lors de l'exécution: {0}")]
     RuntimeError(String),
 }
@@ -44,6 +50,18 @@ impl RuntimeError {
             "le champs {} n'existe pas dans l'objet {}",
             field_name, obj_str
         ))
+    }
+
+    pub fn assign_to_const(var_name: impl ToString) -> Self {
+        Self::AssignToConstVar {
+            var_name: var_name.to_string(),
+        }
+    }
+
+    pub fn assign_to_const_field(field_name: impl ToString) -> Self {
+        Self::AssignToConstField {
+            field_name: field_name.to_string(),
+        }
     }
 
     pub fn invalid_struct(ty: Type) -> Self {

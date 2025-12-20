@@ -30,7 +30,7 @@ macro_rules! optional_body {
 
 #[macro_export]
 macro_rules! as_fonction {
-    ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
+    (builtin: $({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
      : $return_type:expr => $body:block) => {{
          $($($prefix)*)?;
          (
@@ -66,6 +66,45 @@ macro_rules! as_fonction {
                 }),
                 // $return_type,
             }))
+         )
+     }};
+    ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
+     : $return_type:expr => $body:block) => {{
+         $($($prefix)*)?;
+         (
+            String::from(std::stringify!($name)),
+            $crate::compiler::value::ASField::new_with_type_from_value(true,
+            $crate::compiler::obj::Value::Function($crate::compiler::obj::Function::NativeFunction($crate::compiler::value::NativeFunction {
+                name: std::sync::Arc::new(String::from(std::stringify!($name))),
+                desc: std::sync::Arc::new($crate::opt_value!($($desc.to_string())?)),
+                // std::vec![$(
+                // $crate::as_obj::ASFnParam {
+                //     name: std::stringify!($param_name).into(),
+                //     static_type: $param_type,
+                //     default_value: $crate::default_value!($($default)?),
+                // },
+                // )*],
+                func: std::sync::Arc::new(move |_vm: &mut $crate::runtime::vm::VM, args: std::vec::Vec<Value>| {
+                    let mut args = std::collections::VecDeque::from_iter(args.iter());
+                    $(
+                    let $param_name = {
+                        let p = args.pop_front();
+                        $crate::optional_body!($($default)?, {p.unwrap_or_else(|| $($default)?)}, {p.unwrap()})
+                    };
+                    if !$crate::compiler::value::Type::type_match(&$param_type, &$param_name.get_type()) {
+                        return Err($crate::runtime::err::RuntimeError::invalid_arg_type(
+                            std::stringify!($name),
+                            std::stringify!($param_name),
+                            $param_type,
+                            $param_name.get_type(),
+                         ));
+                    }
+                    )*
+                    $(let $vm = _vm;)?
+                    $body
+                }),
+                // $return_type,
+            })))
          )
      }};
 }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -20,33 +20,81 @@ pub type ArcObjet = Arc<RwLock<ASObjet>>;
 pub type ArcClosureMethod = Arc<RwLock<ClosureMethod>>;
 pub type ArcModule = Arc<RwLock<ASModule>>;
 
+#[derive(Debug, Clone)]
+pub struct ASField {
+    pub value: Value,
+    pub is_const: bool,
+    pub field_type: Type,
+}
+
+impl ASField {
+    pub fn new(is_const: bool, field_type: Type, value: Value) -> Self {
+        Self {
+            value,
+            is_const,
+            field_type,
+        }
+    }
+
+    pub fn new_with_type_from_value(is_const: bool, value: Value) -> Self {
+        Self {
+            field_type: value.get_type(),
+            value,
+            is_const,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ASModule {
     pub name: String,
-    pub members: HashMap<String, Value>,
+    pub members: HashMap<String, ASField>,
 }
 
 impl ASModule {
-    pub fn new(name: impl ToString, members: HashMap<String, Value>) -> Self {
+    pub fn new(name: impl ToString, members: HashMap<String, ASField>) -> Self {
         Self {
             name: name.to_string(),
             members,
         }
     }
 
-    pub fn from_iter<T: IntoIterator<Item = (String, Value)>>(
+    pub fn from_iter<T: IntoIterator<Item = (String, ASField)>>(
         name: impl ToString,
         iter: T,
     ) -> ArcModule {
         ArcModule::new(RwLock::new(ASModule::new(name, HashMap::from_iter(iter))))
     }
+
+    pub fn set_member(&mut self, name: &str, val: Value) -> Result<(), RuntimeError> {
+        let Some(member) = self.members.get_mut(name) else {
+            return Err(RuntimeError::invalid_field(&self.name, name));
+        };
+
+        if member.is_const {
+            return Err(RuntimeError::assign_to_const(format!(
+                "{}.{}",
+                self.name, name
+            )));
+        }
+
+        member.value = val;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct FieldProto {
+    pub value_idx: usize,
+    pub is_const: bool,
+    pub field_type: Type,
 }
 
 #[derive(Debug)]
 pub struct ModuleProto {
     pub name: String,
     pub load_fn: ClosureProto,
-    pub exported_members: HashMap<String, usize>,
+    pub exported_members: HashMap<String, FieldProto>,
 }
 
 #[derive(Debug)]
@@ -102,7 +150,7 @@ pub struct ClosureMethod {
 #[derive(Debug)]
 pub struct ASObjet {
     pub structure: ArcStructure,
-    pub fields: HashMap<String, Value>,
+    pub fields: HashMap<String, ASField>,
 }
 
 impl ASObjet {
@@ -113,7 +161,7 @@ impl ASObjet {
     ) -> Result<Value, RuntimeError> {
         // its a field
         if let Some(val) = obj.read().unwrap().fields.get(attr) {
-            return Ok(val.clone());
+            return Ok(val.value.clone());
         }
 
         let obj_val = obj.read().unwrap();
@@ -130,6 +178,29 @@ impl ASObjet {
         }
 
         Err(RuntimeError::invalid_field(&obj_val.to_string(), attr))
+    }
+
+    pub fn set_field(
+        vm: &mut VM,
+        obj: Arc<RwLock<Self>>,
+        attr: &str,
+        val: Value,
+    ) -> Result<(), RuntimeError> {
+        let mut obj = obj.write().unwrap();
+
+        let Some(member) = obj.fields.get_mut(attr) else {
+            return Err(RuntimeError::invalid_field(
+                &obj.structure.read().unwrap().name,
+                attr,
+            ));
+        };
+
+        if member.is_const {
+            return Err(RuntimeError::assign_to_const_field(attr));
+        }
+
+        member.value = val;
+        Ok(())
     }
 }
 
@@ -155,7 +226,7 @@ impl Display for ASObjet {
             self.structure.read().unwrap().name,
             fields_to_string
                 .into_iter()
-                .map(|(k, v)| format!("{}: {}", k, v.repr()))
+                .map(|(k, v)| format!("{}: {}", k, v.value.repr()))
                 .collect::<Vec<_>>()
                 .join(",\n  ")
         )
@@ -163,7 +234,7 @@ impl Display for ASObjet {
 }
 
 impl ASObjet {
-    pub fn new(structure: ArcStructure, fields: HashMap<String, Value>) -> Self {
+    pub fn new(structure: ArcStructure, fields: HashMap<String, ASField>) -> Self {
         Self { structure, fields }
     }
 }

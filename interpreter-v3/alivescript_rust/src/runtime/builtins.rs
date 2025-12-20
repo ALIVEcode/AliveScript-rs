@@ -8,23 +8,27 @@ use crate::runtime::err::RuntimeError;
 pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(|| {
     HashMap::from_iter([
         as_fonction! {
+            builtin:
             afficher(msg: Type::any()): Type::Nul => {
                 println!("{}", msg);
                 Ok(Some(Value::Nul))
             }
         },
         as_fonction! {
+            builtin:
             afficherErr(msg: Type::any()): Type::Nul => {
                 eprintln!("{}", msg);
                 Ok(Some(Value::Nul))
             }
         },
         as_fonction! {
+            builtin:
             typeDe(obj: Type::any()): Type::Type => {
                 Ok(Some(Value::TypeObj(obj.get_type())))
             }
         },
         as_fonction! {
+            builtin:
             tailleDe(obj: Type::iterable()): Type::Entier => {
                 Ok(Some(Value::Entier(match obj {
                     Value::Texte(t) => t.len(),
@@ -34,6 +38,7 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
             }
         },
         as_fonction! {
+            builtin:
             entier(val: Type::Texte): Type::Entier => {
                 let t = val.as_texte().unwrap();
 

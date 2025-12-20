@@ -88,6 +88,10 @@ afficher p.getX()
 afficher p2
 afficher p
 
+lsp = [p, p2]
+lsp[1].y += 22
+afficher ("p2 = " + p2)
+
 var p3 = Point.creer_vide()
 afficher p3
 
@@ -117,3 +121,5 @@ afficher z
 
 ls[2] += 44
 afficher ls
+
+

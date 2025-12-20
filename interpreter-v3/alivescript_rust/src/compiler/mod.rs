@@ -8,7 +8,7 @@ use std::{
 };
 
 use pest::{
-    Parser as PestParser,
+    Parser as PestParser, Span,
     error::{Error as PestError, ErrorVariant as PestErrorVariant},
     iterators::{Pair, Pairs},
 };
@@ -25,7 +25,7 @@ use crate::{
         parser::{PRATT_EXPR_PARSER, PRATT_TYPE_PARSER},
         value::{
             ASFieldInfo, ASFunction, ASModule, ASStructure, ArcClosureProto, ArcStructure,
-            ClosureProto, ModuleProto, StructType, Type, TypeSpec,
+            ClosureProto, FieldProto, ModuleProto, StructType, Type, TypeSpec,
         },
     },
     utils::Invert,
@@ -169,12 +169,20 @@ impl<'a> Compiler<'a> {
             }
             exported.insert(
                 local.name.clone(),
-                rc_self
-                    .borrow()
-                    .resolve_local(&local.name, true)
-                    .expect("Valid local variable")
-                    .expect("Valid local variable")
-                    .0,
+                FieldProto {
+                    value_idx: rc_self
+                        .borrow()
+                        .resolve_local(&local.name, true)
+                        .expect("Valid local variable")
+                        .expect("Valid local variable")
+                        .0,
+                    is_const: local.is_const,
+                    field_type: local.var_type.clone().as_base_type().map_err(
+                        |compilation_error_kind| {
+                            compilation_error_kind.to_error(Span::new("", 0, 0).unwrap())
+                        },
+                    )?,
+                },
             );
         }
 
@@ -1178,7 +1186,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 if matches!(last.as_node_tag(), Some("prop")) {
                     let const_idx = self
                         .borrow_mut()
-                        .push_const(Value::Texte(last.as_str().to_string()));
+                        .get_or_add_const(Value::Texte(last.as_str().to_string()));
                     self.borrow_mut().code.emit_set_field(const_idx);
                 } else {
                     self.parse_top_expr(last)?;

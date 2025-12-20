@@ -12,7 +12,7 @@ use crate::{
         bytecode::{BinCompcode, BinOpcode, JUMP_OFFSET, Opcode},
         obj::{ArcUpvalue, CallFrame, Function, Upvalue, UpvalueLocation, UpvalueSpec, Value},
         value::{
-            ASModule, ASObjet, ArcClosureInst, ArcClosureProto, ArcModule, ArcStructure,
+            ASField, ASModule, ASObjet, ArcClosureInst, ArcClosureProto, ArcModule, ArcStructure,
             ClosureInst, ClosureProto,
         },
     },
@@ -143,9 +143,12 @@ impl VM {
         other_vm.run(module_closure.load_fn)?;
 
         let mut members = HashMap::new();
-        for (member_name, member_idx) in module_closure.exported_members {
-            let value = other_vm.stack[member_idx].clone();
-            members.insert(member_name, value);
+        for (member_name, member) in module_closure.exported_members {
+            let value = other_vm.stack[member.value_idx].clone();
+            members.insert(
+                member_name,
+                ASField::new(member.is_const, member.field_type, value),
+            );
         }
 
         let module = Arc::new(RwLock::new(ASModule {
@@ -163,11 +166,21 @@ impl VM {
         &mut self,
         structure: ArcStructure,
         mut new_s_fields: HashMap<String, Value>,
-    ) -> Result<HashMap<String, Value>, RuntimeError> {
+    ) -> Result<HashMap<String, ASField>, RuntimeError> {
         let struct_name = structure.read().unwrap().name.clone();
+        let mut final_fields = HashMap::with_capacity(structure.read().unwrap().fields.len());
+
         let mut missing = vec![];
         for field_info in structure.read().unwrap().fields.iter() {
-            if new_s_fields.contains_key(&field_info.name) {
+            if let Some(value) = new_s_fields.remove(&field_info.name) {
+                final_fields.insert(
+                    field_info.name.clone(),
+                    ASField {
+                        value,
+                        is_const: field_info.is_const,
+                        field_type: field_info.field_type.clone().as_base_type().unwrap(),
+                    },
+                );
                 continue;
             }
 
@@ -193,7 +206,14 @@ impl VM {
                 });
                 let value = self.run_frame(self.frames.len() - 1)?;
 
-                new_s_fields.insert(field_info.name.clone(), value);
+                final_fields.insert(
+                    field_info.name.clone(),
+                    ASField {
+                        value,
+                        is_const: field_info.is_const,
+                        field_type: field_info.field_type.clone().as_base_type().unwrap(),
+                    },
+                );
             } else {
                 missing.push(field_info.name.clone());
             }
@@ -203,7 +223,7 @@ impl VM {
             return Err(RuntimeError::missing_struct_fields(&struct_name, &missing));
         }
 
-        Ok(new_s_fields)
+        Ok(final_fields)
     }
 
     pub(crate) fn resolve_proto_closure_upvalues(
@@ -537,8 +557,8 @@ impl VM {
                         }
                         Value::Module(m) => {
                             let module = m.read().unwrap();
-                            if let Some(value) = module.members.get(&field_name) {
-                                self.push(value.clone());
+                            if let Some(field) = module.members.get(&field_name) {
+                                self.push(field.value.clone());
                             } else {
                                 return Err(RuntimeError::invalid_field(&module.name, &field_name));
                             }
@@ -552,8 +572,41 @@ impl VM {
                     }
                 }
                 Opcode::SetField => {
-                    todo!()
+                    let field_const_idx = fnc.code[frame.ip] as usize;
+                    frame.ip += 1;
+
+                    let field_name = match &fnc.constants[field_const_idx] {
+                        Value::Texte(t) => t.clone(),
+                        f => {
+                            return Err(RuntimeError::generic_err(format!(
+                                "field name must be a string, got {}",
+                                f
+                            )));
+                        }
+                    };
+
+                    let obj = self.pop().expect("Object");
+                    let value = self.pop().expect("Value");
+
+                    match obj {
+                        Value::Objet(o) => {
+                            ASObjet::set_field(self, o, &field_name, value)?;
+                        }
+                        Value::Structure(s) => {
+                            return Err(RuntimeError::type_error(format!(
+                                "impossible de changer le champs d'une structure puisqu'elles sont immuables",
+                            )));
+                        }
+                        Value::Module(m) => m.write().unwrap().set_member(&field_name, value)?,
+                        o => {
+                            return Err(RuntimeError::type_error(format!(
+                                "impossible de changer le champs d'une valeur de type '{}'",
+                                o.get_type()
+                            )));
+                        }
+                    }
                 }
+
                 Opcode::Closure => {
                     let const_idx = fnc.code[frame.ip] as usize;
                     frame.ip += 1;
