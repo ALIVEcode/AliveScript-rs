@@ -25,6 +25,9 @@ pub enum RuntimeError {
     #[error("Impossibe d'affecter le champs '{field_name}' puisque c'est une constante.")]
     AssignToConstField { field_name: String },
 
+    #[error("Erreur d'affirmation: {0}")]
+    AssertionError(String),
+
     #[error("Erreur lors de l'exécution: {0}")]
     RuntimeError(String),
 }
@@ -39,6 +42,10 @@ impl RuntimeError {
 
     pub fn value_error(msg: impl ToString) -> Self {
         Self::ValueError(msg.to_string())
+    }
+
+    pub fn assertion_error(msg: impl ToString) -> Self {
+        Self::AssertionError(msg.to_string())
     }
 
     pub fn type_error(msg: impl ToString) -> Self {

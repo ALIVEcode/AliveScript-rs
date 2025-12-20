@@ -11,25 +11,25 @@ const b : entier = 3  # b ne peut plus être modifié
 var c : reel = 2.5
 
 Test.affirmerÉgaux(a + b, 13, "Addition entière échouée")
-Test.affirmerÉgaux(a / b, 3, "Division entière (tronquée) échouée")
+Test.affirmerÉgaux(a // b, 3, "Division entière (tronquée) échouée")
 Test.affirmerÉgaux(c * 2.0, 5.0, "Multiplication réelle échouée")
 Test.affirmer(10 > 5, "Comparaison logique échouée")
 
 # --- 2. TESTS DES CHAÎNES ET CONVERSIONS ---
-var s : chaine = "42"
+var s : texte = "42"
 Test.affirmerÉgaux("Hello " + "World", "Hello World", "Concaténation échouée")
 Test.affirmerÉgaux(entier(s), 42, "Conversion entier() échouée")
-Test.affirmerÉgaux(chaine(100), "100", "Conversion chaine() échouée")
+Test.affirmerÉgaux(texte(100), "100", "Conversion texte() échouée")
 
 # --- 3. TESTS DES STRUCTURES ET MÉTHODES ---
 structure Robot
-    nom : chaine
+    nom : texte
     energie : entier
 fin structure
 
 implementation Robot
     # Constructeur retournant le type Robot
-    methode creer(n : chaine) -> Robot
+    methode creer(n : texte) -> Robot
         retourner Robot { nom: n, energie: 100 }
     fin methode
 
@@ -43,7 +43,6 @@ var mon_robot : Robot = Robot.creer("R2D2")
 Test.affirmerÉgaux(mon_robot.nom, "R2D2", "Attribut de structure incorrect")
 
 # Ajout dynamique (Shape transition)
-mon_robot.version = 1.0 
 mon_robot.recharger(50)
 Test.affirmerÉgaux(mon_robot.energie, 150, "Échec de l'appel de méthode -> rien")
 
@@ -59,13 +58,21 @@ Test.affirmerÉgaux(somme, 10, "Somme de liste via 'faire' échouée")
 
 # --- 5. TESTS DU MOT-CLÉ 'LIRE' ET 'SINON' ---
 # Simulation du flux de contrôle du nouveau mot-clé lire
-var entree_utilisateur : chaine = "abc"
+var entree_utilisateur : texte = "abc"
 var age : entier = 0
 var erreur_detectee : booleen = faux
 
 # Syntaxe cible : lire entier dans age, "msg" sinon ...
 # Ici on teste la logique que la VM exécutera
-si est_numerique(entree_utilisateur) alors
+si entree_utilisateur.est_numerique() alors
+    age = entier(entree_utilisateur)
+sinon
+    erreur_detectee = vrai
+    age = -1
+fin si
+
+utiliser Texte
+si Texte.est_numerique(entree_utilisateur) alors
     age = entier(entree_utilisateur)
 sinon
     erreur_detectee = vrai

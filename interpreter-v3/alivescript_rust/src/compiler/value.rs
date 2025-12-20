@@ -334,6 +334,13 @@ impl<T> PartialEq for Closure<T> {
                 .all(|(u1, u2)| Arc::ptr_eq(&u1, &u2))
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct NativeMethod {
+    pub func: NativeFunction,
+    pub inst_value: Box<Value>,
+}
+
 pub struct NativeFunction {
     pub func: Arc<dyn Fn(&mut VM, Vec<Value>) -> Result<Option<Value>, RuntimeError>>,
     pub name: Arc<String>,
@@ -571,7 +578,7 @@ impl Type {
         Type::Optional(Box::new(type1))
     }
 
-    pub fn any() -> Type {
+    pub fn tout() -> Type {
         Type::optional(Type::Tout)
     }
 
@@ -636,7 +643,7 @@ impl Type {
 
 impl From<Option<Type>> for Type {
     fn from(value: Option<Type>) -> Self {
-        value.unwrap_or(Type::any())
+        value.unwrap_or(Type::tout())
     }
 }
 

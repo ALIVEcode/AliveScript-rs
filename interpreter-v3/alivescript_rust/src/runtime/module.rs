@@ -1,9 +1,13 @@
-use std::{collections::HashMap, marker::PhantomData, sync::LazyLock};
+use std::{
+    collections::HashMap,
+    marker::PhantomData,
+    sync::{Arc, LazyLock},
+};
 
 use crate::{
     compiler::{
         obj::Value,
-        value::{ArcModule, Type},
+        value::{ASModule, ArcModule, Type},
     },
     runtime::err::RuntimeError,
 };
@@ -123,37 +127,70 @@ macro_rules! as_module {
 macro_rules! as_module2 {
     (module $name:ident { $($struct_fields:tt)* }
 
-    fn load(&$self:ident) {$($body:stmt);*; [$($var:expr),* $(,)?]}) => {
+    fn load(&$self:ident) {$({$($body:stmt)*})? [$($var:expr),* $(,)?]}) => {
         struct $name {
             $($struct_fields)*
         }
 
         impl $crate::runtime::module::LazyModule for $name {
             fn load(&$self) -> ArcModule {
-                $($body)*
+                $($($body)*)?
                 $crate::compiler::value::ASModule::from_iter(stringify!($name), [$($var),*])
             }
         }
     };
 }
 
-as_module! {
-    UNIT, "Unit",
-    as_fonction! {
-        entier(val: Type::Texte): Type::Entier => {
-            let t = val.as_texte().unwrap();
+as_module2! {
+    module Test { }
 
-            let i = t.parse::<i64>().map_err(|_| RuntimeError::generic_err(
-                format!("Impossible de convertir {} en entier de base 10.", val.repr())
-            ))?;
+    fn load(&self) {
+        [
+            as_fonction! {
+                affirmer(cond: Type::tout(), msg: Type::Texte): Type::Nul => {
+                    if !cond.to_bool() {
+                        let t = msg.as_texte().unwrap();
+                        Err(RuntimeError::assertion_error(t))
+                    } else {
+                        Ok(None)
+                    }
+                }
+            },
+            as_fonction! {
+                affirmerÉgaux(val1: Type::tout(), val2: Type::tout(), msg: Type::Texte): Type::Nul => {
+                    if val1 != val2 {
+                        let t = msg.as_texte().unwrap();
+                        Err(RuntimeError::assertion_error(format!("{}\nGauche: {}\nDroite: {}", t, val1.repr(), val2.repr())))
+                    } else {
+                        Ok(None)
+                    }
+                }
+            },
+        ]
+    }
+}
+as_module2! {
+    module Texte {}
 
-            Ok(Some(Value::Entier(i)))
-        }
-    },
+    fn load(&self) {
+        [
+            as_fonction! {
+                est_numerique(inst: Type::Texte): Type::Booleen => {
+                    let inst = inst.as_texte().unwrap();
+                    Ok(Some(Value::Booleen(inst.chars().all(|c| c.is_ascii_digit()))))
+                }
+            },
+        ]
+    }
 }
 
-pub fn get_stdlib() -> HashMap<String, LazyLock<ArcModule>> {
-    HashMap::from_iter([UNIT].map(|(n, lazy_module)| (n.to_string(), lazy_module)))
+pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
+    let mut stdlib: HashMap<String, Arc<dyn LazyModule>> = HashMap::new();
+
+    stdlib.insert("Texte".to_string(), Arc::new(Texte {}));
+    stdlib.insert("Test".to_string(), Arc::new(Test {}));
+
+    stdlib
 }
 
 pub trait LazyModule {

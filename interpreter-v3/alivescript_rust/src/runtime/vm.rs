@@ -14,7 +14,7 @@ use crate::{
         obj::{ArcUpvalue, CallFrame, Function, Upvalue, UpvalueLocation, UpvalueSpec, Value},
         value::{
             ASField, ASModule, ASObjet, ArcClosureInst, ArcClosureProto, ArcModule, ArcStructure,
-            ClosureInst, ClosureProto,
+            ClosureInst, ClosureProto, NativeMethod,
         },
     },
     runtime::{
@@ -43,7 +43,7 @@ impl VM {
             open_upvalues: Vec::new(),
             global_table: BUILTINS.clone(),
             loaded_modules: HashMap::new(),
-            preloaded_modules: HashMap::new(), //get_stdlib(),
+            preloaded_modules: get_stdlib(),
         }
     }
 
@@ -84,6 +84,12 @@ impl VM {
         self.frames
             .last_mut()
             .ok_or(RuntimeError::generic_err("no frame"))
+    }
+
+    fn get_texte_std_module(&mut self) -> ArcModule {
+        let _ = self.load_module("Texte");
+
+        Arc::clone(&self.loaded_modules["Texte"])
     }
 
     fn close_upvalues(&mut self, frame_base: usize) {
@@ -302,6 +308,23 @@ impl VM {
 
                 self.push(result.unwrap_or(Value::Nul));
             }
+            Value::Function(Function::NativeMethod(f)) => {
+                let mut args = VecDeque::with_capacity(nbargs);
+                let f = f.clone();
+
+                for _ in 0..nbargs {
+                    args.push_front(self.pop().unwrap());
+                }
+
+                args.push_front(*f.inst_value);
+
+                // remove the function that is still on the stack
+                self.pop();
+
+                let result = (f.func.func)(self, args.into())?;
+
+                self.push(result.unwrap_or(Value::Nul));
+            }
             Value::Function(Function::ClosureInst(closure)) => {
                 // set the base as the first arg of the function
                 let base = self.stack.len() - nbargs;
@@ -360,6 +383,23 @@ impl VM {
                 self.pop();
 
                 let result = (f.func)(self, args.into())?;
+
+                return Ok(result.unwrap_or(Value::Nul));
+            }
+            Function::NativeMethod(f) => {
+                let mut args = VecDeque::with_capacity(nbargs);
+                let f = f.clone();
+
+                for _ in 0..nbargs {
+                    args.push_front(self.pop().unwrap());
+                }
+
+                args.push_front(*f.inst_value);
+
+                // remove the function that is still on the stack
+                self.pop();
+
+                let result = (f.func.func)(self, args.into())?;
 
                 return Ok(result.unwrap_or(Value::Nul));
             }
@@ -625,6 +665,22 @@ impl VM {
                             let module = m.read().unwrap();
                             if let Some(field) = module.members.get(&field_name) {
                                 self.push(field.value.clone());
+                            } else {
+                                return Err(RuntimeError::invalid_field(&module.name, &field_name));
+                            }
+                        }
+                        Value::Texte(s) => {
+                            let module = self.get_texte_std_module();
+                            let module = module.read().unwrap();
+                            if let Some(ASField {
+                                value: Value::Function(Function::NativeFunction(f)),
+                                ..
+                            }) = module.members.get(&field_name)
+                            {
+                                self.push(Value::Function(Function::NativeMethod(NativeMethod {
+                                    func: f.clone(),
+                                    inst_value: Box::new(Value::Texte(s.clone())),
+                                })))
                             } else {
                                 return Err(RuntimeError::invalid_field(&module.name, &field_name));
                             }

@@ -1599,6 +1599,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     )
                 };
 
+                self.borrow_mut().mark_initialized(module_var);
                 self.borrow_mut().code.emit_set_local(module_var);
                 if let Some(vars) = vars {
                     for var in vars {
@@ -1790,6 +1791,8 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             Rule::SiStmt => self.parse_if(pair)?,
 
             Rule::RepeterStmt => {
+                self.borrow_mut().begin_scope();
+
                 let mut inner = pair.into_inner();
                 let mut if_not_cond_jmp = None;
 
@@ -1834,12 +1837,30 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     .code
                     .emit_jump(before_cond as i16 - now as i16 - 2); // - 2 here to account for this jump
 
+                {
+                    let mut compiler = self.borrow_mut();
+                    while let Some(continue_jmp_idx) = compiler.continue_stack.pop() {
+                        compiler.patch_jump_to(continue_jmp_idx, before_cond);
+                    }
+                }
+
                 if let Some(if_not_cond_jmp) = if_not_cond_jmp {
                     self.borrow_mut().patch_jump(if_not_cond_jmp);
                 }
+
+                {
+                    let mut compiler = self.borrow_mut();
+                    while let Some(break_jmp_idx) = compiler.break_stack.pop() {
+                        compiler.patch_jump(break_jmp_idx);
+                    }
+                }
+
+                self.borrow_mut().end_scope();
             }
 
             Rule::TantQueStmt => {
+                self.borrow_mut().begin_scope();
+
                 let inner = pair.into_inner();
                 let before_cond = self.borrow().code.inner().len();
 
@@ -1862,8 +1883,25 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 self.borrow_mut()
                     .code
                     .emit_jump(before_cond as i16 - now as i16 - 2); // - 2 here to account for this jump
+
+                {
+                    let mut compiler = self.borrow_mut();
+                    while let Some(continue_jmp_idx) = compiler.continue_stack.pop() {
+                        compiler.patch_jump_to(continue_jmp_idx, before_cond);
+                    }
+                }
+
                 // instruction and its argument
                 self.borrow_mut().patch_jump(if_not_cond_jmp);
+
+                {
+                    let mut compiler = self.borrow_mut();
+                    while let Some(break_jmp_idx) = compiler.break_stack.pop() {
+                        compiler.patch_jump(break_jmp_idx);
+                    }
+                }
+
+                self.borrow_mut().end_scope();
             }
             Rule::PourStmt => {
                 self.borrow_mut().begin_scope();

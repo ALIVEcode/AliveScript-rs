@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 
 use crate::compiler::value::{
     ArcClosureInst, ArcClosureMethod, ArcClosureProto, ArcModule, ArcObjet, ArcStructure, Closure,
-    NativeFunction, Type,
+    NativeFunction, NativeMethod, Type,
 };
 use crate::runtime::err::RuntimeError;
 use crate::runtime::vm::VM;
@@ -32,6 +32,7 @@ pub enum Function {
     ClosureProto(ArcClosureProto),
     ClosureInst(ArcClosureInst),
     NativeFunction(NativeFunction),
+    NativeMethod(NativeMethod),
     ClosureMethod(ArcClosureMethod),
 }
 
@@ -240,6 +241,9 @@ impl Display for Value {
             Value::Function(Function::NativeFunction(native_function)) => {
                 format!("fonction native {}()", native_function.name)
             }
+            Value::Function(Function::NativeMethod(native_function)) => {
+                format!("méthode native {}()", native_function.func.name)
+            }
             Value::Function(Function::ClosureMethod(closure)) => format!(
                 "méthode {}()",
                 closure
@@ -348,6 +352,7 @@ impl PartialEq for Value {
                 *d == *i as f64
             }
             (Value::Entier(i1), Value::Entier(i2)) => i1 == i2,
+            (Value::Decimal(f1), Value::Decimal(f2)) => f1 == f2,
             (Value::Texte(t1), Value::Texte(t2)) => t1 == t2,
             (Value::Booleen(b1), Value::Booleen(b2)) => b1 == b2,
             (Value::Liste(l1), Value::Liste(l2)) => {

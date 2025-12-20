@@ -9,21 +9,21 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
     HashMap::from_iter([
         as_fonction! {
             builtin:
-            afficher(msg: Type::any()): Type::Nul => {
+            afficher(msg: Type::tout()): Type::Nul => {
                 println!("{}", msg);
                 Ok(Some(Value::Nul))
             }
         },
         as_fonction! {
             builtin:
-            afficherErr(msg: Type::any()): Type::Nul => {
+            afficherErr(msg: Type::tout()): Type::Nul => {
                 eprintln!("{}", msg);
                 Ok(Some(Value::Nul))
             }
         },
         as_fonction! {
             builtin:
-            typeDe(obj: Type::any()): Type::Type => {
+            typeDe(obj: Type::tout()): Type::Type => {
                 Ok(Some(Value::TypeObj(obj.get_type())))
             }
         },
@@ -47,6 +47,12 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
                 ))?;
 
                 Ok(Some(Value::Entier(i)))
+            }
+        },
+        as_fonction! {
+            builtin:
+            texte(val: Type::tout()): Type::Texte => {
+                Ok(Some(Value::Texte(val.to_string())))
             }
         },
     ])
