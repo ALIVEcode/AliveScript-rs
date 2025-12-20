@@ -1,5 +1,10 @@
+use std::{collections::HashMap, marker::PhantomData, sync::LazyLock};
+
 use crate::{
-    compiler::{obj::Value, value::Type},
+    compiler::{
+        obj::Value,
+        value::{ArcModule, Type},
+    },
     runtime::err::RuntimeError,
 };
 
@@ -24,14 +29,15 @@ macro_rules! optional_body {
 }
 
 #[macro_export]
-macro_rules! as_fonction_native {
-    ($($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
-     : $return_type:expr => $body:block) => {
+macro_rules! as_fonction {
+    ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
+     : $return_type:expr => $body:block) => {{
+         $($($prefix)*)?;
          (
             String::from(std::stringify!($name)),
             $crate::compiler::obj::Value::Function($crate::compiler::obj::Function::NativeFunction($crate::compiler::value::NativeFunction {
                 name: std::sync::Arc::new(String::from(std::stringify!($name))),
-                desc: std::sync::Arc::new($crate::opt_value!($($desc)?)),
+                desc: std::sync::Arc::new($crate::opt_value!($($desc.to_string())?)),
                 // std::vec![$(
                 // $crate::as_obj::ASFnParam {
                 //     name: std::stringify!($param_name).into(),
@@ -61,53 +67,40 @@ macro_rules! as_fonction_native {
                 // $return_type,
             }))
          )
-     };
+     }};
 }
 
 #[macro_export]
-macro_rules! as_mod_native {
-    ($name:ident, $($var:expr),* $(,)?) => {
-        pub const $name: once_cell::sync::Lazy<std::rc::Rc<std::cell::RefCell<::std::collections::HashMap<String, $crate::compiler::obj::Value>>>> = once_cell::sync::Lazy::new(|| {
-            let mut hashmap = ::std::collections::HashMap::new();
-            $({
-                let (name, func) = $var;
-                hashmap.insert(name, func);
-            })*
-            std::rc::Rc::new(std::cell::RefCell::new(hashmap))
-        });
+macro_rules! as_module {
+    ($var_name:ident, $name:literal, $($var:expr),* $(,)?) => {
+        pub const $var_name: (&'static str, std::sync::LazyLock<$crate::compiler::value::ArcModule>) = ($name, std::sync::LazyLock::new(|| {
+            $crate::compiler::value::ASModule::from_iter($name, [$($var),*])
+        }));
 
     };
 }
 
-as_mod_native! {
-    BUILTIN_MOD,
-    as_fonction_native! {
-        afficher(msg: Type::any()): Type::Nul => {
-            println!("{}", msg);
-            Ok(Some(Value::Nul))
+#[macro_export]
+macro_rules! as_module2 {
+    (module $name:ident { $($struct_fields:tt)* }
+
+    fn load(&$self:ident) {$($body:stmt);*; [$($var:expr),* $(,)?]}) => {
+        struct $name {
+            $($struct_fields)*
         }
-    },
-    as_fonction_native! {
-        afficherErr(msg: Type::any()): Type::Nul => {
-            eprintln!("{}", msg);
-            Ok(Some(Value::Nul))
+
+        impl $crate::runtime::module::LazyModule for $name {
+            fn load(&$self) -> ArcModule {
+                $($body)*
+                $crate::compiler::value::ASModule::from_iter(stringify!($name), [$($var),*])
+            }
         }
-    },
-    as_fonction_native! {
-        typeDe(obj: Type::any()): Type::Type => {
-            Ok(Some(Value::TypeObj(obj.get_type())))
-        }
-    },
-    as_fonction_native! {
-        tailleDe(obj: Type::iterable()): Type::Entier => {
-            Ok(Some(Value::Entier(match obj {
-                Value::Texte(t) => t.len(),
-                Value::Liste(l) => l.read().unwrap().len(),
-                _ => unreachable!()
-            } as i64)))
-        }
-    },
-    as_fonction_native! {
+    };
+}
+
+as_module! {
+    UNIT, "Unit",
+    as_fonction! {
         entier(val: Type::Texte): Type::Entier => {
             let t = val.as_texte().unwrap();
 
@@ -118,13 +111,12 @@ as_mod_native! {
             Ok(Some(Value::Entier(i)))
         }
     },
-    // as_fonction_native! {
-    //     format(template: ASType::Texte, attrs: ASType::Liste => ASObj::liste(vec![])) -> ASType::Texte; {
-    //         as_cast!(ASObj::ASTexte(template) = template);
-    //         as_cast!(ASObj::ASListe(attrs) = attrs);
-    //
-    //         let result = template.format(attrs.borrow().iter());
-    //         Ok(Some(ASObj::ASTexte(result)))
-    //     }
-    // },
+}
+
+pub fn get_stdlib() -> HashMap<String, LazyLock<ArcModule>> {
+    HashMap::from_iter([UNIT].map(|(n, lazy_module)| (n.to_string(), lazy_module)))
+}
+
+pub trait LazyModule {
+    fn load(&self) -> ArcModule;
 }

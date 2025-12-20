@@ -97,11 +97,19 @@ fin fonction
 afficher abc
 afficher abc()
 
-lire entier dans age, "Ton âge : " sinon
-    afficher "Erreur : vous devez entrer un nombre entier !"
-    age = 0 # Valeur par défaut
-    afficher 1
-fin lire
+#lire entier dans age, "Ton âge : " sinon
+#    afficher "Erreur : vous devez entrer un nombre entier !"
+#    age = 0 # Valeur par défaut
+#    afficher 1
+#fin lire
+#
+#afficher ("age = " + age)
 
 afficher 1
+
+
+x, [y, z] = [1, [2, 3]]
+afficher x
+afficher y
+afficher z
 

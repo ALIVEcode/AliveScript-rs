@@ -8,6 +8,11 @@ use crate::compiler::{Compiler, bitmasks::BitArray, utils::format_table};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
 #[repr(u16)]
 pub enum Opcode {
+    /// repush the top of the stack `push(top())`
+    Dup,
+    /// pop the top of the stack
+    Pop,
+
     Constant,
     Closure,
 
@@ -33,7 +38,6 @@ pub enum Opcode {
     JumpIfFalse,
 
     Return,
-    Pop,
 
     BinOp,
     Neg,
@@ -48,11 +52,16 @@ pub enum Opcode {
     SetField,
 
     LoadModule,
+
+    // ForPrep,
+    // ForNext,
 }
 
 impl Opcode {
     pub const fn name(&self) -> &'static str {
         match self {
+            Opcode::Dup => "DUP",
+            Opcode::Pop => "POP",
             Opcode::Constant => "CONST",
             Opcode::Closure => "CLOSURE",
             Opcode::Read => "READ",
@@ -67,7 +76,6 @@ impl Opcode {
             Opcode::SetGlobal => "SET_GLOBAL",
             Opcode::Call => "CALL",
             Opcode::Return => "RETURN",
-            Opcode::Pop => "POP",
             Opcode::BinOp => "BINOP",
             Opcode::BinComp => "BINCOMP",
             Opcode::Neg => "NEG",
@@ -80,6 +88,8 @@ impl Opcode {
             Opcode::GetField => "GET_ATTR",
             Opcode::SetField => "SET_ATTR",
             Opcode::LoadModule => "LOAD_MODULE",
+            // Opcode::ForPrep => "FOR_PREP",
+            // Opcode::ForNext => "FOR_NEXT",
         }
     }
 
@@ -113,7 +123,9 @@ impl Opcode {
 
             Opcode::BinOp | Opcode::BinComp => 1,
 
-            Opcode::Pop | Opcode::GetItem | Opcode::Neg => 0,
+            Opcode::Dup | Opcode::Pop => 0,
+
+            Opcode::GetItem | Opcode::Neg => 0,
 
             Opcode::SetItem => 0,
 
@@ -401,6 +413,10 @@ impl Instructions {
 
     pub fn emit_return(&mut self) {
         self.emit_opcode(Opcode::Return);
+    }
+
+    pub fn emit_dup(&mut self) {
+        self.emit_opcode(Opcode::Dup);
     }
 
     pub fn emit_pop(&mut self) {

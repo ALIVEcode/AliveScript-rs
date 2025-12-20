@@ -54,8 +54,8 @@ LireStmt    =  {
   | lire ~ declVarLire ~ ("," ~ #msg = Expr)?
 }
 declVarLire =  {
-    (Var? ~ (declIdent | DeclIdentList))
-  | (Const ~ (declIdent | DeclIdentList))
+    (Var? ~ (DeclIdent | DeclIdentList))
+  | (Const ~ (DeclIdent | DeclIdentList))
 }
 LireSinon   =  { "sinon" ~ eos+ ~ (#body = StmtBody)? ~ finLire }
 lire        = @{ "lire" ~ !IdentChar }
@@ -69,10 +69,11 @@ UtiliserMembers = { "{" ~ ((#member = Ident) ~ ",")* ~ (#member = Ident)? ~ "}" 
 
 TypeStmt = { "type" ~ typeTerm ~ Assign ~ TypeExpr }
 
-FnDef =  {
-    Docs? ~ eos* ~ "fonction" ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ (":" ~ (#body = Expr) | eos ~ (#body = StmtBody)? ~ finFn)
+FnDef    =  {
+    Docs? ~ eos* ~ PUSH(fonction) ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ (":" ~ (#body = Expr) ~ DROP | eos ~ (#body = StmtBody)? ~ finFn)
 }
-finFn = @{ "fin" ~ WHITESPACE+ ~ "fonction" }
+fonction = @{ ("fonction" | "fn") ~ !IdentChar }
+finFn    = @{ "fin" ~ WHITESPACE+ ~ POP }
 
 StructureDef  =  {
     Docs? ~ eos* ~ "structure" ~ (#name = Ident) ~ eos+ ~ StructureBody
@@ -165,8 +166,8 @@ ListExpr = {
 }
 
 declVar = {
-    (Var? ~ (MultiDeclIdent | declIdent | DeclIdentList))
-  | (Const ~ (MultiDeclIdent | declIdent | DeclIdentList))
+    (Var? ~ (MultiDeclIdent | DeclIdent | DeclIdentList))
+  | (Const ~ (MultiDeclIdent | DeclIdent | DeclIdentList))
 }
 
 DeclStmt = {
@@ -180,17 +181,17 @@ Var   = @{ "var" ~ !IdentChar }
 AssignStmt = { assignVar }
 
 assignVar      = _{
-    (MultiDeclIdent | declIdent | DeclIdentList) ~ (AssignOp | Assign) ~ Expr
+    (MultiDeclIdent | DeclIdent | DeclIdentList) ~ (AssignOp | Assign) ~ #a_value = Expr
 }
-declIdent      = _{
-    Ident ~ (":" ~ TypeExpr)?
+DeclIdent      =  {
+    (#var_name = Ident) ~ (":" ~ #var_type = TypeExpr)?
 }
 MultiDeclIdent =  {
-    ((declIdent | DeclIdentList) ~ "," ~ ((declIdent | DeclIdentList) ~ ",")* ~ (declIdent | DeclIdentList)?)
+    ((DeclIdent | DeclIdentList) ~ "," ~ ((DeclIdent | DeclIdentList) ~ ",")* ~ (DeclIdent | DeclIdentList)?)
 }
 
 DeclIdentList = {
-    ("[" ~ ((declIdent | DeclIdentList) ~ ",")* ~ (declIdent | DeclIdentList)? ~ "]")
+    ("[" ~ ((DeclIdent | DeclIdentList) ~ ",")* ~ (DeclIdent | DeclIdentList)? ~ "]")
 }
 
 RetournerStmt =  { retourner ~ (Expr ~ ",")* ~ Expr? }
@@ -307,7 +308,7 @@ StructInitField = { Ident ~ ":" ~ Expr }
 DebutBloc = { ("debut" | "début") ~ eos+ ~ (!"fin" ~ stmtBloc ~ eos+)* ~ "fin" }
 
 FnExpr = {
-    PUSH("fonction" | "fn") ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ #body = (":" ~ Expr ~ DROP | eos ~ StmtBody ~ "fin" ~ POP)
+    PUSH(fonction) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ #body = (":" ~ Expr ~ DROP | eos ~ StmtBody ~ "fin" ~ POP)
 }
 
 EssayerExpr = { "essayer" ~ Expr }

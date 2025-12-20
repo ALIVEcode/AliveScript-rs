@@ -625,8 +625,9 @@ trait Parser<'a> {
     fn parse_assign_vars(
         &mut self,
         pairs: Pairs<Rule>,
-        is_const: Option<bool>,
-    ) -> Result<(), PestError<Rule>>;
+        is_const: bool,
+        new_local: bool,
+    ) -> Result<(), CompilationError>;
 
     fn parse_assign(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
@@ -646,24 +647,17 @@ trait Parser<'a> {
 impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
     fn parse_top_expr(&mut self, primary: Pair<'a, Rule>) -> Result<(), CompilationError> {
         match primary.as_rule() {
-            Rule::List => {
+            Rule::List | Rule::ListExpr => {
                 let mut nb_el = 0;
                 for arg in primary.into_inner() {
                     self.parse_expr(arg.into_inner())?;
                     nb_el += 1;
                 }
-                // todo: push list
                 self.borrow_mut().code.emit_new_list(nb_el);
             }
 
             Rule::Expr => {
                 self.parse_expr(primary.into_inner())?;
-            }
-
-            Rule::ListExpr => {
-                for expr in primary.into_inner() {
-                    self.parse_expr(expr.into_inner())?;
-                }
             }
 
             Rule::Ident => {
@@ -1051,10 +1045,72 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
     fn parse_assign_vars(
         &mut self,
-        _pairs: Pairs<Rule>,
-        _is_const: Option<bool>,
-    ) -> Result<(), PestError<Rule>> {
-        todo!()
+        pairs: Pairs<Rule>,
+        is_const: bool,
+        new_local: bool,
+    ) -> Result<(), CompilationError> {
+        let last_pair_idx = pairs.len() - 1;
+
+        for (i, pair) in pairs.enumerate() {
+            if i != last_pair_idx {
+                self.borrow_mut().code.emit_dup();
+            }
+            self.borrow_mut().push_const(Value::Entier(i as i64));
+            self.borrow_mut().code.emit_get_item();
+
+            match pair.as_rule() {
+                Rule::DeclIdent => {
+                    let span = pair.as_span();
+                    let decl_def = pair.into_inner();
+                    let name = decl_def.find_first_tagged("var_name").unwrap().as_str();
+                    let mut new_local = new_local;
+
+                    let mut static_type = Type::Tout.into();
+                    if let Some(pair_type) = decl_def.find_first_tagged("var_type") {
+                        static_type = self.parse_type(pair_type.into_inner())?;
+                        new_local = true;
+                    }
+
+                    let mut compiler = self.borrow_mut();
+
+                    if !new_local {
+                        // 1. Try to resolve as a LOCAL
+                        if let Ok(Some((local_idx, local))) = compiler.resolve_local(name, false) {
+                            if local.is_const {
+                                return Err(
+                                    CompilationErrorKind::assign_to_const(name).to_error(span)
+                                );
+                            }
+                            compiler.mark_initialized(local_idx as u16);
+                            compiler.code.emit_set_local(local_idx as u16);
+                            continue;
+                        }
+
+                        // 2. Try to resolve as an UPVALUE
+                        if let Ok(Some((upval_idx, local))) = compiler.resolve_upval(name) {
+                            if local.is_const {
+                                return Err(
+                                    CompilationErrorKind::assign_to_const(name).to_error(span)
+                                );
+                            }
+                            compiler.code.emit_set_upvalue(upval_idx as u16);
+                            continue;
+                        }
+                    }
+
+                    // 3. It defines a new local variable
+                    let local_idx = compiler.declare_local(name, static_type, is_const);
+
+                    compiler.mark_initialized(local_idx);
+                    compiler.code.emit_set_local(local_idx);
+                }
+                Rule::DeclIdentList => {
+                    self.parse_assign_vars(pair.into_inner(), is_const, new_local);
+                }
+                _ => unreachable!("{:#?}", pair),
+            }
+        }
+        Ok(())
     }
 
     fn parse_assign(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError> {
@@ -1068,6 +1124,10 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         let mut is_const = false;
         // let mut var_list = None;
 
+        if let Some(value) = pairs.find_first_tagged("a_value") {
+            self.parse_expr(value.into_inner())?;
+        }
+
         for pair in pairs {
             match pair.as_rule() {
                 Rule::Var => new_local = true,
@@ -1075,32 +1135,24 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     new_local = true;
                     is_const = true;
                 }
-                Rule::Assign => {}
-                Rule::Expr => {
-                    self.parse_expr(pair.into_inner())?;
-                }
+                Rule::Expr | Rule::Assign => {}
                 Rule::AssignOp => {
                     let op_pair = pair.into_inner().next().unwrap();
                     op = Some(BinOpcode::try_from(&op_pair).unwrap());
                     // if we have an assign op, we push the current value of the var
                     self.borrow_mut().load_var(name.unwrap());
                 }
-                Rule::TypeExpr => static_type = self.parse_type(pair.into_inner())?,
-                Rule::Ident => name = Some(pair.as_str()),
-                // Rule::MultiDeclIdent => {
-                //     var_list = Some(parse_assign_vars(
-                //         pair.into_inner(),
-                //         Some(is_const),
-                //         Some(public),
-                //     )?)
-                // }
-                // Rule::DeclIdentList => {
-                //     var_list = Some(parse_assign_vars(
-                //         pair.into_inner(),
-                //         Some(is_const),
-                //         Some(public),
-                //     )?)
-                // }
+                Rule::DeclIdent => {
+                    let decl_def = pair.into_inner();
+                    name = Some(decl_def.find_first_tagged("var_name").unwrap().as_str());
+                    if let Some(pair_type) = decl_def.find_first_tagged("var_type") {
+                        static_type = self.parse_type(pair_type.into_inner())?;
+                        new_local = true;
+                    }
+                }
+                Rule::MultiDeclIdent | Rule::DeclIdentList => {
+                    return self.parse_assign_vars(pair.into_inner(), is_const, new_local);
+                }
                 _ => panic!("{:#?}", pair),
             }
         }
@@ -1151,27 +1203,23 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         let mut static_type = Type::Tout.into();
         let mut is_const = false;
 
+        if let Some(value) = pairs.find_first_tagged("a_value") {
+            self.parse_expr(value.into_inner())?;
+        }
+
         for pair in pairs {
             match pair.as_rule() {
                 Rule::Const => is_const = true,
-                Rule::Var | Rule::Assign => {}
-                Rule::Expr => {
-                    self.parse_expr(pair.into_inner())?;
+                Rule::Expr | Rule::Var | Rule::Assign => {}
+                Rule::DeclIdent => {
+                    let decl_def = pair.into_inner();
+                    name = Some(decl_def.find_first_tagged("var_name").unwrap().as_str());
+                    if let Some(pair_type) = decl_def.find_first_tagged("var_type") {
+                        static_type = self.parse_type(pair_type.into_inner())?;
+                    }
                 }
-                Rule::TypeExpr => static_type = self.parse_type(pair.into_inner())?,
-                Rule::Ident => name = Some(pair.as_str()),
-                // Rule::MultiDeclIdent => {
-                //     var_list = Some(parse_assign_vars(
-                //         pair.into_inner(),
-                //         Some(is_const),
-                //         Some(public),
-                //     )?)
-                // }
-                Rule::DeclIdentList => {
-                    let var_list = Some(self.parse_assign_vars(
-                        pair.into_inner(),
-                        Some(is_const),
-                    )?);
+                Rule::MultiDeclIdent | Rule::DeclIdentList => {
+                    return self.parse_assign_vars(pair.into_inner(), is_const, true);
                 }
                 _ => panic!("{:#?}", pair),
             }
@@ -1523,47 +1571,6 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 self.borrow_mut().code.emit_call(1);
             }
             Rule::FnDef => {
-                // let params = inner.find_first_tagged("params").unwrap().into_inner();
-                //
-                //
-                // let closure = {
-                //     let return_type = inner
-                //         .find_first_tagged("return_type")
-                //         .map(|te| self.parse_type(te.into_inner()))
-                //         .invert()?;
-                //
-                //     let body = inner
-                //         .find(|node| node.as_rule() == Rule::FnBody)
-                //         .unwrap()
-                //         .into_inner()
-                //         .next()
-                //         .unwrap();
-                //
-                //     let mut c = Rc::new(RefCell::new(Compiler::new_closure(
-                //         body.as_str(),
-                //         name.clone(),
-                //         Rc::clone(self),
-                //         0,
-                //         return_type.unwrap_or(Type::Tout.into()),
-                //     )));
-                //     c.parse_fn_params(params)?;
-                //
-                //     let inner_body = match body.as_rule() {
-                //         Rule::Expr => body.into_inner(),
-                //         Rule::StmtBody => body.into_inner(),
-                //         _ => unreachable!(),
-                //     };
-                //
-                //     Rc::try_unwrap(c)
-                //         .unwrap()
-                //         .into_inner()
-                //         .compile(inner_body)?
-                // };
-
-                // let idx = self.borrow_mut().get_or_add_const(Value::closure(closure));
-                //
-                // self.borrow_mut().code.emit_closure(idx as u16);
-
                 let mut inner = pair.into_inner();
                 let name = inner
                     .find_first_tagged("name")
@@ -1778,7 +1785,32 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 self.borrow_mut().patch_jump(if_not_cond_jmp);
             }
             Rule::PourStmt => {
+                self.borrow_mut().begin_scope();
+
                 let inner = pair.into_inner();
+
+                // iter
+                self.parse_expr(inner.find_first_tagged("iter").unwrap().into_inner())?;
+                let iter_idx = self.borrow_mut().declare_inner_local("for_iter");
+                let iter_state_idx = self.borrow_mut().declare_inner_local("for_state");
+                self.borrow_mut().code.emit_set_local(iter_idx);
+                self.borrow_mut().push_const(Value::Entier(0));
+                self.borrow_mut().code.emit_set_local(iter_state_idx);
+
+                // vars
+                let vars = inner.find_first_tagged("vars").unwrap();
+                let iter_idx = self.borrow_mut().declare_inner_local("for_iter");
+                self.parse_assign(vars)?;
+
+                let start_loop = self.borrow().code.inner().len();
+
+                let if_not_cond_jmp = self.borrow_mut().push_cond_jump();
+                if let Some(body) = inner.clone().find(|p| p.as_rule() == Rule::StmtBody) {
+                    self.build_ast_stmts(body.into_inner())?;
+                }
+
+                self.borrow_mut().end_scope();
+
                 // Stmt::Pour {
                 //     var: parse_assign_vars(
                 //         inner

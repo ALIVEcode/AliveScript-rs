@@ -3,7 +3,7 @@ use std::{
     fs,
     io::{self, Write, stdin},
     path::{self, Path},
-    sync::{Arc, RwLock},
+    sync::{Arc, LazyLock, RwLock},
 };
 
 use crate::{
@@ -17,8 +17,9 @@ use crate::{
         },
     },
     runtime::{
+        builtins::BUILTINS,
         err::RuntimeError,
-        module::{self, BUILTIN_MOD},
+        module::{self, LazyModule, get_stdlib},
     },
 };
 
@@ -29,25 +30,29 @@ pub struct VM {
     open_upvalues: Vec<ArcUpvalue>, // track upvalues that point to stack slots
     global_table: HashMap<String, Value>,
     loaded_modules: HashMap<String, ArcModule>,
+    preloaded_modules: HashMap<String, Arc<dyn LazyModule>>,
 }
 
 impl VM {
     pub fn new(file: String) -> Self {
-        let builtin = BUILTIN_MOD.borrow().clone();
-
         Self {
             file,
             stack: Vec::new(),
             frames: Vec::new(),
             open_upvalues: Vec::new(),
-            global_table: builtin,
+            global_table: BUILTINS.clone(),
             loaded_modules: HashMap::new(),
+            preloaded_modules: HashMap::new(), //get_stdlib(),
         }
     }
 
-    pub fn insert_module(&mut self, name: impl ToString, module: ArcModule) {
-        self.loaded_modules.insert(name.to_string(), module);
+    pub fn insert_module(&mut self, name: impl ToString, module: Arc<dyn LazyModule>) {
+        self.preloaded_modules.insert(name.to_string(), module);
     }
+
+    // pub fn insert_module(&mut self, (name, module): (impl ToString, Arc<dyn LazyModule>)) {
+    //     self.preloaded_modules.insert(name.to_string(), module);
+    // }
 
     pub fn dump_stack(&self) -> String {
         format!("{:#?}", self.stack)
@@ -108,6 +113,15 @@ impl VM {
 
         if let Some(module) = self.loaded_modules.get(module_name) {
             return Ok(Value::Module(Arc::clone(&module)));
+        }
+
+        if let Some(lazy_module) = self.preloaded_modules.get(module_name) {
+            let module = lazy_module.load();
+
+            self.loaded_modules
+                .insert(module_name.to_string(), Arc::clone(&module));
+
+            return Ok(Value::Module(module));
         }
 
         let module_file = Path::new(&self.file)
@@ -335,6 +349,13 @@ impl VM {
             frame.ip += 1;
 
             match op {
+                Opcode::Pop => {
+                    self.pop();
+                }
+                Opcode::Dup => {
+                    self.push(self.peek(0).clone());
+                }
+
                 Opcode::Constant => {
                     let const_idx = fnc.code[frame.ip];
                     frame.ip += 1;
@@ -602,7 +623,7 @@ impl VM {
                     let name = name.clone();
 
                     let v = self.global_table.get(&name).cloned().ok_or_else(|| {
-                        RuntimeError::generic_err(format!("Variable globale inconnue {:?}", name))
+                        RuntimeError::generic_err(format!("Variable inconnue {:?}", name))
                     })?;
 
                     self.push(v);
@@ -662,9 +683,6 @@ impl VM {
                     self.stack[frame.base - 1] = ret;
                 }
 
-                Opcode::Pop => {
-                    self.pop();
-                }
                 Opcode::BinOp => {
                     let op = fnc.code[frame.ip];
                     frame.ip += 1;

@@ -33,6 +33,13 @@ impl ASModule {
             members,
         }
     }
+
+    pub fn from_iter<T: IntoIterator<Item = (String, Value)>>(
+        name: impl ToString,
+        iter: T,
+    ) -> ArcModule {
+        ArcModule::new(RwLock::new(ASModule::new(name, HashMap::from_iter(iter))))
+    }
 }
 
 #[derive(Debug)]
@@ -572,10 +579,9 @@ impl FromStr for Type {
             "booleen" | "booléen" => Ok(Self::Booleen),
             "nombre" => Ok(Self::nombre()),
             "iterable" | "itérable" => Ok(Self::iterable()),
-            "texte" => Ok(Self::Texte),
+            "texte" | "chaine" | "chaîne" => Ok(Self::Texte),
             "liste" => Ok(Self::Liste(Box::new(Type::Tout))),
-            "rien" => Ok(Self::Nul),
-            "nul" => Ok(Self::Nul),
+            "rien" | "nul" | "vide" => Ok(Self::Nul),
             "tout" => Ok(Self::Tout),
             "fonction" => Ok(Self::Fonction),
             // "module" => Ok(Self::Module),
