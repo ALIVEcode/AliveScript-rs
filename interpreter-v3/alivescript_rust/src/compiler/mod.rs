@@ -610,12 +610,12 @@ impl<'a> Compiler<'a> {
 }
 
 trait Parser<'a> {
-    fn parse_top_expr(&mut self, primary: Pair<'a, Rule>) -> Result<(), CompilationError>;
+    fn parse_top_expr(&mut self, primary: Pair<'a, Rule>) -> Result<usize, CompilationError>;
 
     fn parse_expr(
         &mut self,
         pairs: impl Iterator<Item = Pair<'a, Rule>>,
-    ) -> Result<(), CompilationError>;
+    ) -> Result<usize, CompilationError>;
 
     fn parse_fn_params(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError>;
     fn parse_fn(
@@ -637,6 +637,13 @@ trait Parser<'a> {
         new_local: bool,
     ) -> Result<(), CompilationError>;
 
+    fn parse_cond_jump(
+        &mut self,
+        rhs_start_idx: usize,
+        rhs_len: usize,
+        cond: bool,
+    ) -> Result<usize, CompilationError>;
+
     fn parse_assign(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
     fn parse_declare(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError>;
@@ -653,7 +660,8 @@ trait Parser<'a> {
 }
 
 impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
-    fn parse_top_expr(&mut self, primary: Pair<'a, Rule>) -> Result<(), CompilationError> {
+    fn parse_top_expr(&mut self, primary: Pair<'a, Rule>) -> Result<usize, CompilationError> {
+        let before = self.borrow().code.len_inner();
         match primary.as_rule() {
             Rule::AssignMember => {
                 self.parse_expr(primary.into_inner())?;
@@ -780,25 +788,43 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             ))?,
         };
 
-        Ok(())
+        Ok(self.borrow().code.len_inner() - before)
+    }
+
+    fn parse_cond_jump(
+        &mut self,
+        rhs_start_idx: usize,
+        rhs_len: usize,
+        cond: bool,
+    ) -> Result<usize, CompilationError> {
+        self.borrow_mut().code.set_cursor(rhs_start_idx);
+
+        self.borrow_mut().code.emit_jump_test(rhs_len as i16, cond);
+
+        self.borrow_mut().code.remove_cursor();
+
+        Ok(3)
     }
 
     fn parse_expr(
         &mut self,
         pairs: impl Iterator<Item = Pair<'a, Rule>>,
-    ) -> Result<(), CompilationError> {
+    ) -> Result<usize, CompilationError> {
         PRATT_EXPR_PARSER
             .map_primary(|pair| Rc::clone(self).parse_top_expr(pair))
             .map_prefix(|prefix, rhs| {
-                rhs?;
+                let mut nb_inst = rhs?;
 
                 if let Ok(op) = UnaryOpcode::try_from(&prefix) {
                     match op {
-                        UnaryOpcode::Negate => self.borrow_mut().code.emit_neg(),
+                        UnaryOpcode::Negate => {
+                            self.borrow_mut().code.emit_neg();
+                            nb_inst += 1;
+                        }
                         _ => {}
                     }
                     // Ok(Box::new(Expr::UnaryOp { expr: rhs, op }))
-                    Ok(())
+                    Ok(nb_inst)
                 } else {
                     Err(PestError::new_from_span(
                         PestErrorVariant::ParsingError {
@@ -811,24 +837,35 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 }
             })
             .map_infix(|lhs, infix, rhs| {
-                lhs?;
-                rhs?;
+                let len_lhs = lhs?;
+                let len_rhs = rhs?;
 
                 if let Ok(op) = BinOpcode::try_from(&infix) {
                     self.borrow_mut().code.emit_binop(op);
-                    return Ok(());
+                    return Ok(len_lhs + len_rhs + 1);
                 }
                 if let Ok(op) = BinCompcode::try_from(&infix) {
                     self.borrow_mut().code.emit_bincomp(op);
-                    return Ok(());
+                    return Ok(len_lhs + len_rhs + 1);
                 }
-                if let Ok(..) = BinLogiccode::try_from(&infix) {
-                    todo!();
+                if let Ok(op) = BinLogiccode::try_from(&infix) {
+                    let start_rhs = self.borrow().code.len_inner() - len_rhs;
+                    match op {
+                        BinLogiccode::Et => {
+                            let et = Rc::clone(self).parse_cond_jump(start_rhs, len_rhs, false)?;
+                            return Ok(len_lhs + len_rhs + et);
+                        }
+                        BinLogiccode::Ou => {
+                            let ou = Rc::clone(self).parse_cond_jump(start_rhs, len_rhs, true)?;
+                            return Ok(len_lhs + len_rhs + ou);
+                        }
+                        BinLogiccode::NonNul => todo!(),
+                    }
                 }
                 todo!();
             })
             .map_postfix(|lhs, postfix| {
-                lhs?;
+                let mut nb_inst = lhs?;
 
                 match postfix.as_rule() {
                     Rule::AccessProp => {
@@ -838,47 +875,18 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                                 .borrow_mut()
                                 .get_or_add_const(Value::Texte(prop.as_str().to_string()));
                             self.borrow_mut().code.emit_get_attr(idx);
+                            nb_inst += 1
                         } else {
                             Rc::clone(self).parse_expr(prop.into_inner())?;
                             self.borrow_mut().code.emit_get_item();
+                            nb_inst += 1
                         }
                     }
                     _ => unreachable!(),
                 }
-                //     Rule::Ternary => {
-                //         let inner = postfix.into_inner();
-                //         let then_expr = parse_expr(
-                //             inner
-                //                 .clone()
-                //                 .find(|p| p.as_rule() == Rule::TernaryThen)
-                //                 .unwrap()
-                //                 .into_inner(),
-                //         )?; // skip the "?"
-                //         let else_expr = parse_expr(
-                //             inner
-                //                 .clone()
-                //                 .find(|p| p.as_rule() == Rule::TernaryElse)
-                //                 .unwrap()
-                //                 .into_inner(),
-                //         )?; // skip the ":"
-                //         Ok(Box::new(Expr::Ternary {
-                //             cond: lhs,
-                //             then_expr,
-                //             else_expr,
-                //         }))
-                //     }
-                //     _ => Err(PestError::new_from_span(
-                //         PestErrorVariant::ParsingError {
-                //             positives: vec![Rule::Not, Rule::Neg, Rule::Pos],
-                //             negatives: vec![postfix.as_rule()],
-                //         },
-                //         postfix.as_span(),
-                //     )),
-                // }
-                Ok(())
+                Ok(nb_inst)
             })
-            .parse(pairs)?;
-        Ok(())
+            .parse(pairs)
     }
 
     fn parse_fn(
@@ -1867,31 +1875,6 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 }
 
                 self.borrow_mut().end_scope();
-
-                // Stmt::Pour {
-                //     var: parse_assign_vars(
-                //         inner
-                //             .clone()
-                //             .find_first_tagged("vars")
-                //             .unwrap()
-                //             .into_inner(),
-                //         None,
-                //         Some(false),
-                //     )?,
-                //     iterable: parse_expr(
-                //         inner
-                //             .clone()
-                //             .find_first_tagged("iter")
-                //             .unwrap()
-                //             .into_inner(),
-                //     )?,
-                //     body: inner
-                //         .clone()
-                //         .find(|p| p.as_rule() == Rule::StmtBody)
-                //         .map(|body| build_ast_stmts(body.into_inner()))
-                //         .invert()?
-                //         .unwrap_or_default(),
-                // }
             }
             Rule::ContinuerStmt => {}
             Rule::SortirStmt => {}

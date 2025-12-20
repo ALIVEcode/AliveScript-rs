@@ -842,6 +842,10 @@ impl VM {
                         .into(),
                     );
                 }
+                Opcode::Not => {
+                    let val = self.pop().expect("val");
+                    self.push(Value::Booleen(!val.to_bool()));
+                }
 
                 Opcode::Jump => {
                     let dist = fnc.code[frame.ip];
@@ -859,6 +863,23 @@ impl VM {
 
                     if !val.to_bool() {
                         self.get_frame().unwrap().ip = (ip as i16 + dist) as usize;
+                    }
+                }
+                Opcode::JumpTest => {
+                    let dist = fnc.code[frame.ip];
+                    let dist = dist as i16 - JUMP_OFFSET;
+                    frame.ip += 1;
+                    let cond = fnc.code[frame.ip] == 1;
+                    frame.ip += 1;
+
+                    let ip = frame.ip;
+
+                    let val = self.peek(0);
+
+                    if val.to_bool() == cond {
+                        self.get_frame().unwrap().ip = (ip as i16 + dist) as usize;
+                    } else {
+                        self.pop();
                     }
                 }
 

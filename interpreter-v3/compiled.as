@@ -122,4 +122,5 @@ afficher z
 ls[2] += 44
 afficher ls
 
+afficher (5 et faux ou afficher("wow") et "s")
 

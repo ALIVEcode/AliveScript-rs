@@ -36,12 +36,14 @@ pub enum Opcode {
 
     Jump,
     JumpIfFalse,
+    JumpTest,
 
     Return,
 
     BinOp,
     Neg,
     BinComp,
+    Not,
 
     NewList,
     GetItem,
@@ -52,7 +54,6 @@ pub enum Opcode {
     SetField,
 
     LoadModule,
-
     // ForPrep,
     // ForNext,
 }
@@ -78,9 +79,11 @@ impl Opcode {
             Opcode::Return => "RETURN",
             Opcode::BinOp => "BINOP",
             Opcode::BinComp => "BINCOMP",
+            Opcode::Not => "NOT",
             Opcode::Neg => "NEG",
             Opcode::Jump => "JUMP",
             Opcode::JumpIfFalse => "JUMP_IF_FALSE",
+            Opcode::JumpTest => "JUMP_TEST",
             Opcode::NewList => "NEW_LIST",
             Opcode::GetItem => "GET_ITEM",
             Opcode::SetItem => "SET_ITEM",
@@ -115,6 +118,7 @@ impl Opcode {
             Opcode::ReadCallWithMsg => 1,
 
             Opcode::Jump | Opcode::JumpIfFalse => 1,
+            Opcode::JumpTest => 2,
 
             Opcode::Closure => 1,
             Opcode::Call => 1,
@@ -125,7 +129,7 @@ impl Opcode {
 
             Opcode::Dup | Opcode::Pop => 0,
 
-            Opcode::GetItem | Opcode::Neg => 0,
+            Opcode::GetItem | Opcode::Neg | Opcode::Not => 0,
 
             Opcode::SetItem => 0,
 
@@ -141,6 +145,7 @@ impl Opcode {
 pub struct Instructions {
     insts: Vec<u16>,
     opcodes: Vec<Opcode>,
+    cursor: Option<usize>,
 }
 
 pub fn instructions_to_string(insts: &[u16]) -> Vec<String> {
@@ -171,6 +176,19 @@ pub fn instructions_to_string(insts: &[u16]) -> Vec<String> {
 
                 inst_str.push((*idx as i16 - JUMP_OFFSET).to_string());
                 // inst_str.push(format!("(to {})", op_i + idx));
+            }
+
+            Opcode::JumpTest => {
+                let idx = args[0];
+                let cond = args[1];
+
+                inst_str.pop();
+                inst_str.pop();
+                inst_str.push(format!("{}", (*idx as i16 - JUMP_OFFSET)));
+                inst_str.push(format!(
+                    "{}",
+                    if *cond == 1 { "if true" } else { "if false" }
+                ));
             }
 
             Opcode::BinOp => {
@@ -248,6 +266,19 @@ pub fn instructions_to_string_debug(insts: &[u16], compiler: Rc<RefCell<Compiler
                 // inst_str.push(format!("(to {})", op_i + idx));
             }
 
+            Opcode::JumpTest => {
+                let idx = args[0];
+                let cond = args[1];
+
+                inst_str.pop();
+                inst_str.pop();
+                inst_str.push(format!("{}", (*idx as i16 - JUMP_OFFSET)));
+                inst_str.push(format!(
+                    "{}",
+                    if *cond == 1 { "if true" } else { "if false" }
+                ));
+            }
+
             Opcode::BinOp => {
                 let op = args[0];
                 let binop = BinOpcode::try_from(*op).expect(&format!("Invalid binop: {}", op));
@@ -291,7 +322,12 @@ impl Instructions {
         Self {
             insts: vec![],
             opcodes: vec![],
+            cursor: None,
         }
+    }
+
+    pub fn len_inner(&self) -> usize {
+        self.insts.len()
     }
 
     pub fn inner(&self) -> &Vec<u16> {
@@ -302,12 +338,26 @@ impl Instructions {
         self.insts[idx] = val
     }
 
+    pub fn set_cursor(&mut self, pos: usize) {
+        self.cursor = Some(pos);
+    }
+    pub fn remove_cursor(&mut self) {
+        self.cursor = None
+    }
+
     fn emit_byte(&mut self, b: u16) {
-        self.insts.push(b.into());
+        if let Some(cursor) = &mut self.cursor {
+            self.insts.insert(*cursor, b.into());
+            *cursor += 1;
+        } else {
+            self.insts.push(b.into());
+        }
     }
 
     fn emit_opcode(&mut self, b: Opcode) {
-        self.opcodes.push(b);
+        if self.cursor.is_none() {
+            self.opcodes.push(b);
+        }
         self.emit_byte(b.into());
     }
 
@@ -438,6 +488,12 @@ impl Instructions {
     pub fn emit_jump(&mut self, target: i16) {
         self.emit_opcode(Opcode::Jump);
         self.emit_byte((target + JUMP_OFFSET) as u16);
+    }
+
+    pub fn emit_jump_test(&mut self, target: i16, cond: bool) {
+        self.emit_opcode(Opcode::JumpTest);
+        self.emit_byte((target + JUMP_OFFSET) as u16);
+        self.emit_byte(cond as u16);
     }
 
     pub fn emit_jump_if_false(&mut self, target: i16) {
