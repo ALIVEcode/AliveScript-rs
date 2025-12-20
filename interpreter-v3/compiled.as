@@ -50,6 +50,7 @@ ls2 = [1]
 ls += ls2
 
 afficher typeDe(ls)
+afficher ls
 
 x = 12
 
@@ -113,3 +114,6 @@ afficher x
 afficher y
 afficher z
 
+
+ls[2] += 44
+afficher ls

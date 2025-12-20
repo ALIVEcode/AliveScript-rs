@@ -181,17 +181,21 @@ Var   = @{ "var" ~ !IdentChar }
 AssignStmt = { assignVar }
 
 assignVar      = _{
-    (MultiDeclIdent | DeclIdent | DeclIdentList) ~ (AssignOp | Assign) ~ #a_value = Expr
+    (#var = (AssignMember | Ident)) ~ ((#op = AssignOp) | Assign) ~ #a_value = Expr
+  | (#var = (AssignMember | MultiDeclIdent | DeclIdent | DeclIdentList)) ~ Assign ~ #a_value = Expr
+}
+AssignMember   =  {
+    Ident ~ (AccessProp)+
 }
 DeclIdent      =  {
     (#var_name = Ident) ~ (":" ~ #var_type = TypeExpr)?
 }
 MultiDeclIdent =  {
-    ((DeclIdent | DeclIdentList) ~ "," ~ ((DeclIdent | DeclIdentList) ~ ",")* ~ (DeclIdent | DeclIdentList)?)
+    ((AssignMember | DeclIdent | DeclIdentList) ~ "," ~ ((AssignMember | DeclIdent | DeclIdentList) ~ ",")* ~ (AssignMember | DeclIdent | DeclIdentList)?)
 }
 
 DeclIdentList = {
-    ("[" ~ ((DeclIdent | DeclIdentList) ~ ",")* ~ (DeclIdent | DeclIdentList)? ~ "]")
+    ("[" ~ ((AssignMember | DeclIdent | DeclIdentList) ~ ",")* ~ (AssignMember | DeclIdent | DeclIdentList)? ~ "]")
 }
 
 RetournerStmt =  { retourner ~ (Expr ~ ",")* ~ Expr? }

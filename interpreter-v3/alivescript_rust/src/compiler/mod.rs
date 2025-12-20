@@ -647,6 +647,9 @@ trait Parser<'a> {
 impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
     fn parse_top_expr(&mut self, primary: Pair<'a, Rule>) -> Result<(), CompilationError> {
         match primary.as_rule() {
+            Rule::AssignMember => {
+                self.parse_expr(primary.into_inner())?;
+            }
             Rule::List | Rule::ListExpr => {
                 let mut nb_el = 0;
                 for arg in primary.into_inner() {
@@ -1117,83 +1120,119 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         let span = pair.as_span();
         let pairs = pair.into_inner();
 
-        let mut name = None;
         let mut static_type = Type::Tout.into();
         let mut op = None;
         let mut new_local = false;
         let mut is_const = false;
         // let mut var_list = None;
 
+        if let Some(p) = pairs.peek().and_then(|p| {
+            if matches!(p.as_rule(), Rule::Const | Rule::Var) {
+                Some(p)
+            } else {
+                None
+            }
+        }) {
+            new_local = true;
+            is_const = p.as_rule() == Rule::Const;
+        }
+
+        let var = pairs
+            .find_first_tagged("var")
+            .expect("One or more variables in the assign");
+
+        if let Some(op_pair) = pairs.find_first_tagged("op") {
+            let op_pair = op_pair.into_inner().next().unwrap();
+            op = Some(BinOpcode::try_from(&op_pair).unwrap());
+            // if we have an assign op, we push the current value of the var
+            self.parse_top_expr(var.clone())?;
+        }
+
         if let Some(value) = pairs.find_first_tagged("a_value") {
             self.parse_expr(value.into_inner())?;
         }
-
-        for pair in pairs {
-            match pair.as_rule() {
-                Rule::Var => new_local = true,
-                Rule::Const => {
-                    new_local = true;
-                    is_const = true;
-                }
-                Rule::Expr | Rule::Assign => {}
-                Rule::AssignOp => {
-                    let op_pair = pair.into_inner().next().unwrap();
-                    op = Some(BinOpcode::try_from(&op_pair).unwrap());
-                    // if we have an assign op, we push the current value of the var
-                    self.borrow_mut().load_var(name.unwrap());
-                }
-                Rule::DeclIdent => {
-                    let decl_def = pair.into_inner();
-                    name = Some(decl_def.find_first_tagged("var_name").unwrap().as_str());
-                    if let Some(pair_type) = decl_def.find_first_tagged("var_type") {
-                        static_type = self.parse_type(pair_type.into_inner())?;
-                        new_local = true;
-                    }
-                }
-                Rule::MultiDeclIdent | Rule::DeclIdentList => {
-                    return self.parse_assign_vars(pair.into_inner(), is_const, new_local);
-                }
-                _ => panic!("{:#?}", pair),
-            }
-        }
-
-        let mut compiler = self.borrow_mut();
 
         // if we have an assign op, we already pushed the value of the var and
         // the value of the expression, the only thing that remains is adding
         // the bin op
         if let Some(op) = op {
-            compiler.code.emit_binop(op);
+            self.borrow_mut().code.emit_binop(op);
         }
 
-        let name = name.unwrap();
-
-        if !new_local {
-            // 1. Try to resolve as a LOCAL
-            if let Ok(Some((local_idx, local))) = compiler.resolve_local(name, false) {
-                if local.is_const {
-                    return Err(CompilationErrorKind::assign_to_const(name).to_error(span));
+        match var.as_rule() {
+            Rule::AssignMember => {
+                if new_local {
+                    let span = var.as_span();
+                    return Err(CompilationErrorKind::generic_error(
+                        "Impossible de déclarer un membre",
+                    )
+                    .to_error(span));
                 }
-                compiler.mark_initialized(local_idx as u16);
-                compiler.code.emit_set_local(local_idx as u16);
-                return Ok(());
-            }
 
-            // 2. Try to resolve as an UPVALUE
-            if let Ok(Some((upval_idx, local))) = compiler.resolve_upval(name) {
-                if local.is_const {
-                    return Err(CompilationErrorKind::assign_to_const(name).to_error(span));
+                let mut inner = var.into_inner();
+                let last = inner.next_back().unwrap().into_inner().next().unwrap();
+
+                // everything until the last
+                self.parse_expr(inner)?;
+
+                if matches!(last.as_node_tag(), Some("prop")) {
+                    let const_idx = self
+                        .borrow_mut()
+                        .push_const(Value::Texte(last.as_str().to_string()));
+                    self.borrow_mut().code.emit_set_field(const_idx);
+                } else {
+                    self.parse_top_expr(last)?;
+                    self.borrow_mut().code.emit_set_item();
                 }
-                compiler.code.emit_set_upvalue(upval_idx as u16);
-                return Ok(());
             }
+            Rule::Ident | Rule::DeclIdent => {
+                let name = match var.as_rule() {
+                    Rule::Ident => var.as_str(),
+                    Rule::DeclIdent => {
+                        let decl_def = var.into_inner();
+                        let name = decl_def.find_first_tagged("var_name").unwrap().as_str();
+                        if let Some(pair_type) = decl_def.find_first_tagged("var_type") {
+                            static_type = self.parse_type(pair_type.into_inner())?;
+                            new_local = true;
+                        }
+                        name
+                    }
+                    _ => unreachable!(),
+                };
+                let mut compiler = self.borrow_mut();
+
+                if !new_local {
+                    // 1. Try to resolve as a LOCAL
+                    if let Ok(Some((local_idx, local))) = compiler.resolve_local(name, false) {
+                        if local.is_const {
+                            return Err(CompilationErrorKind::assign_to_const(name).to_error(span));
+                        }
+                        compiler.mark_initialized(local_idx as u16);
+                        compiler.code.emit_set_local(local_idx as u16);
+                        return Ok(());
+                    }
+
+                    // 2. Try to resolve as an UPVALUE
+                    if let Ok(Some((upval_idx, local))) = compiler.resolve_upval(name) {
+                        if local.is_const {
+                            return Err(CompilationErrorKind::assign_to_const(name).to_error(span));
+                        }
+                        compiler.code.emit_set_upvalue(upval_idx as u16);
+                        return Ok(());
+                    }
+                }
+
+                // 3. It defines a new local variable
+                let local_idx = compiler.declare_local(name, static_type, is_const);
+
+                compiler.mark_initialized(local_idx);
+                compiler.code.emit_set_local(local_idx);
+            }
+            Rule::MultiDeclIdent | Rule::DeclIdentList => {
+                self.parse_assign_vars(var.into_inner(), is_const, new_local)?
+            }
+            _ => panic!("{:#?}", var),
         }
-
-        // 3. It defines a new local variable
-        let local_idx = compiler.declare_local(name, static_type, is_const);
-
-        compiler.mark_initialized(local_idx);
-        compiler.code.emit_set_local(local_idx);
 
         Ok(())
     }
@@ -1207,22 +1246,32 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             self.parse_expr(value.into_inner())?;
         }
 
-        for pair in pairs {
-            match pair.as_rule() {
-                Rule::Const => is_const = true,
-                Rule::Expr | Rule::Var | Rule::Assign => {}
-                Rule::DeclIdent => {
-                    let decl_def = pair.into_inner();
-                    name = Some(decl_def.find_first_tagged("var_name").unwrap().as_str());
-                    if let Some(pair_type) = decl_def.find_first_tagged("var_type") {
-                        static_type = self.parse_type(pair_type.into_inner())?;
-                    }
-                }
-                Rule::MultiDeclIdent | Rule::DeclIdentList => {
-                    return self.parse_assign_vars(pair.into_inner(), is_const, true);
-                }
-                _ => panic!("{:#?}", pair),
+        let var = pairs
+            .find_first_tagged("var")
+            .expect("One or more variables in the assign");
+
+        match var.as_rule() {
+            Rule::Ident => {
+                name = Some(var.as_str());
             }
+            Rule::AssignMember => {
+                let span = var.as_span();
+                return Err(CompilationErrorKind::generic_error(
+                    "Impossible de déclarer un membre",
+                )
+                .to_error(span));
+            }
+            Rule::DeclIdent => {
+                let decl_def = var.into_inner();
+                name = Some(decl_def.find_first_tagged("var_name").unwrap().as_str());
+                if let Some(pair_type) = decl_def.find_first_tagged("var_type") {
+                    static_type = self.parse_type(pair_type.into_inner())?;
+                }
+            }
+            Rule::MultiDeclIdent | Rule::DeclIdentList => {
+                return self.parse_assign_vars(var.into_inner(), is_const, true);
+            }
+            _ => panic!("{:#?}", var),
         }
 
         let local_idx = self

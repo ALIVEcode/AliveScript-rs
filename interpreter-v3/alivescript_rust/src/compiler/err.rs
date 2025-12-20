@@ -179,7 +179,7 @@ impl CompilationErrorKind {
     pub fn generic_error(msg: impl ToString) -> Self {
         Self::CompilationError(msg.to_string())
     }
-
+    
     pub fn assign_to_const(var_name: impl ToString) -> Self {
         Self::AssignToConst {
             var_name: var_name.to_string(),

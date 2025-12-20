@@ -366,7 +366,7 @@ impl Instructions {
         self.emit_byte(const_idx);
     }
 
-    pub fn emit_set_attr(&mut self, const_idx: u16) {
+    pub fn emit_set_field(&mut self, const_idx: u16) {
         self.emit_opcode(Opcode::SetField);
         self.emit_byte(const_idx);
     }

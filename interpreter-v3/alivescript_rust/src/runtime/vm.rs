@@ -453,7 +453,55 @@ impl VM {
                     self.push(result);
                 }
                 Opcode::SetItem => {
-                    todo!()
+                    let slice = self.pop().unwrap();
+                    let obj = self.pop().unwrap();
+                    let value = self.pop().unwrap();
+
+                    match (obj, slice) {
+                        (Value::Liste(lst), Value::Entier(i)) => {
+                            let mut lst = lst.write().unwrap();
+                            let i = if i < 0 { lst.len() as i64 + i } else { i };
+                            if i < 0 || i >= lst.len() as i64 {
+                                return Err(RuntimeError::generic_err(format!(
+                                    "Erreur d'accès. Taille de la liste: {}, mais l'index donnée est {}",
+                                    lst.len(),
+                                    i
+                                )));
+                            }
+                            lst[i as usize] = value;
+                        }
+                        (Value::Liste(lst), Value::Liste(range)) => {
+                            let range = range.read().unwrap();
+                            let mut lst_final = Vec::with_capacity(range.len());
+                            for obj in range.iter() {
+                                if let Value::Entier(i) = obj {
+                                    let lst = lst.read().unwrap();
+                                    let i = if *i < 0 { lst.len() as i64 + *i } else { *i };
+                                    if i < 0 || i >= lst.len() as i64 {
+                                        // throw_err!(
+                                        //     self,
+                                        //     ASErreurType::new_erreur_index(i, lst.len())
+                                        // );
+                                    }
+                                    lst_final.push(lst[i as usize].clone());
+                                } else {
+                                    // throw_err!(
+                                    //     self,
+                                    //     ASErreurType::new_erreur_type(
+                                    //         ASType::Entier,
+                                    //         obj.get_type()
+                                    //     )
+                                    // );
+                                }
+                            }
+                        }
+                        (Value::Texte(txt), Value::Entier(i)) => {
+                            return Err(RuntimeError::generic_err(
+                                "Impossible de modifier une chaîne de charactères, car elles sont immuables",
+                            ));
+                        }
+                        _ => todo!(),
+                    };
                 }
                 Opcode::GetField => {
                     let field_const_idx = fnc.code[frame.ip] as usize;
