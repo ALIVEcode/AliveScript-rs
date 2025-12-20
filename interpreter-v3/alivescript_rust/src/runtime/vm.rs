@@ -4,6 +4,7 @@ use std::{
     io::{self, Write, stdin},
     path::{self, Path},
     sync::{Arc, LazyLock, RwLock},
+    usize,
 };
 
 use crate::{
@@ -343,6 +344,71 @@ impl VM {
             }
         };
         Ok(())
+    }
+
+    pub fn run_fn(&mut self, nbargs: usize, func: &Function) -> Result<Value, RuntimeError> {
+        match func {
+            Function::NativeFunction(f) => {
+                let mut args = VecDeque::with_capacity(nbargs);
+                let f = f.clone();
+
+                for _ in 0..nbargs {
+                    args.push_front(self.pop().unwrap());
+                }
+
+                // remove the function that is still on the stack
+                self.pop();
+
+                let result = (f.func)(self, args.into())?;
+
+                return Ok(result.unwrap_or(Value::Nul));
+            }
+            Function::ClosureInst(closure) => {
+                let curr_depth = self.frames.len();
+                // set the base as the first arg of the function
+                let base = self.stack.len() - nbargs;
+                self.frames.push(CallFrame {
+                    closure: Arc::clone(&closure),
+                    ip: 0,
+                    base,
+                });
+
+                return self.run_frame(curr_depth);
+            }
+            Function::ClosureProto(closure) => {
+                let curr_depth = self.frames.len();
+
+                let closure = self.resolve_proto_closure_upvalues(Arc::clone(closure))?;
+                // set the base as the first arg of the function
+                let base = self.stack.len() - nbargs;
+                self.frames.push(CallFrame {
+                    closure,
+                    ip: 0,
+                    base,
+                });
+
+                return self.run_frame(curr_depth);
+            }
+            Function::ClosureMethod(closure) => {
+                let curr_depth = self.frames.len();
+
+                // set the base as the first arg of the function
+                let base = self.stack.len() - nbargs; // - 1 for the 'inst' param
+                let inst_value = closure.read().unwrap().inst_value.clone();
+                let closure = Arc::clone(&closure.read().unwrap().closure);
+
+                self.frames.push(CallFrame {
+                    closure,
+                    ip: 0,
+                    base,
+                });
+
+                // setting the "inst" argument as the first argument
+                self.stack.insert(base, inst_value);
+
+                return self.run_frame(curr_depth);
+            }
+        };
     }
 
     pub fn run(&mut self, closure: ClosureProto) -> Result<Value, RuntimeError> {
@@ -953,6 +1019,68 @@ impl VM {
                         // if the function doesn't work -> go to "sinon"
                         let frame = self.get_frame().unwrap();
                         frame.ip = (frame.ip as i16 + lire_sinon_dist) as usize;
+                    }
+                }
+
+                Opcode::ForNext => {
+                    let iter_var_idx = fnc.code[frame.ip];
+                    frame.ip += 1;
+
+                    let iter_val = self.stack[iter_var_idx as usize].clone();
+                    let iter_state_val = &self.stack[iter_var_idx as usize + 1];
+
+                    let next_state = match iter_val {
+                        Value::Texte(txt) => {
+                            let state_idx = iter_state_val.as_entier().ok_or_else(|| {
+                                RuntimeError::generic_err(format!(
+                                    "il faut que l'état soit une entier, pas '{}'",
+                                    iter_state_val.get_type()
+                                ))
+                            })?;
+
+                            self.stack[iter_var_idx as usize + 1] = Value::Entier(state_idx + 1);
+
+                            if state_idx as usize >= txt.len() {
+                                None
+                            } else {
+                                Some(Value::Texte(
+                                    txt[state_idx as usize..state_idx as usize + 1].to_string(),
+                                ))
+                            }
+                        }
+                        Value::Liste(lst) => {
+                            let state_idx = iter_state_val.as_entier().ok_or_else(|| {
+                                RuntimeError::generic_err(format!(
+                                    "il faut que l'état soit une entier, pas '{}'",
+                                    iter_state_val.get_type()
+                                ))
+                            })?;
+
+                            self.stack[iter_var_idx as usize + 1] = Value::Entier(state_idx + 1);
+
+                            if state_idx as usize >= lst.read().unwrap().len() {
+                                None
+                            } else {
+                                Some(lst.read().unwrap()[state_idx as usize].clone())
+                            }
+                        }
+                        Value::Function(f) => {
+                            let result = self.run_fn(1, &f);
+                            todo!()
+                        }
+                        Value::Objet(rw_lock) => todo!(),
+                        _ => {
+                            return Err(RuntimeError::generic_err(format!(
+                                "impossible d'itérer sur une valeur de type '{}'",
+                                iter_val.get_type()
+                            )));
+                        }
+                    };
+
+                    if let Some(next_state) = next_state {
+                        self.push(next_state);
+                        // skip the jump
+                        self.get_frame().unwrap().ip += 2;
                     }
                 }
             }

@@ -90,7 +90,9 @@ pub struct Compiler<'a> {
     pub had_error: bool,
     pub panic_mode: bool,
 
-    pub jump_stack: Vec<usize>, // offsets to patch later
+    pub jump_stack: Vec<usize>,     // offsets to patch later
+    pub continue_stack: Vec<usize>, // offsets to patch later
+    pub break_stack: Vec<usize>,    // offsets to patch later
 }
 
 impl<'a> Compiler<'a> {
@@ -108,6 +110,8 @@ impl<'a> Compiler<'a> {
             had_error: false,
             panic_mode: false,
             jump_stack: vec![],
+            continue_stack: vec![],
+            break_stack: vec![],
             return_type: Type::Tout.into(),
         }
     }
@@ -132,6 +136,8 @@ impl<'a> Compiler<'a> {
             had_error: false,
             panic_mode: false,
             jump_stack: vec![],
+            continue_stack: vec![],
+            break_stack: vec![],
             return_type,
         }
     }
@@ -428,7 +434,8 @@ impl<'a> Compiler<'a> {
     fn declare_inner_local(&mut self, debug_name: &str) -> u16 {
         self.locals.push(Local {
             name: format!("(({}))", debug_name),
-            depth: -1, // not initialized yet
+            // inner locals are automatically initialized
+            depth: self.scope_depth as i32,
             is_captured: false,
             var_type: Type::Tout.into(),
             is_const: false,
@@ -556,6 +563,14 @@ impl<'a> Compiler<'a> {
         let jump_idx = self.jump_stack[jmp_stack_idx];
         self.code
             .raw_patch(jump_idx, ((val - jump_idx) as i16 + JUMP_OFFSET) as u16);
+    }
+
+    fn patch_jump_to(&mut self, jmp_stack_idx: usize, dest: usize) {
+        let jump_idx = self.jump_stack[jmp_stack_idx];
+        self.code.raw_patch(
+            jump_idx,
+            (dest as i16 - 1 - jump_idx as i16 + JUMP_OFFSET) as u16,
+        );
     }
 
     fn push_cond_jump(&mut self) -> usize {
@@ -819,10 +834,13 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     match op {
                         UnaryOpcode::Negate => {
                             self.borrow_mut().code.emit_neg();
-                            nb_inst += 1;
+                        }
+                        UnaryOpcode::Pas => {
+                            self.borrow_mut().code.emit_not();
                         }
                         _ => {}
                     }
+                    nb_inst += 1;
                     // Ok(Box::new(Expr::UnaryOp { expr: rhs, op }))
                     Ok(nb_inst)
                 } else {
@@ -1581,7 +1599,6 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     )
                 };
 
-                self.borrow_mut().mark_initialized(module_var);
                 self.borrow_mut().code.emit_set_local(module_var);
                 if let Some(vars) = vars {
                     for var in vars {
@@ -1783,7 +1800,6 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     .find(|p| matches!(p.as_node_tag(), Some("nb_iter")))
                 {
                     let cptr = self.borrow_mut().declare_inner_local("compteur_repeter");
-                    self.borrow_mut().mark_initialized(cptr);
                     self.parse_expr(nb_iter.into_inner())?;
 
                     let mut compiler = self.borrow_mut();
@@ -1854,7 +1870,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
                 let inner = pair.into_inner();
 
-                // iter
+                // setup
                 self.parse_expr(inner.find_first_tagged("iter").unwrap().into_inner())?;
                 let iter_idx = self.borrow_mut().declare_inner_local("for_iter");
                 let iter_state_idx = self.borrow_mut().declare_inner_local("for_state");
@@ -1862,22 +1878,52 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 self.borrow_mut().push_const(Value::Entier(0));
                 self.borrow_mut().code.emit_set_local(iter_state_idx);
 
+                // loop
+                let start_loop = self.borrow().code.len_inner();
+
+                self.borrow_mut().code.emit_for_next(iter_idx);
+                let end_loop_jmp = self.borrow_mut().push_jump();
+
                 // vars
                 let vars = inner.find_first_tagged("vars").unwrap();
-                let iter_idx = self.borrow_mut().declare_inner_local("for_iter");
                 self.parse_assign(vars)?;
 
-                let start_loop = self.borrow().code.inner().len();
-
-                let if_not_cond_jmp = self.borrow_mut().push_cond_jump();
                 if let Some(body) = inner.clone().find(|p| p.as_rule() == Rule::StmtBody) {
                     self.build_ast_stmts(body.into_inner())?;
                 }
 
+                {
+                    let mut compiler = self.borrow_mut();
+                    while let Some(continue_jmp_idx) = compiler.continue_stack.pop() {
+                        compiler.patch_jump_to(continue_jmp_idx, start_loop);
+                    }
+                }
+
+                let end_loop = self.borrow().code.len_inner();
+                // `- 2` because of the 'Jump' instruction that takes 2 instructions
+                self.borrow_mut()
+                    .code
+                    .emit_jump(start_loop as i16 - end_loop as i16 - 2);
+
+                self.borrow_mut().patch_jump(end_loop_jmp);
+
+                {
+                    let mut compiler = self.borrow_mut();
+                    while let Some(break_jmp_idx) = compiler.break_stack.pop() {
+                        compiler.patch_jump(break_jmp_idx);
+                    }
+                }
+
                 self.borrow_mut().end_scope();
             }
-            Rule::ContinuerStmt => {}
-            Rule::SortirStmt => {}
+            Rule::ContinuerStmt => {
+                let jmp = self.borrow_mut().push_jump();
+                self.borrow_mut().continue_stack.push(jmp);
+            }
+            Rule::SortirStmt => {
+                let jmp = self.borrow_mut().push_jump();
+                self.borrow_mut().break_stack.push(jmp);
+            }
             Rule::RetournerStmt => {
                 for expr in pair.into_inner().skip(1) {
                     self.parse_expr(expr.into_inner())?;

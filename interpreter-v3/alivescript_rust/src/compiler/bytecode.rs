@@ -54,8 +54,19 @@ pub enum Opcode {
     SetField,
 
     LoadModule,
-    // ForPrep,
-    // ForNext,
+
+    /// arg: iter_idx
+    /// iter_idx + 1 => iter_state
+    /// updates iter_state and gets the next value for the next iteration
+    ///
+    /// if the next iteration is a valid value, then it :
+    /// -> push(next)
+    /// -> jump 1 (skips the jump {loop_len})
+    ///
+    /// if the next iteration is **not** a valid value, then it continues
+    /// to the next instruction, which is a
+    /// -> jump {loop_len}
+    ForNext,
 }
 
 impl Opcode {
@@ -92,7 +103,7 @@ impl Opcode {
             Opcode::SetField => "SET_ATTR",
             Opcode::LoadModule => "LOAD_MODULE",
             // Opcode::ForPrep => "FOR_PREP",
-            // Opcode::ForNext => "FOR_NEXT",
+            Opcode::ForNext => "FOR_NEXT",
         }
     }
 
@@ -119,6 +130,8 @@ impl Opcode {
 
             Opcode::Jump | Opcode::JumpIfFalse => 1,
             Opcode::JumpTest => 2,
+
+            Opcode::ForNext => 1,
 
             Opcode::Closure => 1,
             Opcode::Call => 1,
@@ -393,6 +406,10 @@ impl Instructions {
         self.emit_opcode(Opcode::Neg);
     }
 
+    pub fn emit_not(&mut self) {
+        self.emit_opcode(Opcode::Not);
+    }
+
     pub fn emit_new_list(&mut self, nb_el: u16) {
         self.emit_opcode(Opcode::NewList);
         self.emit_byte(nb_el);
@@ -520,6 +537,11 @@ impl Instructions {
             self.emit_opcode(Opcode::ReadCall);
         }
         self.emit_byte(jmp);
+    }
+
+    pub fn emit_for_next(&mut self, first_var_slot: u16) {
+        self.emit_opcode(Opcode::ForNext);
+        self.emit_byte(first_var_slot);
     }
 }
 

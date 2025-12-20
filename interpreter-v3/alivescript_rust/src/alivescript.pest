@@ -166,8 +166,8 @@ ListExpr = {
 }
 
 declVar = {
-    (Var? ~ (MultiDeclIdent | DeclIdent | DeclIdentList))
-  | (Const ~ (MultiDeclIdent | DeclIdent | DeclIdentList))
+    (Var? ~  #var = (MultiDeclIdent | DeclIdent | DeclIdentList))
+  | (Const ~ #var =  (MultiDeclIdent | DeclIdent | DeclIdentList))
 }
 
 DeclStmt = {

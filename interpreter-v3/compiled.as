@@ -124,3 +124,9 @@ afficher ls
 
 afficher (5 et faux ou afficher("wow") et "s")
 
+
+pour a, b dans [1, 2], [2, 3], [1, 5]
+  afficher a
+  si b == 3 alors continuer
+  afficher b
+fin pour
