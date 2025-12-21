@@ -42,14 +42,28 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
             }
         },
         as_fonction! {
-            entier(val: Type::Texte): Type::Entier => {
-                let t = val.as_texte().unwrap();
+            abs(val: Type::nombre()): Type::nombre() => {
+                Ok(Some(match val {
+                    Value::Entier(i) => Value::Entier(i.abs()),
+                    Value::Decimal(f) => Value::Decimal(f.abs()),
+                    _ =>  unreachable!()
+                }))
+            }
+        },
+        as_fonction! {
+            entier(val: Type::union_of(Type::Texte, Type::nombre())): Type::Entier => {
+                Ok(Some(match val {
+                    Value::Entier(i) => Value::Entier(*i),
+                    Value::Decimal(f) => Value::Entier(*f as i64),
+                    Value::Texte(t) => {
+                        let i = t.parse::<i64>().map_err(|_| RuntimeError::generic_err(
+                            format!("Impossible de convertir {} en entier de base 10.", val.repr())
+                        ))?;
 
-                let i = t.parse::<i64>().map_err(|_| RuntimeError::generic_err(
-                    format!("Impossible de convertir {} en entier de base 10.", val.repr())
-                ))?;
-
-                Ok(Some(Value::Entier(i)))
+                        Value::Entier(i)
+                    }
+                    _ => unreachable!()
+                }))
             }
         },
         as_fonction! {

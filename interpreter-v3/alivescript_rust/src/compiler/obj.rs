@@ -209,7 +209,7 @@ impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let to_str = match self {
             Value::Entier(i) => i.to_string(),
-            Value::Decimal(d) => d.to_string(),
+            Value::Decimal(d) => format!("{:?}", d),
             Value::Texte(s) => s.clone(),
             Value::Booleen(b) => if *b { "vrai" } else { "faux" }.into(),
             Value::Nul => "nul".into(),
@@ -367,6 +367,7 @@ impl PartialEq for Value {
                 l1.read().unwrap().as_ref() as &Vec<Value>
                     == l2.read().unwrap().as_ref() as &Vec<Value>
             }
+            (Value::Objet(o1), Value::Objet(o2)) => Arc::ptr_eq(o1, o2),
             // (ASDict(d1), ASDict(d2)) => d1 == d2,
             // (ASFonc(f1), ASFonc(f2)) => f1 == f2,
             // (ASClasse(classe1), ASClasse(classe2)) => classe1 == classe2,

@@ -6,6 +6,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use rand::random_range;
 use uuid::timestamp;
 
 use crate::{
@@ -227,6 +228,35 @@ as_module2! {
     }
 }
 as_module2! {
+    module Aleatoire {}
+
+    fn load(&self) {
+        [
+            as_module_fonction! {
+                choix(iter: Type::iterable()): Type::Tout => {
+                    match iter {
+                        Value::Liste(lst) => {
+                            let i = random_range(0..lst.read().unwrap().len());
+                            Ok(Some(lst.read().unwrap()[i].clone()))
+                        }
+                        _ => Err(RuntimeError::value_error(
+                            format!("dans la fonction 'Alétoire.choix', argument #1 invalide '{}'", iter.get_type())
+                        ))
+                    }
+                }
+            },
+            as_module_fonction! {
+                entre(min: Type::Entier, max: Type::Entier): Type::Entier => {
+                    let min = min.as_entier().unwrap();
+                    let max = max.as_entier().unwrap();
+                    let i = random_range(min..max);
+                    Ok(Some(Value::Entier(i)))
+                }
+            },
+        ]
+    }
+}
+as_module2! {
     module Systeme {}
 
     fn load(&self) {
@@ -267,6 +297,7 @@ pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
     stdlib.insert("Liste".to_string(), Arc::new(Liste {}));
     stdlib.insert("Test".to_string(), Arc::new(Test {}));
     stdlib.insert("Système".to_string(), Arc::new(Systeme {}));
+    stdlib.insert("Aléatoire".to_string(), Arc::new(Aleatoire {}));
     stdlib.insert("Debug".to_string(), Arc::new(Debug {}));
 
     stdlib

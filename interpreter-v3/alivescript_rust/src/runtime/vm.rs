@@ -574,6 +574,15 @@ impl VM {
                             }
                             lst[i as usize].clone()
                         }
+                        (Value::Liste(lst), Value::Decimal(i)) if i.fract() == 0.0 => {
+                            let i = i as i64;
+                            let lst = lst.read().unwrap();
+                            let i = if i < 0 { lst.len() as i64 + i } else { i };
+                            if i < 0 || i >= lst.len() as i64 {
+                                // throw_err!(self, ASErreurType::new_erreur_index(i, lst.len()));
+                            }
+                            lst[i as usize].clone()
+                        }
                         (Value::Liste(lst), Value::Liste(range)) => {
                             let range = range.read().unwrap();
                             let mut lst_final = Vec::with_capacity(range.len());
@@ -632,7 +641,13 @@ impl VM {
                             }
                             Value::Texte(txt_final)
                         }
-                        args => todo!("GET_ITEM on '{}' and '{}'", args.0, args.1),
+                        args => todo!(
+                            "GET_ITEM on '{}' ({}) and '{}' ({})",
+                            args.0,
+                            args.0.get_type(),
+                            args.1,
+                            args.1.get_type()
+                        ),
                     };
 
                     self.push(result);
@@ -644,6 +659,19 @@ impl VM {
 
                     match (obj, slice) {
                         (Value::Liste(lst), Value::Entier(i)) => {
+                            let mut lst = lst.write().unwrap();
+                            let i = if i < 0 { lst.len() as i64 + i } else { i };
+                            if i < 0 || i >= lst.len() as i64 {
+                                return Err(RuntimeError::generic_err(format!(
+                                    "Erreur d'accès. Taille de la liste: {}, mais l'index donnée est {}",
+                                    lst.len(),
+                                    i
+                                )));
+                            }
+                            lst[i as usize] = value;
+                        }
+                        (Value::Liste(lst), Value::Decimal(i)) if i.fract() == 0.0 => {
+                            let i = i as i64;
                             let mut lst = lst.write().unwrap();
                             let i = if i < 0 { lst.len() as i64 + i } else { i };
                             if i < 0 || i >= lst.len() as i64 {
@@ -685,7 +713,13 @@ impl VM {
                                 "Impossible de modifier une chaîne de charactères, car elles sont immuables",
                             ));
                         }
-                        _ => todo!(),
+                        args => todo!(
+                            "SET_ITEM on '{}' ({}) and '{}' ({})",
+                            args.0,
+                            args.0.get_type(),
+                            args.1,
+                            args.1.get_type()
+                        ),
                     };
                 }
                 Opcode::GetField => {
