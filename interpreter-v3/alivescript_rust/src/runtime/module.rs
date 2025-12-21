@@ -53,13 +53,6 @@ macro_rules! as_fonction {
             $crate::compiler::obj::Value::Function($crate::compiler::obj::Function::NativeFunction($crate::compiler::value::NativeFunction {
                 name: std::sync::Arc::new(String::from(std::stringify!($name))),
                 desc: std::sync::Arc::new($crate::opt_value!($($desc.to_string())?)),
-                // std::vec![$(
-                // $crate::as_obj::ASFnParam {
-                //     name: std::stringify!($param_name).into(),
-                //     static_type: $param_type,
-                //     default_value: $crate::default_value!($($default)?),
-                // },
-                // )*],
                 func: std::sync::Arc::new(move |_vm: &mut $crate::runtime::vm::VM, args: std::vec::Vec<Value>| {
                     let mut args = std::collections::VecDeque::from_iter(args.iter());
                     $(
@@ -95,13 +88,6 @@ macro_rules! as_module_fonction {
             $crate::compiler::obj::Value::Function($crate::compiler::obj::Function::NativeFunction($crate::compiler::value::NativeFunction {
                 name: std::sync::Arc::new(String::from(std::stringify!($name))),
                 desc: std::sync::Arc::new($crate::opt_value!($($desc.to_string())?)),
-                // std::vec![$(
-                // $crate::as_obj::ASFnParam {
-                //     name: std::stringify!($param_name).into(),
-                //     static_type: $param_type,
-                //     default_value: $crate::default_value!($($default)?),
-                // },
-                // )*],
                 func: std::sync::Arc::new(move |_vm: &mut $crate::runtime::vm::VM, args: std::vec::Vec<Value>| {
                     let mut args = std::collections::VecDeque::from_iter(args.iter());
                     $(

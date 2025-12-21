@@ -919,7 +919,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 body.as_ref().map(|b| b.as_str()).unwrap_or(""),
                 fn_name,
                 Rc::clone(self),
-                0,
+                params.len(),
                 return_type.unwrap_or(Type::Tout.into()),
             )));
             c.parse_fn_params(params)?;
@@ -1018,7 +1018,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 body.as_ref().map(|b| b.as_str()).unwrap_or(""),
                 Some(name.clone()),
                 Rc::clone(self),
-                0,
+                params.len(),
                 return_type.unwrap_or(Type::Tout.into()),
             )));
 

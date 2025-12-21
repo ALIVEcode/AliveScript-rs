@@ -8,34 +8,58 @@ use crate::compiler::{Compiler, bitmasks::BitArray, utils::format_table};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
 #[repr(u16)]
 pub enum Opcode {
-    /// repush the top of the stack `push(top())`
+    /// stack: `[any]`
+    /// 1. repush the top of the stack `push(top())`
     Dup,
-    /// pop the top of the stack
+
+    /// stack: `[any]`
+    /// 1. pop the top of the stack
     Pop,
 
+    /// arg: const_idx
+    /// 1. it gets the constant at `const_idx` (`const_val`)
+    /// 2. it pushes the constant on the stack
     Constant,
+
+    /// arg: const_idx
+    /// 1. it gets the proto closure constant at `const_idx` (`closure_val`)
+    /// 2. it closes the proto closure (turns it into a closure instance with resolved upvalue)
+    /// 3. it pushes the closure instance on the stack
     Closure,
 
     Read,
-    /// stack: `msg`
+    /// stack: `[msg]`
     ReadWithMsg,
-    /// stack: `func`
+    /// stack: `[func]`
     ReadCall,
-    /// stack: `msg, func`
+    /// stack: `[msg, func]`
     ReadCallWithMsg,
 
     GetUpvalue,
     SetUpvalue,
     GetLocal,
-    /// stack: `value`
+    /// stack: `[value]`
     SetLocal,
     GetGlobal,
-    /// stack: `value`
+    /// stack: `[value]`
     SetGlobal,
     Call,
 
+    /// args: dist (i16)
+    /// 1. jumps `dist`
     Jump,
+
+    /// args: dist (i16)
+    /// stack: `[val]`
+    /// 1. it pops the top of the stack (`val`)
+    /// 2. if `!val.to_bool()` -> jumps `dist`
     JumpIfFalse,
+
+    /// args: dist (i16), cond (bool)
+    /// stack: `[val]`
+    /// 1. it peeks at the top of the stack (`val`)
+    /// 2. if `val.to_bool() == cond` -> jumps `dist`
+    /// 3. else -> pops the top of the stack
     JumpTest,
 
     Return,
@@ -45,16 +69,72 @@ pub enum Opcode {
     BinComp,
     Not,
 
+    /// arg: nb_elements
+    /// stack: `[el_n, ..., el_2, el_1]`
+    /// 1. it pops `nb_elements` from the stack
+    /// 2. it creates a new list
+    /// 3. it pushes the list on the stack
     NewList,
+
+    /// stack: `[obj, item]`
+    /// 1. pops the item
+    /// 2. pops the obj
+    /// 3. pushes `obj[item]`
     GetItem,
+
+    /// stack: `[value, obj, item]`
+    /// 1. pops the item
+    /// 2. pops the obj
+    /// 3. pops the value
+    /// 4. does `obj[item] = value`
     SetItem,
 
+    /// arg: nb_fields
+    /// stack: `[struct, field_n_value, field_n_name, ..., field_2_value, field_2_name, field_1_value, field_1_name]`
+    /// 1. it pops the name and the value `nb_fields` times
+    /// 2. it pops the struct
+    /// 3. it populates a new instance of the struct with the fields and resolve the
+    /// default values for the unspecified fields (or throws an error)
+    /// 3. it pushes the new instance on the stack
     NewStruct,
+
+    /// arg: const_name_idx
+    /// stack: `[obj]`
+    /// 1. it gets the text constant at `const_name_idx` (`field_name`)
+    /// 2. pops the obj
+    /// 3. pushes `obj.field_name`
     GetField,
+
+    /// arg: const_name_idx
+    /// stack: `[value, obj]`
+    /// 1. it gets the text constant at `const_name_idx` (`field_name`)
+    /// 2. pops the obj
+    /// 3. pops the value
+    /// 3.5 Checks if `obj.field_name` can be assigned
+    /// 4. does `obj.field_name = value`
     SetField,
+
+    /// arg: const_name_idx
+    /// stack: `[struct, closure]`
+    /// 1. it gets the text constant at `const_name_idx` (`field_name`)
+    /// 2. it `pops` the closure
+    /// 3. it `peeks` at the top of the stack to get the struct
+    /// 4. it assigns the closure to the field with the name `field_name`
     SetDefaultField,
+
+    /// arg: const_name_idx
+    /// stack: `[struct, closure]`
+    /// 1. it gets the text constant at `const_name_idx` (`method_name`)
+    /// 2. it `pops` the closure
+    /// 3. it `peeks` at the top of the stack to get the struct
+    /// 4. it assigns the closure to the method with the name `method_name`
     SetMethod,
 
+    /// arg: const_name_idx
+    /// stack: `[]`
+    /// 1. it gets the text constant at `const_name_idx` (`module_name`)
+    /// 2. it tries to load the module with the name `module_name`
+    /// 3. it pushes the loaded module on the stack
     LoadModule,
 
     /// arg: iter_idx

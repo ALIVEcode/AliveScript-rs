@@ -13,6 +13,9 @@ pub enum RuntimeError {
     #[error("Erreur type: {0}")]
     TypeError(String),
 
+    #[error("Erreur lors de l'appel de la fonction '{func_name}': {msg}")]
+    CallError { func_name: String, msg: String },
+
     #[error("Erreur lors du chargement du module {module_name}: {message}")]
     ModuleLoadError {
         module_name: String,
@@ -49,6 +52,13 @@ impl RuntimeError {
 
     pub fn value_error(msg: impl ToString) -> Self {
         Self::ValueError(msg.to_string())
+    }
+
+    pub fn call_error(func_name: &str, msg: impl ToString) -> Self {
+        Self::CallError {
+            func_name: func_name.to_string(),
+            msg: msg.to_string(),
+        }
     }
 
     pub fn assertion_error(msg: impl ToString) -> Self {

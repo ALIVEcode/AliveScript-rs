@@ -216,7 +216,7 @@ const au_cube = generateur_puissance(3)
 const label_cube = au_cube("Cube : ")
 
 Test.affirmerÉgaux(label_carre(4), "Résultat : 16", "Capture multi-niveau (carré) échouée")
-Test.affirmerÉgaux(label_cube(2), "Cube : 8", "Capture multi-niveau (cube) échouée")
+Test.affirmerÉgaux(label_cube(2), "Cube : 8.0", "Capture multi-niveau (cube) échouée")
 
 
 # --- 14. TEST : ÉTAT PARTAGÉ (MUTATION DANS UNE CLOSURE) ---
