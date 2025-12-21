@@ -6,9 +6,9 @@ utiliser Test
 :)
 
 # --- 1. TEST: DES VARIABLES ET ARITHMÉTIQUE ---
-var a : entier = 10
-const b : entier = 3  # b ne peut plus être modifié
-var c : reel = 2.5
+var a: entier = 10
+const b: entier = 3  # b ne peut plus être modifié
+var c: décimal = 2.5
 
 Test.affirmerÉgaux(a + b, 13, "Addition entière échouée")
 Test.affirmerÉgaux(a // b, 3, "Division entière (tronquée) échouée")

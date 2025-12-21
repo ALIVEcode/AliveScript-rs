@@ -52,6 +52,8 @@ pub enum Opcode {
     NewStruct,
     GetField,
     SetField,
+    SetDefaultField,
+    SetMethod,
 
     LoadModule,
 
@@ -101,6 +103,8 @@ impl Opcode {
             Opcode::NewStruct => "NEW_STRUCT",
             Opcode::GetField => "GET_ATTR",
             Opcode::SetField => "SET_ATTR",
+            Opcode::SetDefaultField => "SET_DEFAULT_FIELD",
+            Opcode::SetMethod => "SET_METHOD",
             Opcode::LoadModule => "LOAD_MODULE",
             // Opcode::ForPrep => "FOR_PREP",
             Opcode::ForNext => "FOR_NEXT",
@@ -148,6 +152,8 @@ impl Opcode {
 
             Opcode::GetField => 1,
             Opcode::SetField => 1,
+            Opcode::SetMethod => 1,
+            Opcode::SetDefaultField => 1,
 
             Opcode::LoadModule => 1,
         }
@@ -436,6 +442,16 @@ impl Instructions {
     pub fn emit_set_field(&mut self, const_idx: u16) {
         self.emit_opcode(Opcode::SetField);
         self.emit_byte(const_idx);
+    }
+
+    pub fn emit_set_method(&mut self, name_const_idx: u16) {
+        self.emit_opcode(Opcode::SetMethod);
+        self.emit_byte(name_const_idx);
+    }
+
+    pub fn emit_set_default_field(&mut self, name_const_idx: u16) {
+        self.emit_opcode(Opcode::SetDefaultField);
+        self.emit_byte(name_const_idx);
     }
 
     pub fn emit_closure(&mut self, const_idx: u16) {

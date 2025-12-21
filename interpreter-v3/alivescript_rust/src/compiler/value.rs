@@ -19,6 +19,7 @@ pub type ArcStructure = Arc<RwLock<ASStructure>>;
 pub type ArcObjet = Arc<RwLock<ASObjet>>;
 pub type ArcClosureMethod = Arc<RwLock<ClosureMethod>>;
 pub type ArcModule = Arc<RwLock<ASModule>>;
+pub type ArcNativeObjet = Arc<RwLock<dyn NativeObjet>>;
 
 #[derive(Debug, Clone)]
 pub struct ASField {
@@ -66,6 +67,15 @@ impl ASModule {
         ArcModule::new(RwLock::new(ASModule::new(name, HashMap::from_iter(iter))))
     }
 
+    pub fn get_member(&self, name: &str) -> Result<Value, RuntimeError> {
+        // its a field
+        if let Some(val) = self.members.get(name) {
+            return Ok(val.value.clone());
+        }
+
+        Err(RuntimeError::invalid_field(&self.name, name))
+    }
+
     pub fn set_member(&mut self, name: &str, val: Value) -> Result<(), RuntimeError> {
         let Some(member) = self.members.get_mut(name) else {
             return Err(RuntimeError::invalid_field(&self.name, name));
@@ -102,8 +112,7 @@ pub struct ASStructure {
     pub name: String,
 
     pub fields: Vec<ASFieldInfo>,
-    pub inst_methods: HashMap<String, ArcClosureProto>,
-    pub struct_methods: HashMap<String, ArcClosureProto>,
+    pub methods: HashMap<String, ArcClosureInst>,
 }
 
 impl ASStructure {
@@ -111,8 +120,7 @@ impl ASStructure {
         Self {
             name,
             fields,
-            inst_methods: HashMap::new(),
-            struct_methods: HashMap::new(),
+            methods: HashMap::new(),
         }
     }
 }
@@ -167,11 +175,11 @@ impl ASObjet {
         let obj_val = obj.read().unwrap();
         // its a method
         let structure = obj_val.structure.read().unwrap();
-        if let Some(method) = structure.inst_methods.get(attr) {
-            let closure = vm.resolve_proto_closure_upvalues(Arc::clone(method))?;
+        if let Some(method) = structure.methods.get(attr) {
+            // let closure = vm.resolve_proto_closure_upvalues(Arc::clone(method))?;
             return Ok(Value::Function(Function::ClosureMethod(Arc::new(
                 RwLock::new(ClosureMethod {
-                    closure,
+                    closure: Arc::clone(method),
                     inst_value: Value::Objet(Arc::clone(&obj)),
                 }),
             ))));
@@ -702,5 +710,21 @@ impl Display for Type {
             B::Struct(struct_type) => struct_type.name.clone(),
         };
         write!(f, "{}", to_string)
+    }
+}
+
+pub trait NativeObjet: Debug {
+    fn type_name(&self) -> &'static str;
+
+    fn get_member(&mut self, vm: &mut VM, name: &str) -> Result<Value, RuntimeError>;
+
+    fn set_member(&mut self, vm: &mut VM, name: &str, val: Value) -> Result<(), RuntimeError> {
+        Err(RuntimeError::generic_err(
+            "Cet objet ne supporte pas l'affectation",
+        ))
+    }
+
+    fn display(&self) -> String {
+        format!("objet natif {}", self.type_name())
     }
 }

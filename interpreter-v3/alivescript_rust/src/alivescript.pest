@@ -301,6 +301,7 @@ term = _{
   | Lit
   | DebutBloc
   | StructInit
+  | AssignMember
   | Ident
   | List
   | Dict
@@ -352,7 +353,7 @@ typePrefix   = _{ "@" }
 typePostfix  = _{ TypeArgs }
 TypeArgs     =  { "<" ~ TypeExpr ~ ("," ~ TypeExpr)* ~ ","? ~ ">" }
 
-Bool      = @{ "vrai" | "faux" }
+Bool      = @{ ("vrai" | "faux") ~ !IdentChar }
 Text      = @{ PUSH("\"" | "'") ~ ("\\" ~ PEEK | !PEEK ~ ANY)* ~ POP }
 Ident     = @{ !(keyword ~ !IdentChar) ~ (LETTER | "_") ~ (LETTER | ASCII_DIGIT | "_")* }
 IdentChar = _{ LETTER | ASCII_DIGIT | "_" }
@@ -365,9 +366,6 @@ keyword = @{
   | "alias"
   | "type"
   | "fonction"
-  | "classe"
-  | "statique"
-  | "init"
   | "methode"
   | "méthode" // Combined variants
 
@@ -386,9 +384,7 @@ keyword = @{
   | "sortir"
   | "const"
   | "var"
-  | "pasdutoutafficher"
   | "retourner"
-  | "xor"
   | "pas"
   | "et"
   | "ou"

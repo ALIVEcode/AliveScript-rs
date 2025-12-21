@@ -8,27 +8,23 @@ use crate::runtime::err::RuntimeError;
 pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(|| {
     HashMap::from_iter([
         as_fonction! {
-            builtin:
             afficher(msg: Type::tout()): Type::Nul => {
                 println!("{}", msg);
                 Ok(Some(Value::Nul))
             }
         },
         as_fonction! {
-            builtin:
             afficherErr(msg: Type::tout()): Type::Nul => {
                 eprintln!("{}", msg);
                 Ok(Some(Value::Nul))
             }
         },
         as_fonction! {
-            builtin:
             typeDe(obj: Type::tout()): Type::Type => {
                 Ok(Some(Value::TypeObj(obj.get_type())))
             }
         },
         as_fonction! {
-            builtin:
             tailleDe(obj: Type::iterable()): Type::Entier => {
                 Ok(Some(Value::Entier(match obj {
                     Value::Texte(t) => t.len(),
@@ -38,7 +34,14 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
             }
         },
         as_fonction! {
-            builtin:
+            suite(debut: Type::Entier, fin: Type::Entier): Type::Liste(Type::Entier) => {
+                let debut = debut.as_entier().unwrap();
+                let fin = fin.as_entier().unwrap();
+
+                Ok(Some(Value::liste((debut..fin).map(|i| Value::Entier(i)).collect())))
+            }
+        },
+        as_fonction! {
             entier(val: Type::Texte): Type::Entier => {
                 let t = val.as_texte().unwrap();
 
@@ -50,7 +53,6 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
             }
         },
         as_fonction! {
-            builtin:
             texte(val: Type::tout()): Type::Texte => {
                 Ok(Some(Value::Texte(val.to_string())))
             }

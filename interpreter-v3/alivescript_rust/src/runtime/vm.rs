@@ -10,11 +10,11 @@ use std::{
 use crate::{
     compiler::{
         Compiler,
-        bytecode::{BinCompcode, BinOpcode, JUMP_OFFSET, Opcode},
+        bytecode::{BinCompcode, BinOpcode, JUMP_OFFSET, Opcode, instructions_to_string},
         obj::{ArcUpvalue, CallFrame, Function, Upvalue, UpvalueLocation, UpvalueSpec, Value},
         value::{
             ASField, ASModule, ASObjet, ArcClosureInst, ArcClosureProto, ArcModule, ArcStructure,
-            ClosureInst, ClosureProto, NativeMethod,
+            ClosureInst, ClosureProto, ModuleProto, NativeMethod,
         },
     },
     runtime::{
@@ -205,17 +205,16 @@ impl VM {
                     continue;
                 }
 
-                let Value::Function(Function::ClosureProto(factory)) = default_val else {
+                let Value::Function(Function::ClosureInst(factory)) = default_val else {
                     panic!(
                         "Dans la structure '{}'. La valeur par défaut du champs '{}' doit être une closure",
                         struct_name, field_info.name
                     )
                 };
 
-                let new_closure = self.resolve_proto_closure_upvalues(Arc::clone(factory))?;
-                let base = self.stack.len() - 1;
+                let base = self.stack.len();
                 self.frames.push(CallFrame {
-                    closure: new_closure,
+                    closure: Arc::clone(factory),
                     ip: 0,
                     base,
                 });
@@ -300,7 +299,7 @@ impl VM {
         Ok(new_closure)
     }
 
-    pub fn call_fn(&mut self, nbargs: usize, func: Value) -> Result<(), RuntimeError> {
+    fn call_fn(&mut self, nbargs: usize, func: Value) -> Result<(), RuntimeError> {
         match func {
             Value::Function(Function::NativeFunction(f)) => {
                 let mut args = VecDeque::with_capacity(nbargs);
@@ -355,11 +354,11 @@ impl VM {
                 });
                 self.check_overflow()?;
             }
-            Value::Function(Function::ClosureMethod(closure)) => {
+            Value::Function(Function::ClosureMethod(method)) => {
                 // set the base as the first arg of the function
-                let base = self.stack.len() - nbargs; // - 1 for the 'inst' param
-                let inst_value = closure.read().unwrap().inst_value.clone();
-                let closure = Arc::clone(&closure.read().unwrap().closure);
+                let base = self.stack.len() - nbargs;
+                let inst_value = method.read().unwrap().inst_value.clone();
+                let closure = Arc::clone(&method.read().unwrap().closure);
 
                 self.frames.push(CallFrame {
                     closure,
@@ -381,35 +380,24 @@ impl VM {
         Ok(())
     }
 
-    pub fn run_fn(&mut self, nbargs: usize, func: &Function) -> Result<Value, RuntimeError> {
+    /// This is an API to call an AliveScript function from code *outside* of AliveScript
+    pub fn run_fn(&mut self, args: Vec<Value>, func: &Function) -> Result<Value, RuntimeError> {
+        let nbargs = args.len();
+
         match func {
             Function::NativeFunction(f) => {
-                let mut args = VecDeque::with_capacity(nbargs);
+                let mut args = VecDeque::from_iter(args);
                 let f = f.clone();
-
-                for _ in 0..nbargs {
-                    args.push_front(self.pop().unwrap());
-                }
-
-                // remove the function that is still on the stack
-                self.pop();
 
                 let result = (f.func)(self, args.into())?;
 
                 return Ok(result.unwrap_or(Value::Nul));
             }
             Function::NativeMethod(f) => {
-                let mut args = VecDeque::with_capacity(nbargs);
+                let mut args = VecDeque::from_iter(args);
                 let f = f.clone();
 
-                for _ in 0..nbargs {
-                    args.push_front(self.pop().unwrap());
-                }
-
                 args.push_front(*f.inst_value);
-
-                // remove the function that is still on the stack
-                self.pop();
 
                 let result = (f.func.func)(self, args.into())?;
 
@@ -417,6 +405,9 @@ impl VM {
             }
             Function::ClosureInst(closure) => {
                 let curr_depth = self.frames.len();
+                for arg in args.into_iter().rev() {
+                    self.push(arg);
+                }
                 // set the base as the first arg of the function
                 let base = self.stack.len() - nbargs;
                 self.frames.push(CallFrame {
@@ -430,6 +421,9 @@ impl VM {
             }
             Function::ClosureProto(closure) => {
                 let curr_depth = self.frames.len();
+                for arg in args.into_iter().rev() {
+                    self.push(arg)
+                }
 
                 let closure = self.resolve_proto_closure_upvalues(Arc::clone(closure))?;
                 // set the base as the first arg of the function
@@ -445,9 +439,12 @@ impl VM {
             }
             Function::ClosureMethod(closure) => {
                 let curr_depth = self.frames.len();
+                for arg in args.into_iter().rev() {
+                    self.push(arg)
+                }
 
                 // set the base as the first arg of the function
-                let base = self.stack.len() - nbargs; // - 1 for the 'inst' param
+                let base = self.stack.len() - nbargs;
                 let inst_value = closure.read().unwrap().inst_value.clone();
                 let closure = Arc::clone(&closure.read().unwrap().closure);
 
@@ -481,13 +478,49 @@ impl VM {
         self.run_main(Arc::new(ClosureInst::new(closure.function, vec![])))
     }
 
-    pub fn run_main(&mut self, closure: ArcClosureInst) -> Result<Value, RuntimeError> {
+    pub fn run_file_to_module(&mut self, file_path: &str) -> Result<ArcModule, RuntimeError> {
+        let module_file = file_path;
+        let module_name = file_path.strip_suffix(".as").unwrap_or(file_path);
+
+        let abs_module_file = fs::canonicalize(&module_file)
+            .map_err(|io_err| RuntimeError::module_load_error(module_name, io_err))?;
+        let module_file_content = fs::read_to_string(&abs_module_file)
+            .map_err(|io_err| RuntimeError::module_load_error(module_name, io_err))?;
+
+        let compiler = Compiler::new(&module_file_content, module_file.to_string());
+        let module_closure = compiler
+            .parse_and_compile_to_module()
+            .map_err(|err| RuntimeError::module_load_error(module_name, err))?;
+
+        self.run(module_closure.load_fn)?;
+
+        let mut members = HashMap::new();
+        for (member_name, member) in module_closure.exported_members {
+            let value = self.stack[member.value_idx].clone();
+            members.insert(
+                member_name,
+                ASField::new(member.is_const, member.field_type, value),
+            );
+        }
+
+        let module = Arc::new(RwLock::new(ASModule {
+            name: module_name.to_string(),
+            members,
+        }));
+
+        self.loaded_modules
+            .insert(module_name.to_string(), Arc::clone(&module));
+
+        Ok(module)
+    }
+
+    fn run_main(&mut self, closure: ArcClosureInst) -> Result<Value, RuntimeError> {
         self.frames.push(CallFrame {
             closure,
             ip: 0,
             base: 0,
         });
-        self.run_frame(0)
+        self.run_frame(self.frames.len() - 1)
     }
 
     fn run_frame(&mut self, until_depth: usize) -> Result<Value, RuntimeError> {
@@ -599,7 +632,7 @@ impl VM {
                             }
                             Value::Texte(txt_final)
                         }
-                        _ => todo!(),
+                        args => todo!("GET_ITEM on '{}' and '{}'", args.0, args.1),
                     };
 
                     self.push(result);
@@ -674,12 +707,16 @@ impl VM {
                             let val = ASObjet::get_field(self, o, &field_name)?;
                             self.push(val);
                         }
+                        Value::NativeObjet(o) => {
+                            let val = o.write().unwrap().get_member(self, &field_name)?;
+                            self.push(val);
+                        }
                         Value::Structure(s) => {
                             let structure = s.read().unwrap();
-                            if let Some(method) = structure.struct_methods.get(&field_name) {
-                                let new_method =
-                                    self.resolve_proto_closure_upvalues(Arc::clone(method))?;
-                                self.push(Value::Function(Function::ClosureInst(new_method)));
+                            if let Some(method) = structure.methods.get(&field_name) {
+                                self.push(Value::Function(Function::ClosureInst(Arc::clone(
+                                    method,
+                                ))));
                             } else {
                                 return Err(RuntimeError::invalid_field(
                                     &structure.to_string(),
@@ -756,6 +793,9 @@ impl VM {
                         Value::Objet(o) => {
                             ASObjet::set_field(self, o, &field_name, value)?;
                         }
+                        Value::NativeObjet(o) => {
+                            o.write().unwrap().set_member(self, &field_name, value)?;
+                        }
                         Value::Structure(s) => {
                             return Err(RuntimeError::type_error(format!(
                                 "impossible de changer le champs d'une structure puisqu'elles sont immuables",
@@ -767,6 +807,69 @@ impl VM {
                                 "impossible de changer le champs d'une valeur de type '{}'",
                                 o.get_type()
                             )));
+                        }
+                    }
+                }
+                Opcode::SetMethod => {
+                    let name_const_idx = fnc.code[frame.ip] as usize;
+                    frame.ip += 1;
+
+                    let name = fnc.constants[name_const_idx as usize]
+                        .clone()
+                        .as_texte()
+                        .expect("The name must be a string")
+                        .to_string();
+
+                    let closure = match self.pop().unwrap() {
+                        Value::Function(Function::ClosureInst(rc_cl)) => rc_cl.clone(),
+                        _ => {
+                            return Err(RuntimeError::generic_err(
+                                "CLOSURE constant must be a Function wrapped as Closure",
+                            ));
+                        }
+                    };
+
+                    // we don't pop the structure
+                    let Value::Structure(structure) = self.peek(0) else {
+                        return Err(RuntimeError::type_error(format!(
+                            "Une méthode peut seulement être définie dans une structure, pas dans une valeur de type '{}'",
+                            self.peek(0).get_type()
+                        )));
+                    };
+
+                    structure.write().unwrap().methods.insert(name, closure);
+                }
+                Opcode::SetDefaultField => {
+                    let name_const_idx = fnc.code[frame.ip] as usize;
+                    frame.ip += 1;
+
+                    let name = fnc.constants[name_const_idx as usize]
+                        .clone()
+                        .as_texte()
+                        .expect("The name must be a string")
+                        .to_string();
+
+                    let closure = match self.pop().unwrap() {
+                        Value::Function(Function::ClosureInst(rc_cl)) => rc_cl.clone(),
+                        _ => {
+                            return Err(RuntimeError::generic_err(
+                                "CLOSURE constant must be a Function wrapped as Closure",
+                            ));
+                        }
+                    };
+
+                    // we don't pop the structure
+                    let Value::Structure(structure) = self.peek(0) else {
+                        return Err(RuntimeError::type_error(format!(
+                            "Une méthode peut seulement être définie dans une structure, pas dans une valeur de type '{}'",
+                            self.peek(0).get_type()
+                        )));
+                    };
+
+                    for field in structure.write().unwrap().fields.iter_mut() {
+                        if field.name == name {
+                            field.value = Some(Value::Function(Function::ClosureInst(closure)));
+                            break;
                         }
                     }
                 }
@@ -1123,9 +1226,10 @@ impl VM {
                 Opcode::ForNext => {
                     let iter_var_idx = fnc.code[frame.ip];
                     frame.ip += 1;
+                    let base = frame.base;
 
-                    let iter_val = self.stack[iter_var_idx as usize].clone();
-                    let iter_state_val = &self.stack[iter_var_idx as usize + 1];
+                    let iter_val = self.stack[base + iter_var_idx as usize].clone();
+                    let iter_state_val = &self.stack[base + iter_var_idx as usize + 1];
 
                     let next_state = match iter_val {
                         Value::Texte(txt) => {
@@ -1136,7 +1240,8 @@ impl VM {
                                 ))
                             })?;
 
-                            self.stack[iter_var_idx as usize + 1] = Value::Entier(state_idx + 1);
+                            self.stack[base + iter_var_idx as usize + 1] =
+                                Value::Entier(state_idx + 1);
 
                             if state_idx as usize >= txt.len() {
                                 None
@@ -1154,7 +1259,8 @@ impl VM {
                                 ))
                             })?;
 
-                            self.stack[iter_var_idx as usize + 1] = Value::Entier(state_idx + 1);
+                            self.stack[base + iter_var_idx as usize + 1] =
+                                Value::Entier(state_idx + 1);
 
                             if state_idx as usize >= lst.read().unwrap().len() {
                                 None
@@ -1163,7 +1269,7 @@ impl VM {
                             }
                         }
                         Value::Function(f) => {
-                            let result = self.run_fn(1, &f);
+                            // let result = self.run_fn(1, &f);
                             todo!()
                         }
                         Value::Objet(rw_lock) => todo!(),

@@ -3,8 +3,8 @@ use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub};
 use std::sync::{Arc, RwLock};
 
 use crate::compiler::value::{
-    ArcClosureInst, ArcClosureMethod, ArcClosureProto, ArcModule, ArcObjet, ArcStructure, Closure,
-    NativeFunction, NativeMethod, Type,
+    ArcClosureInst, ArcClosureMethod, ArcClosureProto, ArcModule, ArcNativeObjet, ArcObjet,
+    ArcStructure, Closure, NativeFunction, NativeMethod, NativeObjet, Type,
 };
 use crate::runtime::err::RuntimeError;
 use crate::runtime::vm::VM;
@@ -25,6 +25,7 @@ pub enum Value {
     Structure(ArcStructure),
     Objet(ArcObjet),
     Module(ArcModule),
+    NativeObjet(ArcNativeObjet),
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +67,7 @@ impl Value {
             V::TypeObj(..) => Type::Type,
             V::Structure(..) => Type::Type,
             V::Objet(o) => Type::Objet(o.read().unwrap().structure.read().unwrap().name.clone()),
+            V::NativeObjet(o) => Type::Objet(o.read().unwrap().type_name().to_string()),
             V::Module(m) => Type::Module(m.read().unwrap().name.clone()),
         }
     }
@@ -164,6 +166,7 @@ impl Value {
     pub fn as_entier(&self) -> Option<i64> {
         match &self {
             Value::Entier(i) => Some(*i as i64),
+            Value::Decimal(d) => Some(*d as i64),
             _ => None,
         }
     }
@@ -242,7 +245,11 @@ impl Display for Value {
                 format!("fonction native {}()", native_function.name)
             }
             Value::Function(Function::NativeMethod(native_function)) => {
-                format!("méthode native {}()", native_function.func.name)
+                format!(
+                    "méthode native {}({})",
+                    native_function.func.name,
+                    native_function.inst_value.repr()
+                )
             }
             Value::Function(Function::ClosureMethod(closure)) => format!(
                 "méthode {}()",
@@ -256,6 +263,7 @@ impl Display for Value {
                     .unwrap_or(&"anonyme".to_string())
             ),
             Value::Module(m) => format!("module '{}.as'", m.read().unwrap().name),
+            Value::NativeObjet(o) => o.read().unwrap().display(),
         };
 
         write!(f, "{}", to_str)

@@ -98,11 +98,13 @@ impl Display for CompilationError {
                     "{}{}\n",
                     " ".repeat(start_col + line_lead_whitespace),
                     "^".repeat(
-                        (if start_ln == end_ln {
+                        ((if start_ln == end_ln {
                             end_col
                         } else {
                             line.len()
-                        }) - start_col
+                        })
+                        .max(start_col + line_lead_whitespace + line_end_whitespace))
+                            - start_col
                             - line_lead_whitespace
                             - line_end_whitespace
                     )
@@ -161,6 +163,11 @@ pub enum CompilationErrorKind {
     #[error("Impossibe d'affecter la variable '{var_name}' puisque c'est une constante.")]
     AssignToConst { var_name: String },
 
+    #[error(
+        "Bloc d'implémentation invalide pour la structure '{struct_name}' (il doit se retrouver au même endroit que la définition de la structure)."
+    )]
+    InvalidImplBlock { struct_name: String },
+
     #[error("{0}")]
     CompilationError(String),
 }
@@ -179,10 +186,16 @@ impl CompilationErrorKind {
     pub fn generic_error(msg: impl ToString) -> Self {
         Self::CompilationError(msg.to_string())
     }
-    
+
     pub fn assign_to_const(var_name: impl ToString) -> Self {
         Self::AssignToConst {
             var_name: var_name.to_string(),
+        }
+    }
+
+    pub fn invalid_impl_block(struct_name: impl ToString) -> Self {
+        Self::InvalidImplBlock {
+            struct_name: struct_name.to_string(),
         }
     }
 }
@@ -192,7 +205,3 @@ impl From<PestError<Rule>> for CompilationErrorKind {
         CompilationErrorKind::LexerError(val)
     }
 }
-
-
-
-

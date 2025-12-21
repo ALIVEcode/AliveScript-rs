@@ -17,8 +17,7 @@ use crate::{
     AlivescriptParser, Rule,
     compiler::{
         bytecode::{
-            BinCompcode, BinLogiccode, BinOpcode, Instructions, JUMP_OFFSET, Opcode, UnaryOpcode,
-            instructions_to_string_debug,
+            BinCompcode, BinLogiccode, BinOpcode, Instructions, JUMP_OFFSET, Opcode, UnaryOpcode, instructions_to_string, instructions_to_string_debug
         },
         err::{CompilationError, CompilationErrorKind},
         obj::{UpvalueSpec, Value},
@@ -337,27 +336,32 @@ impl<'a> Compiler<'a> {
         self.function.borrow().constants.get(idx).cloned()
     }
 
-    fn get_struct_const(&self, name: &str) -> Option<ArcStructure> {
+    fn get_struct_const(
+        &self,
+        name: &str,
+    ) -> Result<Option<(ArcStructure, usize)>, CompilationErrorKind> {
         let f = self.function.borrow();
-        let s = f.constants.iter().find(|c| match c {
+        let s = f.constants.iter().enumerate().find(|(_, c)| match c {
             Value::Structure(s) => s.read().unwrap().name == name,
             _ => false,
         });
 
-        if let Some(s) = s {
+        if let Some((i, s)) = s {
             let Value::Structure(s) = s else {
                 unreachable!()
             };
-            return Some(ArcStructure::clone(s));
+            return Ok(Some((ArcStructure::clone(s), i)));
         }
 
         // 2. Try to resolve as an UPVALUE
         if let Some(parent) = &self.parent {
             let p = parent.borrow();
-            return p.get_struct_const(name);
+            return p
+                .get_struct_const(name)
+                .and_then(|e| Err(CompilationErrorKind::invalid_impl_block(name)));
         }
 
-        None
+        Ok(None)
     }
 
     fn get_or_add_const(&mut self, obj: Value) -> u16 {
@@ -633,11 +637,7 @@ trait Parser<'a> {
         fn_name: Option<String>,
     ) -> Result<(), CompilationError>;
 
-    fn parse_methode_def(
-        &mut self,
-        structure: ArcStructure,
-        pair: Pair<'a, Rule>,
-    ) -> Result<(), CompilationError>;
+    fn parse_methode_def(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
     fn parse_assign_vars(
         &mut self,
@@ -992,19 +992,13 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         Ok(())
     }
 
-    fn parse_methode_def(
-        &mut self,
-        structure: ArcStructure,
-        pair: Pair<'a, Rule>,
-    ) -> Result<(), CompilationError> {
+    fn parse_methode_def(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError> {
         let mut inner = pair.into_inner();
 
         let name = inner
             .find_first_tagged("name")
             .map(|node| node.as_str().to_string())
             .unwrap();
-
-        let mut is_static_method = true;
 
         let mut params = inner.find_first_tagged("params").unwrap().into_inner();
 
@@ -1018,11 +1012,10 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 .find(|node| node.as_rule() == Rule::MethodeBody)
                 .unwrap()
                 .into_inner()
-                .next()
-                .unwrap();
+                .next();
 
             let mut c = Rc::new(RefCell::new(Compiler::new_closure(
-                body.as_str(),
+                body.as_ref().map(|b| b.as_str()).unwrap_or(""),
                 Some(name.clone()),
                 Rc::clone(self),
                 0,
@@ -1039,37 +1032,32 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     .borrow_mut()
                     .declare_local("inst", Type::Tout.into(), true);
                 c.borrow_mut().mark_initialized(inst_idx);
-
-                is_static_method = false;
             }
 
             c.parse_fn_params(params)?;
 
-            let inner_body = match body.as_rule() {
-                Rule::Expr => body.into_inner(),
-                Rule::StmtBody => body.into_inner(),
-                _ => unreachable!(),
-            };
+            match body {
+                Some(body) => match body.as_rule() {
+                    Rule::Expr => Rc::try_unwrap(c)
+                        .unwrap()
+                        .into_inner()
+                        .compile_lambda_expr(body.into_inner())?,
+                    Rule::StmtBody => Rc::try_unwrap(c)
+                        .unwrap()
+                        .into_inner()
+                        .compile(body.into_inner())?,
 
-            Rc::try_unwrap(c)
-                .unwrap()
-                .into_inner()
-                .compile(inner_body)?
+                    b => unreachable!("{:?}", b),
+                },
+                None => Rc::try_unwrap(c).unwrap().into_inner().compile_empty()?,
+            }
         };
 
-        if is_static_method {
-            structure
-                .write()
-                .unwrap()
-                .struct_methods
-                .insert(name, closure.into());
-        } else {
-            structure
-                .write()
-                .unwrap()
-                .inst_methods
-                .insert(name, closure.into());
-        }
+        let closure_idx = self.borrow_mut().get_or_add_const(Value::closure(closure));
+        self.borrow_mut().code.emit_closure(closure_idx);
+
+        let name_idx = self.borrow_mut().get_or_add_const(Value::Texte(name));
+        self.borrow_mut().code.emit_set_method(name_idx);
 
         Ok(())
     }
@@ -1080,12 +1068,11 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         is_const: bool,
         new_local: bool,
     ) -> Result<(), CompilationError> {
-        let last_pair_idx = pairs.len() - 1;
+        let inner = self.borrow_mut().declare_inner_local("multi_assign_save");
+        self.borrow_mut().code.emit_set_local(inner);
 
         for (i, pair) in pairs.enumerate() {
-            if i != last_pair_idx {
-                self.borrow_mut().code.emit_dup();
-            }
+            self.borrow_mut().code.emit_get_local(inner);
             self.borrow_mut().push_const(Value::Entier(i as i64));
             self.borrow_mut().code.emit_get_item();
 
@@ -1141,6 +1128,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 _ => unreachable!("{:#?}", pair),
             }
         }
+
         Ok(())
     }
 
@@ -1679,6 +1667,21 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     .map(|node| node.as_str().to_string())
                     .unwrap();
 
+                let structure = Arc::new(RwLock::new(ASStructure::new(name.clone(), vec![])));
+
+                let idx = self
+                    .borrow_mut()
+                    .get_or_add_const(Value::Structure(Arc::clone(&structure)));
+
+                let s_idx = self
+                    .borrow_mut()
+                    .declare_local(&name, Type::Tout.into(), true);
+
+                self.borrow_mut().mark_initialized(s_idx);
+
+                // we push the struct to set the fields
+                self.borrow_mut().code.emit_const(idx);
+
                 // let mut struct_fields = HashMap::new();
                 let mut fields_token = inner
                     .find(|node| node.as_rule() == Rule::StructureBody)
@@ -1689,12 +1692,10 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 fields_token.next_back();
 
                 let mut field_types = HashMap::new();
-                let mut fields = Vec::new();
 
                 for field in fields_token {
                     let mut f_inner = field.into_inner();
                     let mut is_const = false;
-                    let mut value = None;
                     match f_inner.peek().unwrap().as_rule() {
                         Rule::Const => {
                             f_inner.next();
@@ -1733,42 +1734,39 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                             static_type.clone().into(),
                         );
 
-                        value = Some(Value::closure(
-                            cmp.compile_lambda_expr(default_val.into_inner())?,
-                        ));
+                        let default_closure =
+                            Value::closure(cmp.compile_lambda_expr(default_val.into_inner())?);
+
+                        let closure_idx = self.borrow_mut().get_or_add_const(default_closure);
+                        self.borrow_mut().code.emit_closure(closure_idx);
+
+                        let name_const_idx = self
+                            .borrow_mut()
+                            .get_or_add_const(Value::Texte(field_name.clone()));
+                        self.borrow_mut()
+                            .code
+                            .emit_set_default_field(name_const_idx);
                     }
 
                     field_types.insert(field_name.clone(), static_type.clone());
 
-                    fields.push(ASFieldInfo {
+                    structure.write().unwrap().fields.push(ASFieldInfo {
                         name: field_name,
                         field_type: static_type.into(),
                         is_const,
                         is_private: false,
-                        value,
+                        value: None,
                     });
                 }
-
-                let structure = ASStructure::new(name.clone(), fields);
-
-                let idx = self
-                    .borrow_mut()
-                    .get_or_add_const(Value::Structure(Arc::new(RwLock::new(structure))));
 
                 let struct_type = TypeSpec::new_simple(
                     name.clone(),
                     Type::Struct(StructType::new(name.clone(), field_types)),
                 );
 
-                let s_idx = self
-                    .borrow_mut()
-                    .declare_local(&name, struct_type.clone(), true);
-
-                self.borrow_mut().mark_initialized(s_idx);
-
                 self.borrow_mut().declare_local_type(&name, struct_type);
 
-                self.borrow_mut().code.emit_const(idx);
+                // now that the fields are set, we set the struct in the variable
                 self.borrow_mut().code.emit_set_local(s_idx);
             }
 
@@ -1781,13 +1779,24 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 // remove the "finImpl" token from the list
                 inner.next_back();
 
-                let structure = self.borrow_mut().get_struct_const(&name).ok_or(
-                    CompilationErrorKind::generic_error("Needs to be a struct").to_error(span),
-                )?;
+                // let (structure, const_idx) = self
+                //     .borrow_mut()
+                //     .get_struct_const(&name)
+                //     .map_err(|err| err.to_error(span))?
+                //     .ok_or(
+                //         CompilationErrorKind::generic_error("Needs to be a struct").to_error(span),
+                //     )?;
 
-                for methode in inner {
-                    self.parse_methode_def(Arc::clone(&structure), methode)?;
+                self.borrow_mut().load_var(&name);
+
+                let nb_methods = inner.len();
+                for (i, methode) in inner.enumerate() {
+                    self.parse_methode_def(methode)?;
                 }
+
+                // because the definition of a method doesn't pop the struct,
+                // we need to do it manually after
+                self.borrow_mut().code.emit_pop();
             }
 
             Rule::SiStmt => self.parse_if(pair)?,

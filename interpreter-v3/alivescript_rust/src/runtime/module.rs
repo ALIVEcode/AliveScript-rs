@@ -1,8 +1,12 @@
+use core::time;
 use std::{
     collections::HashMap,
     marker::PhantomData,
     sync::{Arc, LazyLock},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+
+use uuid::timestamp;
 
 use crate::{
     compiler::{
@@ -40,7 +44,7 @@ macro_rules! unpack {
 
 #[macro_export]
 macro_rules! as_fonction {
-    (builtin: $({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
+    ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
      : $return_type:expr => $body:block) => {{
          $($($prefix)*)?;
          (
@@ -78,6 +82,9 @@ macro_rules! as_fonction {
             }))
          )
      }};
+}
+#[macro_export]
+macro_rules! as_module_fonction {
     ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
      : $return_type:expr => $body:block) => {{
          $($($prefix)*)?;
@@ -152,7 +159,7 @@ as_module2! {
 
     fn load(&self) {
         [
-            as_fonction! {
+            as_module_fonction! {
                 affirmer(cond: Type::tout(), msg: Type::Texte): Type::Nul => {
                     if !cond.to_bool() {
                         let t = msg.as_texte().unwrap();
@@ -162,7 +169,7 @@ as_module2! {
                     }
                 }
             },
-            as_fonction! {
+            as_module_fonction! {
                 affirmerÉgaux(val1: Type::tout(), val2: Type::tout(), msg: Type::Texte): Type::Nul => {
                     if val1 != val2 {
                         let t = msg.as_texte().unwrap();
@@ -180,13 +187,13 @@ as_module2! {
 
     fn load(&self) {
         [
-            as_fonction! {
+            as_module_fonction! {
                 taille(inst: Type::Texte): Type::Entier => {
                     let inst = inst.as_texte().unwrap();
                     Ok(Some(Value::Entier(inst.len() as i64)))
                 }
             },
-            as_fonction! {
+            as_module_fonction! {
                 est_numerique(inst: Type::Texte): Type::Booleen => {
                     let inst = inst.as_texte().unwrap();
                     Ok(Some(Value::Booleen(inst.chars().all(|c| c.is_ascii_digit()))))
@@ -200,14 +207,14 @@ as_module2! {
 
     fn load(&self) {
         [
-            as_fonction! {
+            as_module_fonction! {
                 taille(inst: Type::liste_tout()): Type::Entier => {
                     unpack!(Value::Liste(lst) = inst);
 
                     Ok(Some(Value::Entier(lst.read().unwrap().len() as i64)))
                 }
             },
-            as_fonction! {
+            as_module_fonction! {
                 ajouter(inst: Type::liste_tout(), val: Type::Tout): Type::Nul => {
                     unpack!(Value::Liste(lst) = inst);
 
@@ -219,13 +226,31 @@ as_module2! {
         ]
     }
 }
+as_module2! {
+    module Systeme {}
+
+    fn load(&self) {
+        [
+            as_module_fonction! {
+                temps(): Type::Entier => {
+                    Ok(Some(Value::Entier(
+                        SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap()
+                            .as_millis() as i64
+                    )))
+                }
+            },
+        ]
+    }
+}
 
 as_module2! {
     module Debug {}
 
     fn load(&self) {
         [
-            as_fonction! {
+            as_module_fonction! {
                 nb(inst: Type::Texte): Type::Booleen => {
                     let inst = inst.as_texte().unwrap();
                     Ok(Some(Value::Booleen(inst.chars().all(|c| c.is_ascii_digit()))))
@@ -241,6 +266,7 @@ pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
     stdlib.insert("Texte".to_string(), Arc::new(Texte {}));
     stdlib.insert("Liste".to_string(), Arc::new(Liste {}));
     stdlib.insert("Test".to_string(), Arc::new(Test {}));
+    stdlib.insert("Système".to_string(), Arc::new(Systeme {}));
     stdlib.insert("Debug".to_string(), Arc::new(Debug {}));
 
     stdlib
