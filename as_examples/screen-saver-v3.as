@@ -1,4 +1,5 @@
 utiliser Graphique
+utiliser Aléatoire
 
 structure Carré
   x: entier
@@ -7,7 +8,7 @@ structure Carré
   h: entier = 50
   couleur: texte
   vel: décimal = 5
-  mov: liste<décimal> = [5, 5]
+  mov: liste<décimal> = [Aléatoire.choix([-5, 5]), Aléatoire.choix([-5, 5])]
 fin structure
 
 implémentation Carré
@@ -42,19 +43,66 @@ implémentation Carré
   méthode dessiner(inst)
     Graphique.dessinerRect(inst.x, inst.y, inst.l, inst.h, inst.couleur)
   fin méthode
+
+  # --- MÉTHODE : COLLISIONNE ---
+  # Vérifie si l'instance actuelle touche une autre instance de Carré
+  # Retourne vrai s'il y a contact, faux sinon.
+  methode collisionne(inst, autre : Carré) -> booleen
+      # On vérifie les 4 limites (gauche, droite, haut, bas)
+      var collision_x : booleen = (inst.x < autre.x + autre.l) et (inst.x + inst.l > autre.x)
+      var collision_y : booleen = (inst.y < autre.y + autre.h) et (inst.y + inst.h > autre.y)
+      
+      retourner collision_x et collision_y
+  fin methode
+
+  # --- MÉTHODE : REBONDIR ---
+  # Inverse les vecteurs de mouvement si un impact est détecté
+  methode rebondir(inst, autre : Carré) -> rien
+    si inst.collisionne(autre) alors
+      # 1. Calcul de l'enfoncement sur chaque axe
+      var delta_x : décimal = (inst.x + inst.l / 2.0) - (autre.x + autre.l / 2.0)
+      var delta_y : décimal = (inst.y + inst.h / 2.0) - (autre.y + autre.h / 2.0)
+        
+      # 2. On détermine l'axe de collision le plus profond
+      # (Si la différence en X est plus grande que celle en Y, le choc est latéral)
+      si abs(delta_x) > abs(delta_y) alors
+          # Choc Horizontal : on inverse le mouvement X
+          inst.mov[0] *= -1.0
+          autre.mov[0] *= -1.0
+          
+          # Résolution : on pousse un peu pour séparer
+          var overlap : entier = (inst.l / 2 + autre.l / 2) - entier(abs(delta_x))
+          si delta_x > 0 alors inst.x += overlap 
+          sinon inst.x -= overlap
+      sinon
+          # Choc Vertical : on inverse le mouvement Y
+          inst.mov[1] *= -1.0
+          autre.mov[1] *= -1.0
+          
+          # Résolution : on pousse un peu pour séparer
+          var overlap : entier = (inst.h / 2 + autre.h / 2) - entier(abs(delta_y))
+          si delta_y > 0 alors inst.y += overlap 
+          sinon inst.y -= overlap
+      fin si
+    fin si
+  fin methode
 fin implémentation
 
 var couleurs = ["bleu", "rouge", "orange", "vert", "blanc"]
 var carrés: liste<Carré> = []
 
 fonction init()
-  pour chaque i dans suite(0, 10) faire
-    carrés.ajouter(Carré.créer(i, i * 75, couleurs[i % tailleDe(couleurs)]))
+  pour chaque i dans suite(0, 5) faire
+    carrés.ajouter(Carré.créer(i * 75, i * 75, couleurs[i % tailleDe(couleurs)]))
   fin pour
 fin fonction
 
 fonction update()
   pour chaque carré dans carrés faire
+    pour chaque autre_carré dans carrés 
+      si carré == autre_carré alors continuer
+      carré.rebondir(autre_carré)
+    fin pour
     carré.bouger()
   fin pour
 fin fonction
