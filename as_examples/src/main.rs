@@ -78,7 +78,7 @@ impl LazyModule for GraphiqueModule {
                     {
                         let app = Arc::clone(&ctx);
                     }
-                    changerFond(couleur: Type::Texte): Type::Nul => {
+                    dessinerFond(couleur: Type::Texte): Type::Nul => {
                         let couleur = couleur.as_texte().unwrap();
 
                         let color = get_couleur(couleur);

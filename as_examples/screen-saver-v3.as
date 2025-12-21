@@ -4,11 +4,11 @@ utiliser Aléatoire
 structure Carré
   x: entier
   y: entier
-  l: entier = 50
-  h: entier = 50
+  l: entier = 20
+  h: entier = 20
   couleur: texte
   vel: décimal = 5
-  mov: liste<décimal> = [Aléatoire.choix([-5, 5]), Aléatoire.choix([-5, 5])]
+  mov: liste<décimal> = [Aléatoire.choix([-2, 2]), Aléatoire.choix([-2, 2])]
 fin structure
 
 implémentation Carré
@@ -71,7 +71,7 @@ implémentation Carré
           autre.mov[0] *= -1.0
           
           # Résolution : on pousse un peu pour séparer
-          var overlap : entier = (inst.l / 2 + autre.l / 2) - entier(abs(delta_x))
+          var overlap : entier = ((inst.l / 2 + autre.l / 2) - entier(abs(delta_x))) * 2
           si delta_x > 0 alors inst.x += overlap 
           sinon inst.x -= overlap
       sinon
@@ -80,7 +80,7 @@ implémentation Carré
           autre.mov[1] *= -1.0
           
           # Résolution : on pousse un peu pour séparer
-          var overlap : entier = (inst.h / 2 + autre.h / 2) - entier(abs(delta_y))
+          var overlap : entier = ((inst.h / 2 + autre.h / 2) - entier(abs(delta_y))) * 2
           si delta_y > 0 alors inst.y += overlap 
           sinon inst.y -= overlap
       fin si
@@ -92,8 +92,10 @@ var couleurs = ["bleu", "rouge", "orange", "vert", "blanc"]
 var carrés: liste<Carré> = []
 
 fonction init()
-  pour chaque i dans suite(0, 5) faire
-    carrés.ajouter(Carré.créer(i * 75, i * 75, couleurs[i % tailleDe(couleurs)]))
+  var nb = 30
+  var div = 800 / nb
+  pour chaque i dans suite(0, nb) faire
+    carrés.ajouter(Carré.créer(i * 30 + i * div, i * 30 + i * div, couleurs[i % tailleDe(couleurs)]))
   fin pour
 fin fonction
 
@@ -108,7 +110,7 @@ fonction update()
 fin fonction
 
 fonction dessiner()
-  Graphique.changerFond("noir")
+  Graphique.dessinerFond("noir")
   pour chaque carré dans carrés faire
     carré.dessiner()
   fin pour
