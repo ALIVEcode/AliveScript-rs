@@ -13,8 +13,8 @@ use crate::{
         bytecode::{BinCompcode, BinOpcode, JUMP_OFFSET, Opcode, instructions_to_string},
         obj::{ArcUpvalue, CallFrame, Function, Upvalue, UpvalueLocation, UpvalueSpec, Value},
         value::{
-            ASField, ASModule, ASObjet, ArcClosureInst, ArcClosureProto, ArcModule, ArcStructure,
-            ClosureInst, ClosureProto, ModuleProto, NativeMethod,
+            ASDict, ASField, ASModule, ASObjet, ArcClosureInst, ArcClosureProto, ArcModule,
+            ArcStructure, ClosureInst, ClosureProto, ModuleProto, NativeMethod,
         },
     },
     runtime::err::RuntimeError,
@@ -601,11 +601,57 @@ impl VM {
                     }
                     self.push(Value::Liste(Arc::new(RwLock::new(lst.into()))).into());
                 }
+                Opcode::NewDict => {
+                    let nb_el = fnc.code[frame.ip];
+                    frame.ip += 1;
+
+                    let mut members = HashMap::with_capacity(nb_el as usize);
+                    for _ in 0..nb_el {
+                        let field_name = self.pop().unwrap();
+                        let field_value = self.pop().unwrap();
+                        members.insert(field_name.to_string(), field_value);
+                    }
+
+                    self.push(Value::Dict(Arc::new(RwLock::new(ASDict { members }))).into());
+                }
                 Opcode::GetItem => {
                     let slice = self.pop().unwrap();
                     let obj = self.pop().unwrap();
 
                     let result = match (obj, slice) {
+                        (Value::Dict(d), Value::Texte(txt)) => {
+                            let d = d.read().unwrap();
+                            let Some(member) = d.members.get(&txt) else {
+                                return Err(RuntimeError::generic_err(format!(
+                                    "Erreur de clé. La clé {} n'existe pas dans le dictionnaire.",
+                                    Value::Texte(txt).repr()
+                                )));
+                            };
+
+                            member.clone()
+                        }
+                        (Value::Dict(d), Value::Entier(i)) => {
+                            let d = d.read().unwrap();
+                            let Some(member) = d.members.get(&i.to_string()) else {
+                                return Err(RuntimeError::generic_err(format!(
+                                    "Erreur de clé. La clé {} n'existe pas dans le dictionnaire.",
+                                    Value::Entier(i).repr()
+                                )));
+                            };
+
+                            member.clone()
+                        }
+                        (Value::Dict(d), Value::Decimal(f)) => {
+                            let d = d.read().unwrap();
+                            let Some(member) = d.members.get(&f.to_string()) else {
+                                return Err(RuntimeError::generic_err(format!(
+                                    "Erreur de clé. La clé {} n'existe pas dans le dictionnaire.",
+                                    Value::Decimal(f).repr()
+                                )));
+                            };
+
+                            member.clone()
+                        }
                         (Value::Liste(lst), Value::Entier(i)) => {
                             let lst = lst.read().unwrap();
                             let i = if i < 0 { lst.len() as i64 + i } else { i };
@@ -698,6 +744,18 @@ impl VM {
                     let value = self.pop().unwrap();
 
                     match (obj, slice) {
+                        (Value::Dict(d), Value::Texte(t)) => {
+                            let mut dict = d.write().unwrap();
+                            dict.members.insert(t, value);
+                        }
+                        (Value::Dict(d), Value::Entier(i)) => {
+                            let mut dict = d.write().unwrap();
+                            dict.members.insert(i.to_string(), value);
+                        }
+                        (Value::Dict(d), Value::Decimal(f)) => {
+                            let mut dict = d.write().unwrap();
+                            dict.members.insert(f.to_string(), value);
+                        }
                         (Value::Liste(lst), Value::Entier(i)) => {
                             let mut lst = lst.write().unwrap();
                             let i = if i < 0 { lst.len() as i64 + i } else { i };
@@ -838,6 +896,33 @@ impl VM {
                                 return Err(RuntimeError::invalid_field(&module.name, &field_name));
                             }
                         }
+                        Value::Dict(d) => {
+                            let dict = d.read().unwrap();
+                            if let Some(member) = dict.members.get(&field_name) {
+                                self.push(member.clone());
+                            } else {
+                                drop(dict);
+                                let module = self.get_std_module("Dict");
+                                let module = module.read().unwrap();
+                                if let Some(ASField {
+                                    value: Value::Function(Function::NativeFunction(f)),
+                                    ..
+                                }) = module.members.get(&field_name)
+                                {
+                                    self.push(Value::Function(Function::NativeMethod(
+                                        NativeMethod {
+                                            func: f.clone(),
+                                            inst_value: Box::new(Value::Dict(d)),
+                                        },
+                                    )))
+                                } else {
+                                    return Err(RuntimeError::invalid_field(
+                                        &module.name,
+                                        &field_name,
+                                    ));
+                                }
+                            }
+                        }
                         o => {
                             return Err(RuntimeError::type_error(format!(
                                 "impossible d'accéder à un champs sur une valeur de type '{}'",
@@ -876,6 +961,10 @@ impl VM {
                             )));
                         }
                         Value::Module(m) => m.write().unwrap().set_member(&field_name, value)?,
+                        Value::Dict(d) => {
+                            let mut dict = d.write().unwrap();
+                            dict.members.insert(field_name, value);
+                        }
                         o => {
                             return Err(RuntimeError::type_error(format!(
                                 "impossible de changer le champs d'une valeur de type '{}'",

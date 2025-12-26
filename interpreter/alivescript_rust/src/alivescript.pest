@@ -322,7 +322,9 @@ essayer     = @{ "essayer" ~ !IdentChar }
 finEssayer  = @{ "fin" ~ WHITESPACE+ ~ "essayer" }
 
 List = { "[" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE* ~ "]" }
-Dict = { "{" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE* ~ "}" }
+Dict = { "{" ~ NEWLINE* ~ (DictMember ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ DictMember? ~ NEWLINE* ~ "}" }
+
+DictMember = { (#key = Ident | Lit | "[" ~ Expr ~ "]") ~ ":" ~ (#val = Expr) }
 
 Callable = {
     (Lit | List | Dict | StructInit | DebutBloc | Ident | "(" ~ NEWLINE* ~ Expr ~ NEWLINE* ~ ")") ~ (AccessProp)*

@@ -684,6 +684,28 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 }
                 self.borrow_mut().code.emit_new_list(nb_el);
             }
+            Rule::Dict => {
+                let mut nb_el = 0;
+                for member in primary.into_inner() {
+                    let inner_member = member.into_inner();
+                    let value = inner_member.find_first_tagged("val").expect("A value");
+                    self.parse_top_expr(value)?;
+
+                    let key = inner_member.find_first_tagged("key").expect("A key");
+                    match key.as_rule() {
+                        Rule::Expr | Rule::Lit => {
+                            _ = self.parse_top_expr(key)?;
+                        }
+                        Rule::Ident => {
+                            self.borrow_mut()
+                                .push_const(Value::Texte(key.as_str().to_string()));
+                        }
+                        _ => unreachable!("dict key: {:?}", key.as_rule()),
+                    };
+                    nb_el += 1;
+                }
+                self.borrow_mut().code.emit_new_dict(nb_el);
+            }
 
             Rule::Expr => {
                 self.parse_expr(primary.into_inner())?;

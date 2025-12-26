@@ -1,10 +1,11 @@
+use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub};
 use std::sync::{Arc, RwLock};
 
 use crate::compiler::value::{
-    ArcClosureInst, ArcClosureMethod, ArcClosureProto, ArcModule, ArcNativeObjet, ArcObjet,
-    ArcStructure, Closure, NativeFunction, NativeMethod, NativeObjet, Type,
+    ArcClosureInst, ArcClosureMethod, ArcClosureProto, ArcDict, ArcModule, ArcNativeObjet,
+    ArcObjet, ArcStructure, Closure, NativeFunction, NativeMethod, NativeObjet, Type,
 };
 use crate::runtime::err::RuntimeError;
 use crate::runtime::vm::VM;
@@ -21,6 +22,7 @@ pub enum Value {
     Texte(String),
     Function(Function),
     Liste(Arc<RwLock<Vec<Value>>>),
+    Dict(ArcDict),
     TypeObj(Type),
     Structure(ArcStructure),
     Objet(ArcObjet),
@@ -63,6 +65,26 @@ impl Value {
                     .reduce(|t1, t2| Type::union_of(t1, t2))
                     .unwrap_or(Type::Tout),
             )),
+            V::Dict(d) => Type::Dict(
+                Box::new(
+                    Type::Texte, // d.read()
+                                 //     .unwrap()
+                                 //     .members
+                                 //     .keys()
+                                 // .map(|v| v.get_type())
+                                 // .reduce(|t1, t2| Type::union_of(t1, t2))
+                                 // .unwrap_or(Type::Tout),
+                ),
+                Box::new(
+                    d.read()
+                        .unwrap()
+                        .members
+                        .values()
+                        .map(|v| v.get_type())
+                        .reduce(|t1, t2| Type::union_of(t1, t2))
+                        .unwrap_or(Type::Tout),
+                ),
+            ),
             V::Function(..) => Type::Fonction,
             V::TypeObj(..) => Type::Type,
             V::Structure(..) => Type::Type,
@@ -221,6 +243,16 @@ impl Display for Value {
                     .unwrap()
                     .iter()
                     .map(|val| val.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Value::Dict(vals) => format!(
+                "{{{}}}",
+                vals.read()
+                    .unwrap()
+                    .members
+                    .iter()
+                    .map(|(k, v)| format!("{:?}: {}", k, v.repr()))
                     .collect::<Vec<_>>()
                     .join(", ")
             ),

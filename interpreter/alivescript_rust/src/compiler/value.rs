@@ -21,6 +21,12 @@ pub type ArcObjet = Arc<RwLock<ASObjet>>;
 pub type ArcClosureMethod = Arc<RwLock<ClosureMethod>>;
 pub type ArcModule = Arc<RwLock<ASModule>>;
 pub type ArcNativeObjet = Arc<dyn NativeObjet>;
+pub type ArcDict = Arc<RwLock<ASDict>>;
+
+#[derive(Debug, Clone)]
+pub struct ASDict {
+    pub members: HashMap<String, Value>,
+}
 
 #[derive(Debug, Clone)]
 pub struct ASField {
@@ -504,6 +510,7 @@ pub enum Type {
     Texte,
 
     Liste(Box<Type>),
+    Dict(Box<Type>, Box<Type>),
 
     Fonction,
 
@@ -532,6 +539,10 @@ impl StructType {
 impl Type {
     pub fn liste_tout() -> Self {
         Self::Liste(Box::new(Type::Tout))
+    }
+
+    pub fn dict_tout() -> Self {
+        Self::Dict(Box::new(Type::Tout), Box::new(Type::Tout))
     }
 
     pub fn with_type_args(&self, args: Vec<Type>) -> Result<Type, CompilationErrorKind> {
@@ -634,6 +645,10 @@ impl Type {
                 arr.iter().all(|el| Self::type_match(el, t))
             }
 
+            (Type::Dict(k1, v1), Type::Dict(k2, v2)) => {
+                Self::type_match(k1, k2) && Self::type_match(v1, v2)
+            }
+
             (Type::Array(types1), Type::Array(types2)) => {
                 if types1.len() != types2.len() {
                     return false;
@@ -691,6 +706,7 @@ impl Display for Type {
             B::Decimal => "décimal".into(),
             B::Booleen => "booléen".into(),
             B::Texte => "texte".into(),
+            B::Dict(k, v) => format!("dict<{}, {}>", k, v),
             B::Liste(t) => format!("liste<{}>", t),
             B::Fonction => "fonction".into(),
             B::Union(types) => types
@@ -731,7 +747,7 @@ pub trait NativeObjet: Debug + Any {
         ))
     }
 
-    fn as_any(self: Arc<Self>) -> Arc<dyn Any>; 
+    fn as_any(self: Arc<Self>) -> Arc<dyn Any>;
 
     fn display(&self) -> String {
         format!("objet natif {}", self.type_name())

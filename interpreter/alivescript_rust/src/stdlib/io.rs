@@ -133,6 +133,27 @@ as_module! {
                 }
             },
             as_module_fonction! {
+                lignes(inst: Type::Objet(String::from("ES.Fichier"))): Type::Liste => {
+                    unpack!(Value::NativeObjet(fh) = inst);
+                    let fh = Arc::clone(fh).as_any();
+                    let Some(f) = fh.downcast_ref::<FileHandle>() else {
+                        return Err(RuntimeError::generic_err(format!("Objet invalide (Fichier attendu) {:?}", fh)));
+                    };
+
+                    let mut file = f.file.write().unwrap();
+                    let mut s = String::new();
+                    let result = file.read_to_string(&mut s);
+                    match result {
+                        Ok(_) => {}
+                        Err(err) => return Err(RuntimeError::generic_err(format!(
+                            "Erreur lors de la lecture du fichier:\n{}", err
+                        )))
+                    };
+
+                    Ok(Some(Value::liste(s.lines().map(|line| Value::Texte(line.to_string())).collect())))
+                }
+            },
+            as_module_fonction! {
                 lireTout(inst: Type::Objet(String::from("ES.Fichier"))): Type::Texte => {
                     unpack!(Value::NativeObjet(fh) = inst);
                     let fh = Arc::clone(fh).as_any();

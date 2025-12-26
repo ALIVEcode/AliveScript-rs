@@ -99,6 +99,22 @@ as_module! {
 }
 
 as_module! {
+    module Dict {}
+
+    fn load(&self) {
+        [
+            as_module_fonction! {
+                taille(inst: Type::dict_tout()): Type::Entier => {
+                    unpack!(Value::Dict(d) = inst);
+
+                    Ok(Some(Value::Entier(d.read().unwrap().members.len() as i64)))
+                }
+            },
+        ]
+    }
+}
+
+as_module! {
     module Aleatoire as "Aléatoire" {}
 
     fn load(&self) {
@@ -167,6 +183,7 @@ pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
 
     stdlib.push(Arc::new(Texte {}));
     stdlib.push(Arc::new(Liste {}));
+    stdlib.push(Arc::new(Dict {}));
     stdlib.push(Arc::new(Test {}));
     stdlib.push(Arc::new(Systeme {}));
     stdlib.push(Arc::new(Aleatoire {}));

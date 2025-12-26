@@ -88,6 +88,13 @@ pub enum Opcode {
     /// 3. it pushes the list on the stack
     NewList,
 
+    /// arg: nb_elements
+    /// stack: `[el_n_value, el_n_name, ..., el_2_value, el_2_name, el_1_value, el_1_name]`
+    /// 1. it pops the name and the value `nb_elements` times
+    /// 2. it creates a new dict
+    /// 3. it pushes the dict on the stack
+    NewDict,
+
     /// stack: `[obj, item]`
     /// 1. pops the item
     /// 2. pops the obj
@@ -191,6 +198,7 @@ impl Opcode {
             Opcode::JumpIfFalse => "JUMP_IF_FALSE",
             Opcode::JumpTest => "JUMP_TEST",
             Opcode::NewList => "NEW_LIST",
+            Opcode::NewDict => "NEW_DICT",
             Opcode::GetItem => "GET_ITEM",
             Opcode::SetItem => "SET_ITEM",
             Opcode::NewStruct => "NEW_STRUCT",
@@ -214,6 +222,7 @@ impl Opcode {
             | Opcode::GetGlobal
             | Opcode::SetGlobal
             | Opcode::NewList
+            | Opcode::NewDict
             | Opcode::NewStruct => 1,
 
             Opcode::Read => 0,
@@ -526,6 +535,11 @@ impl Instructions {
 
     pub fn emit_new_list(&mut self, nb_el: OpcodeByteSize) {
         self.emit_opcode(Opcode::NewList);
+        self.emit_byte(nb_el);
+    }
+
+    pub fn emit_new_dict(&mut self, nb_el: OpcodeByteSize) {
+        self.emit_opcode(Opcode::NewDict);
         self.emit_byte(nb_el);
     }
 
