@@ -1296,6 +1296,36 @@ impl VM {
                         frame.ip = (frame.ip as i16 + lire_sinon_dist) as usize;
                     }
                 }
+                Opcode::TryCall => {
+                    let nb_args = fnc.code[frame.ip] as usize;
+                    frame.ip += 1;
+
+                    let catch_dist = fnc.code[frame.ip] as i16 - JUMP_OFFSET;
+                    frame.ip += 1;
+
+                    let Value::Function(func) = self.peek(nb_args).clone() else {
+                        unreachable!()
+                    };
+
+                    let mut args = vec![];
+                    for _ in 0..nb_args {
+                        args.push(self.pop().unwrap());
+                    }
+
+                    // the len w/o the args and the function
+                    let len = self.stack.len() - 1;
+                    let len_frames = self.frames.len();
+
+                    let result = self.run_fn(args, &func);
+
+                    if result.is_err() {
+                        self.stack.truncate(len);
+                        self.frames.truncate(len_frames);
+                        // if the function doesn't work -> go to "sinon"
+                        let frame = self.get_frame().unwrap();
+                        frame.ip = (frame.ip as i16 + catch_dist) as usize;
+                    }
+                }
 
                 Opcode::ForNext => {
                     let iter_var_idx = fnc.code[frame.ip];

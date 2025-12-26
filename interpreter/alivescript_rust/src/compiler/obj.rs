@@ -452,7 +452,7 @@ impl Div for Value {
             (Value::Decimal(x), Value::Entier(y)) => Value::Decimal(x / y as f64),
             (Value::Entier(x), Value::Decimal(y)) => Value::Decimal(x as f64 / y),
             (Value::Decimal(x), Value::Decimal(y)) => Value::Decimal(x / y),
-            (l, r) => Err(RuntimeError::invalid_op("*", l.get_type(), r.get_type()))?,
+            (l, r) => Err(RuntimeError::invalid_op("/", l.get_type(), r.get_type()))?,
         })
     }
 }

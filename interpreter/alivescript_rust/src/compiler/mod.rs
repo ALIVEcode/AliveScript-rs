@@ -17,7 +17,8 @@ use crate::{
     AlivescriptParser, Rule,
     compiler::{
         bytecode::{
-            BinCompcode, BinLogiccode, BinOpcode, Instructions, JUMP_OFFSET, Opcode, UnaryOpcode, instructions_to_string, instructions_to_string_debug
+            BinCompcode, BinLogiccode, BinOpcode, Instructions, JUMP_OFFSET, Opcode, UnaryOpcode,
+            instructions_to_string, instructions_to_string_debug,
         },
         err::{CompilationError, CompilationErrorKind},
         obj::{UpvalueSpec, Value},
@@ -782,7 +783,43 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             }
 
             Rule::EssayerExpr => {
-                self.parse_expr(primary.into_inner())?;
+                let span = primary.as_span();
+                let mut inner = primary.into_inner();
+                {
+                    let cmp = Compiler::new_closure(
+                        inner.as_str(),
+                        None,
+                        Rc::clone(self),
+                        0,
+                        Type::Tout.into(),
+                    );
+
+                    let default_closure = Value::closure(cmp.compile_lambda_expr(
+                        inner.find_first_tagged("expr").unwrap().into_inner(),
+                    )?);
+
+                    let closure_idx = self.borrow_mut().get_or_add_const(default_closure);
+                    self.borrow_mut().code.emit_closure(closure_idx);
+                }
+
+                let mut jump_to_sinon = 0;
+                let jump_idx = self.borrow_mut().code.inner().len() + 2;
+                self.borrow_mut().code.emit_try_call(0, 0);
+                self.borrow_mut().jump_stack.push(jump_idx);
+                jump_to_sinon = self.borrow_mut().jump_stack.len() - 1;
+
+                let skip_sinon_jmp = self.borrow_mut().push_jump();
+                self.borrow_mut().patch_jump(jump_to_sinon);
+                let Some(essayer_sinon_body) = inner.find_first_tagged("essayer_body") else {
+                    return Err(CompilationErrorKind::generic_error("Syntax error").to_error(span));
+                };
+                if essayer_sinon_body.as_rule() == Rule::StmtBody {
+                    self.build_ast_stmts(essayer_sinon_body.into_inner());
+                    self.borrow_mut().code.pop_if_op_is(Opcode::Pop);
+                } else {
+                    self.parse_top_expr(essayer_sinon_body);
+                }
+                self.borrow_mut().patch_jump(skip_sinon_jmp);
             }
 
             Rule::FnExpr => {
@@ -1341,6 +1378,17 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         PRATT_TYPE_PARSER
             .map_primary(|primary| match primary.as_rule() {
                 Rule::TypeExpr => Rc::clone(self).parse_type(primary.into_inner()),
+                // TODO: proper handling of qualified type names
+                Rule::QualifiedTypeName => Ok(Type::from_str(primary.as_str())
+                    .map_err(|_| {
+                        PestError::new_from_span(
+                            PestErrorVariant::CustomError {
+                                message: format!("Unknown type {}", primary.as_str()),
+                            },
+                            primary.as_span(),
+                        )
+                    })?
+                    .into()),
                 Rule::Ident => Ok(Type::from_str(primary.as_str())
                     .map_err(|_| {
                         PestError::new_from_span(

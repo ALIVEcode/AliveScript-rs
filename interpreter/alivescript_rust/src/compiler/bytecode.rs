@@ -5,6 +5,8 @@ use thiserror::Error;
 
 use crate::compiler::{Compiler, bitmasks::BitArray, utils::format_table};
 
+type OpcodeByteSize = u16;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
 #[repr(u16)]
 pub enum Opcode {
@@ -34,6 +36,16 @@ pub enum Opcode {
     ReadCall,
     /// stack: `[msg, func]`
     ReadCallWithMsg,
+
+    /// args: jump_to_catch_dist, nb_func_args
+    /// stack: `[func, ...args]`
+    /// 1. it calls the func with `nb_func_args`
+    /// 2. if the call fails:
+    ///     restore the stack to what it was
+    ///     jump `jump_to_catch_dist`
+    /// 3. else:
+    ///     continue execution (do nothing)
+    TryCall,
 
     GetUpvalue,
     SetUpvalue,
@@ -162,6 +174,7 @@ impl Opcode {
             Opcode::ReadWithMsg => "READ_MSG",
             Opcode::ReadCall => "READ_CALL",
             Opcode::ReadCallWithMsg => "READ_CALL_MSG",
+            Opcode::TryCall => "TRY_CALL",
             Opcode::GetUpvalue => "GET_UPVAL",
             Opcode::SetUpvalue => "SET_UPVAL",
             Opcode::GetLocal => "GET_LOCAL",
@@ -191,7 +204,7 @@ impl Opcode {
         }
     }
 
-    pub const fn nargs(&self) -> u16 {
+    pub const fn nargs(&self) -> OpcodeByteSize {
         match self {
             Opcode::Constant
             | Opcode::GetUpvalue
@@ -211,6 +224,8 @@ impl Opcode {
             Opcode::ReadCall => 1,
             // stack: [msg, func]
             Opcode::ReadCallWithMsg => 1,
+
+            Opcode::TryCall => 2,
 
             Opcode::Jump | Opcode::JumpIfFalse => 1,
             Opcode::JumpTest => 2,
@@ -242,12 +257,12 @@ impl Opcode {
 
 #[derive(Clone)]
 pub struct Instructions {
-    insts: Vec<u16>,
+    insts: Vec<OpcodeByteSize>,
     opcodes: Vec<Opcode>,
     cursor: Option<usize>,
 }
 
-pub fn instructions_to_string(insts: &[u16]) -> Vec<String> {
+pub fn instructions_to_string(insts: &[OpcodeByteSize]) -> Vec<String> {
     let mut instructions = vec![];
     let mut iter = insts.iter();
 
@@ -315,7 +330,10 @@ pub fn instructions_to_string(insts: &[u16]) -> Vec<String> {
     instructions
 }
 
-pub fn instructions_to_string_debug(insts: &[u16], compiler: Rc<RefCell<Compiler>>) -> Vec<String> {
+pub fn instructions_to_string_debug(
+    insts: &[OpcodeByteSize],
+    compiler: Rc<RefCell<Compiler>>,
+) -> Vec<String> {
     let mut instructions = vec![];
     let mut iter = insts.iter();
 
@@ -363,6 +381,16 @@ pub fn instructions_to_string_debug(insts: &[u16], compiler: Rc<RefCell<Compiler
                 inst_str.pop();
                 inst_str.push(format!("{}", (*idx as i16 - JUMP_OFFSET)));
                 // inst_str.push(format!("(to {})", op_i + idx));
+            }
+
+            Opcode::TryCall => {
+                let nargs = args[0];
+                let idx = args[1];
+
+                inst_str.pop();
+                inst_str.pop();
+                inst_str.push(format!("{}", nargs));
+                inst_str.push(format!("{}", (*idx as i16 - JUMP_OFFSET)));
             }
 
             Opcode::JumpTest => {
@@ -429,11 +457,11 @@ impl Instructions {
         self.insts.len()
     }
 
-    pub fn inner(&self) -> &Vec<u16> {
+    pub fn inner(&self) -> &Vec<OpcodeByteSize> {
         &self.insts
     }
 
-    pub fn raw_patch(&mut self, idx: usize, val: u16) {
+    pub fn raw_patch(&mut self, idx: usize, val: OpcodeByteSize) {
         self.insts[idx] = val
     }
 
@@ -444,7 +472,7 @@ impl Instructions {
         self.cursor = None
     }
 
-    fn emit_byte(&mut self, b: u16) {
+    fn emit_byte(&mut self, b: OpcodeByteSize) {
         if let Some(cursor) = &mut self.cursor {
             self.insts.insert(*cursor, b.into());
             *cursor += 1;
@@ -483,7 +511,7 @@ impl Instructions {
         self.opcodes.last().is_some_and(|lo| *lo == op)
     }
 
-    pub fn emit_const(&mut self, idx: u16) {
+    pub fn emit_const(&mut self, idx: OpcodeByteSize) {
         self.emit_opcode(Opcode::Constant);
         self.emit_byte(idx);
     }
@@ -496,12 +524,12 @@ impl Instructions {
         self.emit_opcode(Opcode::Not);
     }
 
-    pub fn emit_new_list(&mut self, nb_el: u16) {
+    pub fn emit_new_list(&mut self, nb_el: OpcodeByteSize) {
         self.emit_opcode(Opcode::NewList);
         self.emit_byte(nb_el);
     }
 
-    pub fn emit_new_struct(&mut self, nb_el: u16) {
+    pub fn emit_new_struct(&mut self, nb_el: OpcodeByteSize) {
         self.emit_opcode(Opcode::NewStruct);
         self.emit_byte(nb_el);
     }
@@ -514,62 +542,62 @@ impl Instructions {
         self.emit_opcode(Opcode::SetItem);
     }
 
-    pub fn emit_get_attr(&mut self, const_idx: u16) {
+    pub fn emit_get_attr(&mut self, const_idx: OpcodeByteSize) {
         self.emit_opcode(Opcode::GetField);
         self.emit_byte(const_idx);
     }
 
-    pub fn emit_set_field(&mut self, const_idx: u16) {
+    pub fn emit_set_field(&mut self, const_idx: OpcodeByteSize) {
         self.emit_opcode(Opcode::SetField);
         self.emit_byte(const_idx);
     }
 
-    pub fn emit_set_method(&mut self, name_const_idx: u16) {
+    pub fn emit_set_method(&mut self, name_const_idx: OpcodeByteSize) {
         self.emit_opcode(Opcode::SetMethod);
         self.emit_byte(name_const_idx);
     }
 
-    pub fn emit_set_default_field(&mut self, name_const_idx: u16) {
+    pub fn emit_set_default_field(&mut self, name_const_idx: OpcodeByteSize) {
         self.emit_opcode(Opcode::SetDefaultField);
         self.emit_byte(name_const_idx);
     }
 
-    pub fn emit_closure(&mut self, const_idx: u16) {
+    pub fn emit_closure(&mut self, const_idx: OpcodeByteSize) {
         self.emit_opcode(Opcode::Closure);
         self.emit_byte(const_idx);
     }
 
-    pub fn emit_get_upvalue(&mut self, idx: u16) {
+    pub fn emit_get_upvalue(&mut self, idx: OpcodeByteSize) {
         self.emit_opcode(Opcode::GetUpvalue);
         self.emit_byte(idx);
     }
 
-    pub fn emit_set_upvalue(&mut self, idx: u16) {
+    pub fn emit_set_upvalue(&mut self, idx: OpcodeByteSize) {
         self.emit_opcode(Opcode::SetUpvalue);
         self.emit_byte(idx);
     }
 
-    pub fn emit_get_local(&mut self, slot: u16) {
+    pub fn emit_get_local(&mut self, slot: OpcodeByteSize) {
         self.emit_opcode(Opcode::GetLocal);
         self.emit_byte(slot);
     }
 
-    pub fn emit_set_local(&mut self, slot: u16) {
+    pub fn emit_set_local(&mut self, slot: OpcodeByteSize) {
         self.emit_opcode(Opcode::SetLocal);
         self.emit_byte(slot);
     }
 
-    pub fn emit_get_global(&mut self, const_name_slot: u16) {
+    pub fn emit_get_global(&mut self, const_name_slot: OpcodeByteSize) {
         self.emit_opcode(Opcode::GetGlobal);
         self.emit_byte(const_name_slot);
     }
 
-    pub fn emit_set_global(&mut self, const_name_slot: u16) {
+    pub fn emit_set_global(&mut self, const_name_slot: OpcodeByteSize) {
         self.emit_opcode(Opcode::SetGlobal);
         self.emit_byte(const_name_slot);
     }
 
-    pub fn emit_call(&mut self, nargs: u16) {
+    pub fn emit_call(&mut self, nargs: OpcodeByteSize) {
         self.emit_opcode(Opcode::Call);
         self.emit_byte(nargs);
     }
@@ -588,33 +616,33 @@ impl Instructions {
 
     pub fn emit_binop(&mut self, op: BinOpcode) {
         self.emit_opcode(Opcode::BinOp);
-        // The BinOpcode u16 value represent the operation done
-        self.emit_byte(op as u16);
+        // The BinOpcode OpcodeByteSize value represent the operation done
+        self.emit_byte(op as OpcodeByteSize);
     }
 
     pub fn emit_bincomp(&mut self, op: BinCompcode) {
         self.emit_opcode(Opcode::BinComp);
-        // The BinOpcode u16 value represent the operation done
-        self.emit_byte(op as u16);
+        // The BinOpcode OpcodeByteSize value represent the operation done
+        self.emit_byte(op as OpcodeByteSize);
     }
 
     pub fn emit_jump(&mut self, target: i16) {
         self.emit_opcode(Opcode::Jump);
-        self.emit_byte((target + JUMP_OFFSET) as u16);
+        self.emit_byte((target + JUMP_OFFSET) as OpcodeByteSize);
     }
 
     pub fn emit_jump_test(&mut self, target: i16, cond: bool) {
         self.emit_opcode(Opcode::JumpTest);
-        self.emit_byte((target + JUMP_OFFSET) as u16);
-        self.emit_byte(cond as u16);
+        self.emit_byte((target + JUMP_OFFSET) as OpcodeByteSize);
+        self.emit_byte(cond as OpcodeByteSize);
     }
 
     pub fn emit_jump_if_false(&mut self, target: i16) {
         self.emit_opcode(Opcode::JumpIfFalse);
-        self.emit_byte((target + JUMP_OFFSET) as u16);
+        self.emit_byte((target + JUMP_OFFSET) as OpcodeByteSize);
     }
 
-    pub fn emit_load_module(&mut self, module_name_const: u16) {
+    pub fn emit_load_module(&mut self, module_name_const: OpcodeByteSize) {
         self.emit_opcode(Opcode::LoadModule);
         self.emit_byte(module_name_const);
     }
@@ -626,7 +654,7 @@ impl Instructions {
             self.emit_opcode(Opcode::Read);
         }
     }
-    pub fn emit_read_call(&mut self, jmp: u16, with_msg: bool) {
+    pub fn emit_read_call(&mut self, jmp: OpcodeByteSize, with_msg: bool) {
         if with_msg {
             self.emit_opcode(Opcode::ReadCallWithMsg);
         } else {
@@ -634,8 +662,13 @@ impl Instructions {
         }
         self.emit_byte(jmp);
     }
+    pub fn emit_try_call(&mut self, jmp: OpcodeByteSize, nargs: OpcodeByteSize) {
+        self.emit_opcode(Opcode::TryCall);
+        self.emit_byte(nargs);
+        self.emit_byte(jmp);
+    }
 
-    pub fn emit_for_next(&mut self, first_var_slot: u16) {
+    pub fn emit_for_next(&mut self, first_var_slot: OpcodeByteSize) {
         self.emit_opcode(Opcode::ForNext);
         self.emit_byte(first_var_slot);
     }
@@ -646,7 +679,7 @@ pub const JUMP_OFFSET: i16 = (1 << 8) - 1;
 #[derive(Debug, Error)]
 pub enum InstructionError {
     #[error("Invalid opcode: {0}")]
-    InvalidOpcode(u16),
+    InvalidOpcode(OpcodeByteSize),
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

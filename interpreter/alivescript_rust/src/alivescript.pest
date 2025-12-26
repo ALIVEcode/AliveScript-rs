@@ -317,7 +317,9 @@ FnExpr = {
     PUSH(fonction) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ #body = (":" ~ Expr ~ DROP | eos ~ StmtBody ~ "fin" ~ POP)
 }
 
-EssayerExpr = { "essayer" ~ Expr }
+EssayerExpr =  { essayer ~ (#expr = Expr) ~ "sinon" ~ ((#essayer_body = Expr) | eos ~ (#essayer_body = StmtBody) ~ finEssayer) }
+essayer     = @{ "essayer" ~ !IdentChar }
+finEssayer  = @{ "fin" ~ WHITESPACE+ ~ "essayer" }
 
 List = { "[" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE* ~ "]" }
 Dict = { "{" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE* ~ "}" }
@@ -340,18 +342,23 @@ Lit = {
   | Null
 }
 
-TypeExpr     =  { typePrefix? ~ typeTerm ~ typePostfix? ~ (typeInfix ~ typePrefix? ~ typeTerm ~ typePostfix?)* }
-typeTerm     = _{
-    Ident
+TypeExpr =  { typePrefix? ~ typeTerm ~ typePostfix? ~ (typeInfix ~ typePrefix? ~ typeTerm ~ typePostfix?)* }
+typeTerm = _{
+    QualifiedTypeName
+  | Ident
   | TypeFonction
   | Lit
   | "(" ~ TypeExpr ~ ")"
 }
-TypeFonction =  { fonction ~ ("(" ~ (TypeExpr ~ ",")* ~ TypeExpr? ~ ")" ~ ("->" ~ TypeExpr)?)? }
-typeInfix    = _{ Pipe }
-typePrefix   = _{ "@" }
-typePostfix  = _{ TypeArgs }
-TypeArgs     =  { "<" ~ TypeExpr ~ ("," ~ TypeExpr)* ~ ","? ~ ">" }
+
+QualifiedTypeName =  {
+    Ident ~ "." ~ Ident ~ ("." ~ Ident)*
+}
+TypeFonction      =  { fonction ~ ("(" ~ (TypeExpr ~ ",")* ~ TypeExpr? ~ ")" ~ ("->" ~ TypeExpr)?)? }
+typeInfix         = _{ Pipe }
+typePrefix        = _{ "@" }
+typePostfix       = _{ TypeArgs }
+TypeArgs          =  { "<" ~ TypeExpr ~ ("," ~ TypeExpr)* ~ ","? ~ ">" }
 
 Bool      = @{ ("vrai" | "faux") ~ !IdentChar }
 Text      = @{ PUSH("\"" | "'") ~ ("\\" ~ PEEK | !PEEK ~ ANY)* ~ POP }
