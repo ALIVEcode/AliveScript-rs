@@ -264,3 +264,22 @@ depose(50)
 Test.affirmerÉgaux(voir(), 150, "Deux closures partageant la même variable ont échoué")
 
 afficher "Tests des closures intriquées et de l'état partagé terminés !"
+
+var x = essayer "a" / 2 sinon 12
+Test.affirmerÉgaux(x, 12, "Essayer erreur avec sinon expression")
+
+
+var y = essayer "a" / 2 sinon 
+  voir()
+  44
+fin essayer
+
+Test.affirmerÉgaux(y, 44, "Essayer erreur avec sinon bloc")
+
+var z = essayer 2 / 2 sinon 
+  44
+fin essayer
+
+Test.affirmerÉgaux(z, 1.0, "Essayer valide avec sinon bloc")
+
+afficher "Tests des blocs 'essayer' terminés !"

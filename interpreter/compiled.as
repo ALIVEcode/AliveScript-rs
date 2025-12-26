@@ -130,3 +130,15 @@ pour a, b dans [1, 2], [2, 3], [1, 5]
   si b == 3 alors continuer
   afficher b
 fin pour
+
+var x = essayer "a" / 2 sinon 12
+
+afficher x
+
+
+var y = essayer "a" / 2 sinon 
+  afficher "oups"
+  44
+fin essayer
+
+afficher y

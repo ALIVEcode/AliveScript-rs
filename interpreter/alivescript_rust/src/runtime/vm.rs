@@ -1318,12 +1318,19 @@ impl VM {
 
                     let result = self.run_fn(args, &func);
 
-                    if result.is_err() {
-                        self.stack.truncate(len);
-                        self.frames.truncate(len_frames);
-                        // if the function doesn't work -> go to "sinon"
-                        let frame = self.get_frame().unwrap();
-                        frame.ip = (frame.ip as i16 + catch_dist) as usize;
+                    match result {
+                        Err(_) => {
+                            self.stack.truncate(len);
+                            self.frames.truncate(len_frames);
+                            // if the function doesn't work -> go to "sinon"
+                            let frame = self.get_frame().unwrap();
+                            frame.ip = (frame.ip as i16 + catch_dist) as usize;
+                        }
+                        Ok(val) => {
+                            // we discard the function
+                            self.pop();
+                            self.push(val);
+                        }
                     }
                 }
 
