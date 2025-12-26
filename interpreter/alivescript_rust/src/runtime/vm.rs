@@ -91,7 +91,7 @@ impl VM {
             .ok_or(RuntimeError::generic_err("no frame"))
     }
 
-    fn get_std_module(&mut self, name: &'static str) -> ArcModule {
+    pub(crate) fn get_std_module(&mut self, name: &'static str) -> ArcModule {
         let _ = self.load_module(name);
 
         Arc::clone(&self.loaded_modules[name])
@@ -782,7 +782,7 @@ impl VM {
                             self.push(val);
                         }
                         Value::NativeObjet(o) => {
-                            let val = o.write().unwrap().get_member(self, &field_name)?;
+                            let val = o.get_member(self, &field_name)?;
                             self.push(val);
                         }
                         Value::Structure(s) => {
@@ -868,7 +868,7 @@ impl VM {
                             ASObjet::set_field(self, o, &field_name, value)?;
                         }
                         Value::NativeObjet(o) => {
-                            o.write().unwrap().set_member(self, &field_name, value)?;
+                            o.set_member(self, &field_name, value)?;
                         }
                         Value::Structure(s) => {
                             return Err(RuntimeError::type_error(format!(

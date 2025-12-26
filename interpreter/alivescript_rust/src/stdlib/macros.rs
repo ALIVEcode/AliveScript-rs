@@ -90,7 +90,7 @@ macro_rules! as_module_fonction {
             $crate::compiler::obj::Value::Function($crate::compiler::obj::Function::NativeFunction($crate::compiler::value::NativeFunction {
                 name: std::sync::Arc::new(String::from(std::stringify!($name))),
                 desc: std::sync::Arc::new($crate::opt_value!($($desc.to_string())?)),
-                func: std::sync::Arc::new(move |_vm: &mut $crate::runtime::vm::VM, args: std::vec::Vec<Value>| {
+                func: std::sync::Arc::new(move |_vm: &mut $crate::runtime::vm::VM, args: std::vec::Vec<$crate::compiler::obj::Value>| {
                     let mut args = std::collections::VecDeque::from_iter(args.iter());
                     $(
                     let $param_name = {

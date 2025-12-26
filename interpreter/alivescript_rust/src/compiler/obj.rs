@@ -67,7 +67,7 @@ impl Value {
             V::TypeObj(..) => Type::Type,
             V::Structure(..) => Type::Type,
             V::Objet(o) => Type::Objet(o.read().unwrap().structure.read().unwrap().name.clone()),
-            V::NativeObjet(o) => Type::Objet(o.read().unwrap().type_name().to_string()),
+            V::NativeObjet(o) => Type::Objet(o.type_name().to_string()),
             V::Module(m) => Type::Module(m.read().unwrap().name.clone()),
         }
     }
@@ -263,7 +263,7 @@ impl Display for Value {
                     .unwrap_or(&"anonyme".to_string())
             ),
             Value::Module(m) => format!("module '{}.as'", m.read().unwrap().name),
-            Value::NativeObjet(o) => o.read().unwrap().display(),
+            Value::NativeObjet(o) => o.display(),
         };
 
         write!(f, "{}", to_str)

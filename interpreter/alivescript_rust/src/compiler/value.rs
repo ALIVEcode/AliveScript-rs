@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
@@ -19,7 +20,7 @@ pub type ArcStructure = Arc<RwLock<ASStructure>>;
 pub type ArcObjet = Arc<RwLock<ASObjet>>;
 pub type ArcClosureMethod = Arc<RwLock<ClosureMethod>>;
 pub type ArcModule = Arc<RwLock<ASModule>>;
-pub type ArcNativeObjet = Arc<RwLock<dyn NativeObjet>>;
+pub type ArcNativeObjet = Arc<dyn NativeObjet>;
 
 #[derive(Debug, Clone)]
 pub struct ASField {
@@ -643,6 +644,7 @@ impl Type {
                     .all(|(t1, t2)| Type::type_match(t1, t2));
             }
 
+            (Type::Objet(o1), Type::Objet(o2)) => o1 == o2,
             (Type::Decimal, Type::Entier) => true,
             _ => false,
         }
@@ -713,16 +715,23 @@ impl Display for Type {
     }
 }
 
-pub trait NativeObjet: Debug {
+pub trait NativeObjet: Debug + Any {
     fn type_name(&self) -> &'static str;
 
-    fn get_member(&mut self, vm: &mut VM, name: &str) -> Result<Value, RuntimeError>;
+    fn get_member(self: Arc<Self>, vm: &mut VM, name: &str) -> Result<Value, RuntimeError>;
 
-    fn set_member(&mut self, vm: &mut VM, name: &str, val: Value) -> Result<(), RuntimeError> {
+    fn set_member(
+        self: Arc<Self>,
+        vm: &mut VM,
+        name: &str,
+        val: Value,
+    ) -> Result<(), RuntimeError> {
         Err(RuntimeError::generic_err(
             "Cet objet ne supporte pas l'affectation",
         ))
     }
+
+    fn as_any(self: Arc<Self>) -> Arc<dyn Any>; 
 
     fn display(&self) -> String {
         format!("objet natif {}", self.type_name())
