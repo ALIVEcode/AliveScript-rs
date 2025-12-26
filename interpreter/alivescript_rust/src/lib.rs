@@ -16,6 +16,8 @@ pub mod runtime;
 
 pub mod cli;
 
+pub mod stdlib;
+
 use pest::Parser;
 use pest_derive::Parser;
 

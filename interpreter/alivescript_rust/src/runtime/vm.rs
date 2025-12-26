@@ -17,11 +17,8 @@ use crate::{
             ClosureInst, ClosureProto, ModuleProto, NativeMethod,
         },
     },
-    runtime::{
-        builtins::BUILTINS,
-        err::RuntimeError,
-        module::{self, LazyModule, get_stdlib},
-    },
+    runtime::err::RuntimeError,
+    stdlib::{LazyModule, builtins::BUILTINS, get_stdlib},
 };
 
 pub const MAX_DEPTH: usize = 2000;
