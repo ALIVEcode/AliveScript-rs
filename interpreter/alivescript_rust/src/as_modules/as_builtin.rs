@@ -1,15 +1,35 @@
+use dyn_fmt::AsStrFormatExt;
 use unindent::Unindent;
 
 use crate::{
     as_cast, as_fonction, as_mod,
-    as_obj::{ASDict, ASErreurType, ASObj, ASPaire, ASType},
-    as_var, call_methode, union_of,
+    as_obj::{ASDict, ASErreur, ASErreurType, ASObj, ASPaire, ASType},
+    as_var, call_methode,
+    data::Data,
+    union_of,
 };
 
 as_mod! {
     BUILTIN_MOD,
     as_fonction! {
-        erreur(msg: ASType::Texte) -> ASType::Nul; {
+        lancer(err: ASType::Erreur) -> ASType::Nul; {
+            as_cast!(ASObj::ASErreur(ref err) = err);
+            Err(err.err_type().clone())
+        }
+    },
+    as_fonction! {
+        Erreur[runner](nom: ASType::Texte, msg: ASType::Texte => ASObj::texte("")) -> ASType::Erreur; {
+            as_cast!(ASObj::ASTexte(ref msg) = msg);
+            as_cast!(ASObj::ASTexte(ref nom) = nom);
+            Ok(Some(ASObj::ASErreur(
+                Box::new(ASErreur::new(
+                    ASErreurType::new_erreur(Some(nom.clone()), msg.clone()), 0, runner.current_file().cloned()
+                ))
+            )))
+        }
+    },
+    as_fonction! {
+        typeErr(msg: ASType::Erreur) -> ASType::Texte; {
             as_cast!(ASObj::ASTexte(ref msg) = msg);
             Err(ASErreurType::new_erreur(None, msg.clone()))
         }
@@ -17,6 +37,12 @@ as_mod! {
     as_fonction! {
         afficherErr(msg: ASType::any()) -> ASType::Nul; {
             eprintln!("{}", msg);
+            Ok(Some(ASObj::ASNul))
+        }
+    },
+    as_fonction! {
+        afficher[runner](msg: ASType::any()) -> ASType::Nul; {
+            runner.send_data(Data::Afficher(msg.to_string()));
             Ok(Some(ASObj::ASNul))
         }
     },
@@ -34,6 +60,15 @@ as_mod! {
                 Some(var) => ASObj::ASTexte(var.get_type().to_string()),
                 None => ASObj::ASNul,
             }))
+        }
+    },
+    as_fonction! {
+        format(template: ASType::Texte, attrs: ASType::liste_tout() => ASObj::liste(vec![])) -> ASType::Texte; {
+            as_cast!(ASObj::ASTexte(template) = template);
+            as_cast!(ASObj::ASListe(attrs) = attrs);
+
+            let result = template.format(attrs.borrow().iter());
+            Ok(Some(ASObj::ASTexte(result)))
         }
     },
     as_fonction! {
@@ -95,7 +130,7 @@ as_mod! {
                 ASObj::ASEntier(_) => obj.clone(),
                 ASObj::ASDecimal(d) => ASObj::ASEntier(d as i64),
                 ASObj::ASTexte(ref s) => {
-                    ASObj::ASEntier(i64::from_str_radix(s, base as u32).map_err(|_| {
+                    ASObj::ASEntier(i64::from_str_radix(s.trim(), base as u32).map_err(|_| {
                         ASErreurType::new_erreur_valeur(Some(format!("\"{}\" ne peut pas se faire convertir en entier", &obj)), obj.clone())
                     })?)
                 }
@@ -117,7 +152,7 @@ as_mod! {
         }
     },
     as_fonction! {
-        liste[runner](obj: ASType::iterable() => ASObj::liste(vec![])) -> ASType::Liste; {
+        liste[runner](obj: ASType::iterable() => ASObj::liste(vec![])) -> ASType::liste_tout(); {
             if let Some(result) = call_methode!(obj.__liste__(), runner) {
                 return result;
             }
@@ -156,7 +191,7 @@ as_mod! {
                     let mut dict = Vec::with_capacity(l.borrow().len());
                     for e in l.borrow().iter() {
                         let ASObj::ASListe(kv) = e else {
-                            return Err(ASErreurType::new_erreur_type(ASType::Liste, e.get_type()));
+                            return Err(ASErreurType::new_erreur_type(ASType::liste_tout(), e.get_type()));
                         };
                         if kv.borrow().len() != 2 {
                             return Err(ASErreurType::new_erreur_valeur(

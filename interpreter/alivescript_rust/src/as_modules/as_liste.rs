@@ -16,13 +16,12 @@ impl Ord for SortableASObj {
     }
 }
 
-impl Eq for SortableASObj {
-}
+impl Eq for SortableASObj {}
 
 as_mod!(
     LISTE_MOD,
     as_fonction! {
-        trier[runner](lst: ASType::Liste, clef: ASType::Fonction => ASObj::ASNul) -> ASType::Liste; {
+        trier[runner](lst: ASType::liste_tout(), clef: ASType::Fonction => ASObj::ASNul) -> ASType::liste_tout(); {
             let env = runner.get_env();
             as_cast!(ASObj::ASListe(lst) = lst);
             let mut lst = lst.as_ref().clone();

@@ -45,7 +45,7 @@ impl InterpretorIO for TestIO {
     }
 }
 
-pub fn run_test<P>(file_path: P, expected: &Vec<Data>)
+pub fn run_test_file<P>(file_path: P, expected: &Vec<Data>)
 where
     P: AsRef<Path>,
 {
@@ -53,6 +53,16 @@ where
 
     let mut test_io = TestIO::default();
     run_script(&script, &mut test_io);
+
+    assert_eq!(test_io.outputs(), expected);
+}
+
+pub fn run_test<P>(script: &str, expected: &Vec<Data>)
+where
+    P: AsRef<Path>,
+{
+    let mut test_io = TestIO::default();
+    run_script(&script.into(), &mut test_io);
 
     assert_eq!(test_io.outputs(), expected);
 }

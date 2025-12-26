@@ -1,0 +1,401 @@
+WHITESPACE = _{ " " | "\t" }
+COMMENT    = _{
+    "(:" ~ (!":)" ~ ANY)* ~ ":)"
+  | "#" ~ (!NEWLINE ~ ANY)* ~ &NEWLINE
+}
+
+Docs = {
+    "(-:" ~ (!":-)" ~ ANY)* ~ ":-)"
+}
+
+eos    = _{ NEWLINE | ";" }
+script = _{ SOI ~ eos* ~ (stmt ~ eos+)* ~ stmt? ~ EOI }
+
+StmtBody = {
+    eos* ~ (stmt ~ eos+)+
+}
+
+stmtBloc = _{
+    UtiliserStmt
+  | DeclStmt
+  | AssignStmt
+  | SiStmt
+  | PourStmt
+  | RepeterStmt
+  | TantQueStmt
+  | TypeStmt
+  | FnDef
+  | StructureDef
+  | ImplDef
+  | subStmt // ~ (si ~ Expr)?
+}
+
+// si = @{ "si" ~ !IdentChar }
+
+stmt = _{
+    stmtBloc
+}
+
+subStmt = _{
+    RetournerStmt
+  | ContinuerStmt
+  | LireStmt
+  | SortirStmt
+  | CommandStmt
+  | Expr
+}
+
+CommandStmt = {
+    Ident ~ !"(" ~ term ~ postfix?
+}
+
+LireStmt    =  {
+    lire ~ (#cast = Callable) ~ In ~ declVarLire ~ ("," ~ #msg = Expr)? ~ LireSinon?
+  | lire ~ declVarLire ~ ("," ~ #msg = Expr)?
+}
+declVarLire =  {
+    (Var? ~ (DeclIdent | DeclIdentList))
+  | (Const ~ (DeclIdent | DeclIdentList))
+}
+LireSinon   =  { ^"sinon" ~ eos+ ~ (#body = StmtBody)? ~ finLire }
+lire        = @{ ^"lire" ~ !IdentChar }
+finLire     = @{ ^"fin" ~ WHITESPACE+ ~ ^"lire" }
+// (Lit | FnCall | DebutBloc | List | Dict | Ident | FnExpr)}
+
+UtiliserStmt    = { ^"utiliser" ~ ((#module = ModuleIdent | #path = Text)) ~ ModuleAlias? ~ UtiliserMembers? }
+ModuleIdent     = { (Ident ~ ("." ~ Ident)*) }
+ModuleAlias     = { ^"alias" ~ Ident | Ident ~ "." }
+UtiliserMembers = { "{" ~ ((#member = Ident) ~ ",")* ~ (#member = Ident)? ~ "}" }
+
+TypeStmt = { ^"type" ~ typeTerm ~ Assign ~ TypeExpr }
+
+FnDef    =  {
+    Docs? ~ eos* ~ PUSH(fonction) ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ (":" ~ (#body = Expr) ~ DROP | eos ~ (#body = StmtBody)? ~ finFn)
+}
+fonction = @{ (^"fonction" | ^"fn") ~ !IdentChar }
+finFn    = @{ ^"fin" ~ WHITESPACE+ ~ POP }
+
+StructureDef  =  {
+    Docs? ~ eos* ~ ^"structure" ~ (#name = Ident) ~ eos+ ~ StructureBody
+}
+StructureBody =  {
+    (StructureField ~ eos+)* ~ finStructure
+}
+finStructure  = @{ ^"fin" ~ WHITESPACE+ ~ ^"structure" }
+
+StructureField = {
+    (Const ~ Ident | Var? ~ Ident) ~ (":" ~ TypeExpr)? ~ (Assign ~ Expr)?
+}
+
+ImplDef = {
+    Docs? ~ eos* ~ PUSH(^"implementation" | ^"implémentation" | ^"impl") ~ (#name = Ident) ~ eos+ ~ (Methode ~ eos+)* ~ finImpl
+}
+// "impl" | "implementation" | "implémentation"
+finImpl      = @{ ^"fin" ~ WHITESPACE+ ~ POP }
+Methode      =  {
+    Docs? ~ eos* ~ PUSH(^"methode" | ^"méthode") ~ (#name = Ident) ~ (#params = MethodParams) ~ ("->" ~ #return_type = TypeExpr)? ~ MethodeBody
+}
+MethodParams =  {
+    "(" ~ (#inst_param = InstParam) ~ ("," ~ FnParam)* ~ ","? ~ ")"
+  | "(" ~ (FnParam ~ ",")* ~ FnParam? ~ ")"
+}
+InstParam    = @{ ^"inst" }
+MethodeBody  =  {
+    (":" ~ Expr | eos ~ StmtBody? ~ finMethode)
+}
+finMethode   = @{ ^"fin" ~ WHITESPACE+ ~ POP }
+// "methode" | "méthode"
+
+SiStmt = {
+    ^"si" ~ (#cond = Expr) ~ siInner // "alors"? ~ eos+ ~ thenBr ~ sinonSiBr* ~ sinonBr? ~ finSi
+}
+
+thenBr = {
+    (!(sinonSiKw | ^"sinon") ~ stmtBloc ~ eos+)*
+}
+
+finSi = @{ ^"fin" ~ WHITESPACE+ ~ ^"si" }
+
+sinonSiKw = @{ ^"sinon" ~ WHITESPACE+ ~ ^"si" }
+
+sinonSiBr = {
+    sinonSiKw ~ (#cond = Expr) ~ siInner // "alors"? ~ eos+ ~ thenBr
+}
+
+sinonBr = {
+    ^"sinon" ~ sinonInner // ~ eos+ ~ (stmtBloc ~ eos+)*
+}
+
+StmtBloc =  { stmtBloc }
+siInner  = _{
+    ^"alors" ~ (#body = StmtBloc) ~ (eos+ ~ (sinonSiBr | sinonBr))?
+  | ^"alors"? ~ eos+ ~ (#body = thenBr) ~ (sinonSiBr | sinonBr | finSi)
+}
+
+sinonInner = _{
+    (!eos ~ stmtBloc)
+  | (eos+ ~ (#body = StmtBody) ~ finSi)
+}
+
+PourStmt =  {
+    ^"pour" ~ ^"chaque"? ~ (#vars = declVar) ~ ^"dans" ~ (#iter = PourIter) ~ ^"faire"? ~ eos+ ~ StmtBody? ~ finPour
+}
+finPour  = @{ ^"fin" ~ WHITESPACE+ ~ ^"pour" }
+
+RepeterStmt =  {
+    PUSH(^"repeter" | ^"répéter") ~ (#nb_iter = Expr)? ~ eos+ ~ StmtBody? ~ finRepeter
+}
+finRepeter  = @{ ^"fin" ~ WHITESPACE+ ~ POP }
+// "repeter" | "répéter"
+
+TantQueStmt =  {
+    tantQue ~ (#cond = Expr) ~ ^"faire"? ~ eos+ ~ StmtBody? ~ finTantQue
+}
+tantQue     = @{ ^"tant" ~ WHITESPACE+ ~ ^"que" ~ !IdentChar }
+finTantQue  = @{ ^"fin" ~ WHITESPACE+ ~ ^"tant" ~ WHITESPACE+ ~ ^"que" ~ !IdentChar }
+
+ContinuerStmt = @{ ^"continuer" ~ !IdentChar }
+SortirStmt    = @{ ^"sortir" ~ !IdentChar }
+
+PourIter = {
+    ListExpr
+  | Expr
+}
+ListExpr = {
+    (Expr ~ ",")+ ~ Expr?
+}
+
+declVar = {
+    (Var? ~ #var = (MultiDeclIdent | DeclIdent | DeclIdentList))
+  | (Const ~ #var = (MultiDeclIdent | DeclIdent | DeclIdentList))
+}
+
+DeclStmt = {
+    (Var ~ assignVar)
+  | (Const ~ assignVar)
+}
+
+Const = @{ ^"const" ~ !IdentChar }
+Var   = @{ ^"var" ~ !IdentChar }
+
+AssignStmt = { assignVar }
+
+assignVar      = _{
+    (#var = (AssignMember | Ident)) ~ ((#op = AssignOp) | Assign) ~ #a_value = Expr
+  | (#var = (AssignMember | MultiDeclIdent | DeclIdent | DeclIdentList)) ~ Assign ~ #a_value = Expr
+}
+AssignMember   =  {
+    Ident ~ (AccessProp)+
+}
+DeclIdent      =  {
+    (#var_name = Ident) ~ (":" ~ #var_type = TypeExpr)?
+}
+MultiDeclIdent =  {
+    ((AssignMember | DeclIdent | DeclIdentList) ~ "," ~ ((AssignMember | DeclIdent | DeclIdentList) ~ ",")* ~ (AssignMember | DeclIdent | DeclIdentList)?)
+}
+
+DeclIdentList = {
+    ("[" ~ ((AssignMember | DeclIdent | DeclIdentList) ~ ",")* ~ (AssignMember | DeclIdent | DeclIdentList)? ~ "]")
+}
+
+RetournerStmt =  { retourner ~ (Expr ~ ",")* ~ Expr? }
+retourner     = @{ ^"retourner" ~ !IdentChar }
+
+FnParams = {
+    "(" ~ (FnParam ~ ",")* ~ FnParam? ~ ")"
+}
+
+FnParam = {
+    (#p_name = Ident) ~ (":" ~ #p_type = TypeExpr)? ~ (Assign ~ #p_default = Expr)?
+}
+
+Expr = { prefix? ~ term ~ postfix? ~ (infix ~ prefix? ~ term ~ postfix?)* }
+
+infix        = _{
+    binOpInfix
+  | RangeEq
+  | Range
+  | compInfix
+  | logicInfix
+}
+binOpInfix   = _{
+    Add
+  | Sub
+  | Pow
+  | Mul
+  | DivInt
+  | Div
+  | Modulo
+  | Pipe
+  | Ampersant
+  | Xor
+  | BitwiseLeft
+  | BitwiseRight
+}
+compInfix    = _{
+    Eq
+  | Neq
+  | In
+  | NotIn
+  | Gte
+  | Lte
+  | Lt
+  | Gt
+}
+logicInfix   = _{
+    And
+  | Or
+  | NonNull
+}
+Add          = @{ "+" }
+Sub          = @{ "-" }
+Mul          = @{ "*" }
+Div          = @{ "/" }
+DivInt       = @{ "//" }
+Modulo       = @{ "%" }
+BitwiseLeft  = @{ "<<" }
+BitwiseRight = @{ ">>" }
+Pow          = @{ "^" | "**" }
+Ampersant    = @{ "&" }
+Pipe         = @{ "|" }
+Xor          = @{ "xor" }
+Eq           = @{ "==" }
+Neq          = @{ "!=" }
+In           = @{ ^"dans" ~ !IdentChar }
+NotIn        =  { ^"pas" ~ In }
+Gt           = @{ ">" }
+Lt           = @{ "<" }
+Gte          = @{ ">=" }
+Lte          = @{ "<=" }
+And          = @{ ^"et" ~ !IdentChar }
+Or           = @{ ^"ou" ~ !IdentChar }
+NonNull      = @{ "??" }
+prefix       = _{ Neg | Not | Pos }
+Neg          =  { "-" }
+Pos          =  { "+" }
+Not          = @{ ^"pas" ~ !IdentChar | ^"non" ~ !IdentChar }
+postfix      = _{ Ternary | AccessProp }
+Range        =  { (".." | "..<") ~ ((#end = Expr) ~ "bond")? }
+RangeEq      =  { ("..=" | ^"jusqu'à" | ^"jusqu'a") ~ ((#end = Expr) ~ ^"bond")? }
+Ternary      =  {
+    "?" ~ TernaryThen ~ ":" ~ TernaryElse
+}
+TernaryThen  =  { Expr }
+TernaryElse  =  { Expr }
+
+AccessProp = {
+    "." ~ (#prop = Ident)
+  | "[" ~ Expr ~ "]"
+}
+
+AssignOp = ${
+    (Add | Sub | Mul | Div | DivInt | Modulo | BitwiseLeft | BitwiseRight | Pow | Ampersant | Pipe | Xor | NonNull) ~ "="
+}
+Assign   = @{ ":=" | "=" | "<-" | "←" }
+
+term = _{
+  
+  | EssayerExpr
+  | FnExpr
+  | FnCall
+  | Lit
+  | DebutBloc
+  | StructInit
+  | AssignMember
+  | Ident
+  | List
+  | Dict
+  | "(" ~ NEWLINE* ~ Expr ~ NEWLINE* ~ ")"
+}
+
+StructInit      = { Ident ~ "{" ~ (StructInitField ~ ",")* ~ StructInitField? ~ "}" }
+StructInitField = { Ident ~ ":" ~ Expr }
+
+DebutBloc = { (^"debut" | ^"début") ~ eos+ ~ (!^"fin" ~ stmtBloc ~ eos+)* ~ ^"fin" }
+
+FnExpr = {
+    PUSH(fonction) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ #body = (":" ~ Expr ~ DROP | eos ~ StmtBody ~ "fin" ~ POP)
+}
+
+EssayerExpr = { ^"essayer" ~ Expr }
+
+List = { "[" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE* ~ "]" }
+Dict = { "{" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE* ~ "}" }
+
+Callable = {
+    (Lit | List | Dict | StructInit | DebutBloc | Ident | "(" ~ NEWLINE* ~ Expr ~ NEWLINE* ~ ")") ~ (AccessProp)*
+}
+
+FnCall = { Callable ~ FunctionArgs }
+
+FunctionArgs = {
+    "(" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE* ~ ")"
+}
+
+Lit = {
+    Bool
+  | Decimal
+  | Integer
+  | Text
+  | Null
+}
+
+TypeExpr     =  { typePrefix? ~ typeTerm ~ typePostfix? ~ (typeInfix ~ typePrefix? ~ typeTerm ~ typePostfix?)* }
+typeTerm     = _{
+    Ident
+  | TypeFonction
+  | Lit
+  | "(" ~ TypeExpr ~ ")"
+}
+TypeFonction =  { fonction ~ ("(" ~ (TypeExpr ~ ",")* ~ TypeExpr? ~ ")" ~ ("->" ~ TypeExpr)?)? }
+typeInfix    = _{ Pipe }
+typePrefix   = _{ "@" }
+typePostfix  = _{ TypeArgs }
+TypeArgs     =  { "<" ~ TypeExpr ~ ("," ~ TypeExpr)* ~ ","? ~ ">" }
+
+Bool      = @{ (^"vrai" | ^"faux") ~ !IdentChar }
+Text      = @{ PUSH("\"" | "'") ~ ("\\" ~ PEEK | !PEEK ~ ANY)* ~ POP }
+Ident     = @{ !(keyword ~ !IdentChar) ~ (LETTER | "_") ~ (LETTER | ASCII_DIGIT | "_")* }
+IdentChar = _{ LETTER | ASCII_DIGIT | "_" }
+Integer   = @{ "-"? ~ ASCII_DIGIT+ }
+Decimal   = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+Null      = @{ ^"nul" }
+
+keyword = @{
+    ^"utiliser"
+  | ^"alias"
+  | ^"type"
+  | ^"fonction"
+  | ^"methode"
+  | ^"méthode" // Combined variants
+  | ^"si"
+  | ^"alors"
+  | ^"sinon"
+  | ^"pour"
+  | ^"chaque"
+  | ^"dans"
+  | ^"faire"
+  | ^"repeter"
+  | ^"répéter"
+  | ^"tant"
+  | ^"continuer"
+  | ^"sortir"
+  | ^"const"
+  | ^"var"
+  | ^"retourner"
+  | ^"pas"
+  | ^"et"
+  | ^"ou"
+  | ^"non"
+  | ^"jusqu'à"
+  | ^"jusqu'a" // Combined variants
+  | ^"fin"
+  | ^"bond"
+  | ^"debut"
+  | ^"début" // Combined variants
+  | ^"fn"
+  | ^"essayer"
+  | ^"vrai"
+  | ^"faux"
+  | ^"nul"
+}

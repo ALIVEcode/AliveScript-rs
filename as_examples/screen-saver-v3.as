@@ -13,7 +13,6 @@ fin structure
 
 implémentation Carré
   méthode créer(x: entier, y: entier, couleur: texte)
-    #afficher [x, y, couleur]
     retourner Carré {x: x, y: y, couleur: couleur}
   fin méthode
 
@@ -47,17 +46,17 @@ implémentation Carré
   # --- MÉTHODE : COLLISIONNE ---
   # Vérifie si l'instance actuelle touche une autre instance de Carré
   # Retourne vrai s'il y a contact, faux sinon.
-  methode collisionne(inst, autre : Carré) -> booleen
+  méthode collisionne(inst, autre : Carré) -> booleen
       # On vérifie les 4 limites (gauche, droite, haut, bas)
       var collision_x : booleen = (inst.x < autre.x + autre.l) et (inst.x + inst.l > autre.x)
       var collision_y : booleen = (inst.y < autre.y + autre.h) et (inst.y + inst.h > autre.y)
       
       retourner collision_x et collision_y
-  fin methode
+  fin méthode
 
   # --- MÉTHODE : REBONDIR ---
   # Inverse les vecteurs de mouvement si un impact est détecté
-  methode rebondir(inst, autre : Carré) -> rien
+  méthode rebondir(inst, autre : Carré) -> rien
     si inst.collisionne(autre) alors
       # 1. Calcul de l'enfoncement sur chaque axe
       var delta_x : décimal = (inst.x + inst.l / 2.0) - (autre.x + autre.l / 2.0)
@@ -85,7 +84,7 @@ implémentation Carré
           sinon inst.y -= overlap
       fin si
     fin si
-  fin methode
+  fin méthode
 fin implémentation
 
 var couleurs = ["bleu", "rouge", "orange", "vert", "blanc"]

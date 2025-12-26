@@ -87,6 +87,7 @@ impl ASModuleBuiltin {
         alias: &Option<String>,
         vars: &Option<Vec<String>>,
         runner: &mut Runner,
+        public: bool,
     ) -> Result<(), ASErreurType> {
         match self {
             Self::Custom(module) => {
@@ -103,6 +104,7 @@ impl ASModuleBuiltin {
                     alias,
                     vars,
                     runner.get_env_mut(),
+                    public,
                 );
             }
             _ => {
@@ -115,6 +117,7 @@ impl ASModuleBuiltin {
                     alias,
                     vars,
                     env,
+                    public,
                 );
             }
         }
@@ -126,13 +129,21 @@ impl ASModuleBuiltin {
         alias: &Option<String>,
         vars: &Option<Vec<String>>,
         env: &mut ASEnv,
+        public: bool,
     ) {
         if self.is_custom() {
             return;
         }
         let mod_scope = AS_MODULES;
         let mod_scope = mod_scope.get(self).expect("Module that exists");
-        ASModuleBuiltin::load_from_scope(Rc::clone(&mod_scope), self.name(), alias, vars, env);
+        ASModuleBuiltin::load_from_scope(
+            Rc::clone(&mod_scope),
+            self.name(),
+            alias,
+            vars,
+            env,
+            public,
+        );
     }
 
     pub fn name(&self) -> String {
@@ -156,6 +167,7 @@ impl ASModuleBuiltin {
         alias: &Option<String>,
         vars: &Option<Vec<String>>,
         env: &mut ASEnv,
+        public: bool,
     ) {
         match alias {
             // Some() => mod_scope.iter().for_each(|(_name, (var, val))| {
@@ -164,21 +176,37 @@ impl ASModuleBuiltin {
             Some(alias_name) => match vars.as_deref() {
                 None => {
                     env.declare(
-                        ASVar::new(alias_name.clone(), Some(ASType::Module), true),
+                        ASVar::new_maybe_public(
+                            alias_name.clone(),
+                            Some(ASType::Module),
+                            true,
+                            public,
+                        ),
                         ASObj::ASModule {
                             name,
                             alias: Some(alias_name.clone()),
-                            env: Rc::clone(&mod_scope),
+                            env: Rc::new(RefCell::new(mod_scope.borrow().into_only_public())),
                         },
                     );
                 }
                 Some([x]) if x == "*" => {
                     let mut mod_env = ASScope::new();
-                    mod_scope.borrow().iter().for_each(|(_name, (var, val))| {
-                        mod_env.insert(var.clone(), val.clone());
-                    });
+                    mod_scope
+                        .borrow()
+                        .iter()
+                        .filter(|(_name, var)| var.0.is_public())
+                        .for_each(|(_name, (var, val))| {
+                            let mut var = var.clone();
+                            var.set_public(public);
+                            mod_env.insert(var, val.clone());
+                        });
                     env.declare(
-                        ASVar::new(alias_name.clone(), Some(ASType::Module), true),
+                        ASVar::new_maybe_public(
+                            alias_name.clone(),
+                            Some(ASType::Module),
+                            true,
+                            public,
+                        ),
                         ASObj::ASModule {
                             name,
                             alias: Some(alias_name.clone()),
@@ -189,15 +217,21 @@ impl ASModuleBuiltin {
                 Some(used_vars) => {
                     let mut mod_env = ASScope::new();
                     used_vars.iter().for_each(|var_name| {
-                        let var = mod_scope
+                        let mut var = mod_scope
                             .borrow()
-                            .get(var_name)
+                            .get_public(var_name)
                             .expect("Variable qui existe dans module.")
                             .clone();
+                        var.0.set_public(public);
                         mod_env.insert(var.0, var.1);
                     });
                     env.declare(
-                        ASVar::new(alias_name.clone(), Some(ASType::Module), true),
+                        ASVar::new_maybe_public(
+                            alias_name.clone(),
+                            Some(ASType::Module),
+                            true,
+                            public,
+                        ),
                         ASObj::ASModule {
                             name,
                             alias: Some(alias_name.clone()),
@@ -209,26 +243,36 @@ impl ASModuleBuiltin {
             None => match vars.as_deref() {
                 None => {
                     env.declare(
-                        ASVar::new(name.clone(), Some(ASType::Module), true),
+                        ASVar::new_maybe_public(name.clone(), Some(ASType::Module), true, public),
                         ASObj::ASModule {
                             name,
                             alias: None,
-                            env: Rc::clone(&mod_scope),
+                            env: Rc::new(RefCell::new(mod_scope.borrow().into_only_public())),
                         },
                     );
                 }
                 Some([x]) if x == "*" => {
-                    mod_scope.borrow().iter().for_each(|(_name, (var, val))| {
-                        env.declare(var.clone(), val.clone());
-                    });
+                    mod_scope
+                        .borrow()
+                        .iter()
+                        .filter(|(_name, var)| var.0.is_public())
+                        .for_each(|(_name, (var, val))| {
+                            let mut var = var.clone();
+                            var.set_public(public);
+                            env.declare(var, val.clone());
+                        });
                 }
                 Some(used_vars) => {
                     used_vars.iter().for_each(|var_name| {
-                        let var = mod_scope
+                        let mut var = mod_scope
                             .borrow()
-                            .get(var_name)
-                            .expect("Variable qui existe dans module.")
+                            .get_public(var_name)
+                            .expect(&format!(
+                                "La variable {} n'existe pas de le module {}",
+                                var_name, name
+                            ))
                             .clone();
+                        var.0.set_public(public);
                         env.declare(var.0, var.1);
                     });
                 }
@@ -255,25 +299,4 @@ impl TryFrom<&str> for ASModuleBuiltin {
             // _ => Err(ASErreurType::new_erreur_module_invalide(mod_name.into())),
         }
     }
-}
-
-#[cfg(feature = "dynlib")]
-pub fn load_dynlib(path: String) -> Option<Rc<RefCell<ASScope>>> {
-    use libloading::{Library, Symbol};
-
-    unsafe {
-        let lib = Library::new(path).ok()?;
-        let func: Symbol<unsafe extern "C" fn() -> *mut ASScope> = lib.get(b"load_aslib").ok()?;
-
-        let scope = &mut *func();
-
-        dbg!(&scope.0.keys().collect::<Vec<_>>());
-
-        Some(Rc::new(RefCell::new(scope.clone())))
-    }
-}
-
-#[cfg(not(feature = "dynlib"))]
-pub fn load_dynlib(path: String) -> Option<Rc<RefCell<ASScope>>> {
-    None
 }

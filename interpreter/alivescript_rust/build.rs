@@ -1,4 +1,4 @@
-use lalrpop;
+// use lalrpop;
 
 #[cfg(not(feature = "no-ast"))]
 fn main() {
@@ -13,9 +13,8 @@ fn main() {
             std::fs::copy(path, out).unwrap();
         }
     }
-    lalrpop::Configuration::new().process_dir("./src/").unwrap();
+    // lalrpop::Configuration::new().process_dir("./src/").unwrap();
 }
 
 #[cfg(feature = "no-ast")]
-fn main() {
-}
+fn main() {}

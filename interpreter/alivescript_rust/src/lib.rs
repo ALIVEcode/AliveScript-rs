@@ -1,133 +1,61 @@
-#![allow(dead_code, unused_variables)]
+#![allow(unused)]
 
-pub mod as_modules;
-pub mod visitor;
+// pub mod as_modules;
+pub mod as_obj_utils;
 #[cfg(feature = "py")]
 mod as_py;
-mod as_obj_utils;
-
-pub mod as_obj;
-pub mod ast;
-
-#[cfg(not(feature = "no-ast"))]
-pub mod lexer;
-#[cfg(not(feature = "no-ast"))]
-pub mod token;
 
 pub mod data;
 pub mod io;
-pub mod runner;
+pub mod utils;
 
+pub mod bench;
+
+pub mod compiler;
+pub mod runtime;
+
+pub mod cli;
+
+use pest::Parser;
+use pest_derive::Parser;
+
+use crate::compiler::Compiler;
 use crate::data::Data;
 use crate::io::InterpretorIO;
-use crate::runner::Runner;
+use crate::runtime::vm::VM;
 
-#[cfg(not(feature = "no-ast"))]
-use crate::lexer::LexicalError;
-#[cfg(not(feature = "no-ast"))]
-use lalrpop_util::lalrpop_mod;
-#[cfg(not(feature = "no-ast"))]
-use lalrpop_util::ParseError;
+#[derive(Parser)]
+#[grammar = "./alivescript.pest"]
+pub struct AlivescriptParser;
 
-#[cfg(not(feature = "no-ast"))]
-lalrpop_mod!(pub alivescript, "/src/alivescript.rs");
-
-#[cfg(not(feature = "no-ast"))]
-use crate::{lexer::Lexer, visitor::Visitor};
-
-pub fn get_err_line(script: &String, start: usize, end: usize) -> (String, usize) {
-    let line_num = script[0..end].split('\n').count();
-
-    let line_start = script[0..end].rfind(&['\n', ';']).unwrap_or(0);
-    let line_end = script[start..]
-        .find(&['\n', ';'])
-        .map(|i| i + start)
-        .unwrap_or(script.len());
-    (script[line_start..=line_end].trim().to_owned(), line_num)
-}
-
-#[cfg(not(feature = "no-ast"))]
-pub fn run_script<'a, IO: InterpretorIO + 'a>(script: &String, interpretor_io: &mut IO) {
-    let lexer = Lexer::new(&script[..]);
-    let result_stmts = alivescript::ScriptParser::new().parse(lexer);
-
-    match result_stmts {
-        Ok(stmts) => {
-            let mut visitor = Runner::new(interpretor_io);
-            visitor.visit_body(&stmts);
-        }
-        Err(err) => {
-            let err_txt = match err {
-                ParseError::UnrecognizedToken { token, expected } => {
-                    let (line, line_num) = get_err_line(&script, token.0, token.2);
-                    format!("À la ligne {} ('{}'). Jeton non reconnu: {}. Jetons valides dans cette position: {}",
-                             line_num, line, token.1, expected.join(", "))
-                }
-                ParseError::InvalidToken { location } => todo!(),
-                ParseError::UnrecognizedEof { location, expected } => todo!(),
-                ParseError::ExtraToken { token } => todo!(),
-                ParseError::User { error } => todo!(),
-            };
-            interpretor_io.send(Data::Erreur {
-                texte: format!("ErreurSyntaxe: {}", err_txt),
-                ligne: 0,
-            })
-        }
-    };
-}
-
-#[cfg(not(feature = "no-ast"))]
-pub fn run_script_from_file<'a, IO: InterpretorIO + 'a>(script: &String, interpretor_io: &mut IO, script_file: String) {
-    let lexer = Lexer::new(&script[..]);
-    let result_stmts = alivescript::ScriptParser::new().parse(lexer);
-
-    match result_stmts {
-        Ok(stmts) => {
-            let mut visitor = Runner::new_with_file(interpretor_io, script_file);
-            visitor.visit_body(&stmts);
-        }
-        Err(err) => {
-            let err_txt = match err {
-                ParseError::UnrecognizedToken { token, expected } => {
-                    let (line, line_num) = get_err_line(&script, token.0, token.2);
-                    format!("À la ligne {} ('{}'). Jeton non reconnu: {}. Jetons valides dans cette position: {}",
-                             line_num, line, token.1, expected.join(", "))
-                }
-                ParseError::InvalidToken { location } => todo!(),
-                ParseError::UnrecognizedEof { location, expected } => todo!(),
-                ParseError::ExtraToken { token } => todo!(),
-                ParseError::User { error } => todo!(),
-            };
-            interpretor_io.send(Data::Erreur {
-                texte: format!("ErreurSyntaxe: {}", err_txt),
-                ligne: 0,
-            })
-        }
-    };
-}
-
-#[cfg(not(feature = "no-ast"))]
-pub fn run_script_with_runner<'a>(
+pub fn compile_script_from_file2<'a, IO: InterpretorIO + 'a>(
     script: &String,
-    runner: &mut Runner<'a>,
-) -> Result<(), ParseError<usize, token::Token, LexicalError>> {
-    let lexer = Lexer::new(script.as_str());
-    let result_stmts = alivescript::ScriptParser::new().parse(lexer);
+    interpretor_io: &mut IO,
+    script_file: String,
+) {
+    let debug = script.starts_with("#debug!");
+    let result_stmts = AlivescriptParser::parse(Rule::script, script);
+    if debug {
+        println!("{:#?}", result_stmts);
+    }
 
     match result_stmts {
         Ok(stmts) => {
-            runner.visit_body(&stmts);
-            Ok(())
+            // let mut visitor = Runner::new_with_file(interpretor_io, script_file);
+            let compiler = Compiler::new(script, script_file.clone());
+            let closure = compiler.compile(stmts).unwrap();
+            let mut vm = VM::new(script_file);
+            let result = vm.run(closure).unwrap();
+            // println!("{:#?}", vm.stack);
+            // println!("{:?}", result);
         }
-        Err(err) => Err(err),
-    }
-}
-
-#[cfg(test)]
-mod test {
-    #[test]
-    fn nombres() {}
-
-    #[test]
-    fn texte() {}
+        Err(err) => interpretor_io.send(Data::Erreur {
+            texte: format!(
+                "ErreurSyntaxe: {}\n{:#?}",
+                err.to_string(),
+                err.parse_attempts()
+            ),
+            ligne: 0,
+        }),
+    };
 }

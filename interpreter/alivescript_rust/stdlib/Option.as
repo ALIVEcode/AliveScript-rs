@@ -8,7 +8,7 @@ classe Option
 
     methode getVal()
         si inst == Option._vide alors
-            erreur("L'option ne contient pas de valeurs.")
+            erreur("L'option ne contient pas de valeur.")
         fin si
         retourner inst._val
     fin methode

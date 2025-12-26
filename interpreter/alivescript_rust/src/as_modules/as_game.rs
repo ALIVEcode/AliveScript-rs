@@ -1,4 +1,3 @@
-
 use crate::{
     as_fonction, as_mod,
     as_obj::{ASType, ASType::*},

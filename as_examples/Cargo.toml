@@ -5,6 +5,6 @@ edition = "2024"
 
 [dependencies]
 
-alivescript_rust = { path = "../interpreter-v3/alivescript_rust/" }
+alivescript_rust = { path = "../interpreter/alivescript_rust/" }
 anyhow = "1.0.100"
 raylib = {version = "5.5.1", features = ["wayland"]}

@@ -1,13 +1,12 @@
 #![allow(dead_code, unused_variables)]
-use lalrpop_util::ParseError;
+// use lalrpop_util::ParseError;
 
-use std::{cell::RefCell, env, io::Write, rc::Rc};
+use std::{cell::RefCell, io::Write, rc::Rc};
 
 use alivescript_rust::{
+    cli,
     data::{Data, Response},
-    get_err_line,
     io::InterpretorIO,
-    run_script_from_file, run_script_with_runner,
 };
 
 const ALIVESCRIPT_VERSION: &'static str = "0.10.0";
@@ -79,68 +78,63 @@ impl InterpretorIO for ReplIO {
     }
 }
 
-fn main() -> std::io::Result<()> {
-    let mut args = env::args();
-    let first_arg = args.nth(1);
-    if let Some(script_file) = first_arg {
-        if script_file == "--version" {
-            println!("{}", ALIVESCRIPT_VERSION);
-            return Ok(());
-        }
-        let mut io = IO {};
-        let script = std::fs::read_to_string(&script_file).unwrap();
-        run_script_from_file(&script, &mut io, script_file);
-        return Ok(());
-    }
-    let console = Rc::new(RefCell::new(console::Term::stdout()));
-    let mut io = ReplIO {
-        console: Rc::clone(&console),
-    };
-    let mut runner = alivescript_rust::runner::Runner::new(&mut io);
-    loop {
-        write!(console.borrow_mut(), "> ")?;
-        let mut in_block = false;
-        let mut body = String::new();
-        loop {
-            let line = console.borrow_mut().read_line()?;
-            if in_block {
-                console.borrow_mut().clear_last_lines(1)?;
-                writeln!(console.borrow_mut(), "{}", line.replace("\t", "  "))?;
-            }
-            body += &(line + "\n");
-            if let Err(err) = run_script_with_runner(&body, &mut runner) {
-                match err {
-                    ParseError::UnrecognizedToken { token, expected } => {
-                        let (line, line_num) = get_err_line(&body, token.0, token.2);
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!(
-                                "À la ligne {} ('{}'). Jeton non reconnu: {}. Jetons valides dans cette position: {}", 
-                                line_num, 
-                                line, 
-                                token.1,
-                                expected.join(", ")
-                            ),
-                        ));
-                    }
-
-                    ParseError::UnrecognizedEof { location, expected } => {
-                        body += "\n";
-                        write!(console.borrow_mut(), "|")?;
-                        in_block = true;
-                        continue;
-                    }
-                    ParseError::InvalidToken { location } => todo!(),
-                    ParseError::ExtraToken { token } => todo!(),
-                    ParseError::User { error } => todo!(),
-                }
-            } else {
-                break;
-            }
-        }
-        runner.remove_error_status();
-        if let Some(value) = runner.get_stmt_result() {
-            writeln!(console.borrow_mut(), "{}", value.repr())?;
-        }
-    }
+fn main() {
+    cli::run_cli();
 }
+
+// fn main() -> std::io::Result<()> {
+//     let mut args = env::args();
+//     let first_arg = args.nth(1);
+//     if let Some(script_file) = first_arg {
+//         if script_file == "--version" {
+//             println!("{}", ALIVESCRIPT_VERSION);
+//             return Ok(());
+//         } else if script_file == "-c" {
+//             let script_file = args.next().expect("File arg missing after -c");
+//             let mut io = IO {};
+//             let script = std::fs::read_to_string(&script_file).unwrap();
+//             compile_script_from_file2(&script, &mut io, script_file);
+//             return Ok(());
+//         } else if script_file == "bench" {
+//             main_benchmark();
+//             return Ok(());
+//         }
+//         let mut io = IO {};
+//         let script = std::fs::read_to_string(&script_file).unwrap();
+//         run_script_from_file(&script, &mut io, script_file);
+//         return Ok(());
+//     }
+//     let console = Rc::new(RefCell::new(console::Term::stdout()));
+//     let mut io = ReplIO {
+//         console: Rc::clone(&console),
+//     };
+//     let mut runner = alivescript_rust::runner::Runner::new(&mut io);
+//     loop {
+//         write!(console.borrow_mut(), "> ")?;
+//         let in_block = false;
+//         let mut body = String::new();
+//         loop {
+//             let line = console.borrow_mut().read_line()?;
+//             if in_block {
+//                 console.borrow_mut().clear_last_lines(1)?;
+//                 writeln!(console.borrow_mut(), "{}", line.replace("\t", "  "))?;
+//             }
+//             body += &(line + "\n");
+//             if let Err(err) = run_script_with_runner(&body, &mut runner) {
+//                 writeln!(console.borrow_mut(), "{}", err.to_string())?;
+//                 // ParseError::UnrecognizedEof { location, expected } => {
+//                 //     body += "\n";
+//                 //     write!(console.borrow_mut(), "|")?;
+//                 //     in_block = true;
+//                 //     continue;
+//                 // }
+//             } else {
+//                 break;
+//             }
+//         }
+//         runner.remove_error_status();
+//         if let Some(value) = runner.get_stmt_result() {
+//             writeln!(console.borrow_mut(), "{}", value.repr())?;
+//         }
+//     }
+// }

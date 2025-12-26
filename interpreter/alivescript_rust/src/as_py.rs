@@ -4,7 +4,7 @@ use std::rc::Rc;
 use pyo3::types::{PyDict, PyList};
 use pyo3::{prelude::*, types::PyFunction};
 
-use crate::as_obj::{ASFnParam, ASObj, ASScope, ASType, ASVar, ASDict};
+use crate::as_obj::{ASDict, ASFnParam, ASObj, ASScope, ASType, ASVar};
 use crate::runner::Runner;
 
 pub fn run_python_script(script: String) -> Option<Rc<RefCell<ASScope>>> {

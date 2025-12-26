@@ -42,7 +42,7 @@ as_mod! {
         }
     },
     as_fonction! {
-        couper(txt: ASType::Texte, pattern: ASType::Texte, limite: ASType::optional(ASType::Entier) => ASObj::ASNul) -> ASType::Liste; {
+        couper(txt: ASType::Texte, pattern: ASType::Texte, limite: ASType::optional(ASType::Entier) => ASObj::ASNul) -> ASType::Liste(Box::new(ASType::Texte)); {
             as_cast!(ASObj::ASTexte(txt) = txt);
             as_cast!(ASObj::ASTexte(pattern) = pattern);
 
