@@ -975,11 +975,11 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
                 if let Ok(op) = BinOpcode::try_from(&infix) {
                     self.borrow_mut().code.emit_binop(op);
-                    return Ok(len_lhs + len_rhs + 1);
+                    return Ok(len_lhs + len_rhs + 2);
                 }
                 if let Ok(op) = BinCompcode::try_from(&infix) {
                     self.borrow_mut().code.emit_bincomp(op);
-                    return Ok(len_lhs + len_rhs + 1);
+                    return Ok(len_lhs + len_rhs + 2);
                 }
                 if let Ok(op) = BinLogiccode::try_from(&infix) {
                     let start_rhs = self.borrow().code.len_inner() - len_rhs;

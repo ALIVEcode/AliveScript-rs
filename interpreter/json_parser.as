@@ -71,10 +71,11 @@ impl JSONParser
     premier = inst.prochain()
     si premier.estNumérique() alors 
       chiffres = premier
-      tant que inst.inspecter().estNumérique()
+      tant que inst.inspecter().estNumérique() ou inst.inspecter() == "."
         chiffres += inst.prochain()
       fin tant que
 
+      si "." dans chiffres alors retourner décimal(chiffres)
       retourner entier(chiffres)
 
     sinon si premier == "t" alors 

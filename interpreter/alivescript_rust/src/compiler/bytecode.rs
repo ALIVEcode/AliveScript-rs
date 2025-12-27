@@ -40,7 +40,7 @@ pub enum Opcode {
     /// stack: `[msg, func]`
     ReadCallWithMsg,
 
-    /// args: jump_to_catch_dist, nb_func_args
+    /// args: nb_func_args, jump_to_catch_dist
     /// stack: `[func, ...args]`
     /// 1. it calls the func with `nb_func_args`
     /// 2. if the call fails:
@@ -70,7 +70,7 @@ pub enum Opcode {
     /// 2. if `!val.to_bool()` -> jumps `dist`
     JumpIfFalse,
 
-    /// args: dist (i16), cond (bool)
+    /// args: cond (bool), dist (i16)
     /// stack: `[val]`
     /// 1. it peeks at the top of the stack (`val`)
     /// 2. if `val.to_bool() == cond` -> jumps `dist`
@@ -299,7 +299,6 @@ pub fn instructions_to_string(insts: &[OpcodeByteSize]) -> Vec<String> {
             })
             .collect::<Vec<_>>();
 
-
         inst_str.extend(args.iter().map(|arg| arg.to_string()));
 
         match op {
@@ -313,16 +312,18 @@ pub fn instructions_to_string(insts: &[OpcodeByteSize]) -> Vec<String> {
             }
 
             Opcode::JumpTest => {
-                let idx = args[0];
-                let cond = args[1];
+                let cond = args[0];
+                let idx = args[1];
 
+                let dest_line = get_final_dest_of_jump(insts, bytes - 1);
                 inst_str.pop();
                 inst_str.pop();
-                inst_str.push(format!("{}", (*idx as i16 - JUMP_OFFSET)));
                 inst_str.push(format!(
                     "{}",
                     if *cond == 1 { "if true" } else { "if false" }
                 ));
+                inst_str.push(format!("{}", (*idx as i16 - JUMP_OFFSET)));
+                inst_str.push(format!("(to {})", dest_line));
             }
 
             Opcode::BinOp => {
@@ -352,7 +353,6 @@ pub fn instructions_to_string(insts: &[OpcodeByteSize]) -> Vec<String> {
 
 fn get_final_dest_of_jump(insts: &[OpcodeByteSize], jmp_idx: u16) -> usize {
     let jmp_inst = insts[jmp_idx as usize];
-    dbg!(jmp_idx, jmp_inst);
     let jmp_dist = (jmp_inst as i16 - JUMP_OFFSET + 1);
 
     let dest = (jmp_idx as i16 + jmp_dist) as usize;
@@ -393,9 +393,8 @@ pub fn instructions_to_string_debug(
     let mut op_i = 1;
     let mut bytes = 0;
     while let Some(byte) = iter.next() {
-        bytes += 1;
         let Ok(op) = Opcode::try_from(*byte) else {
-            panic!("Invalid opcode {}", byte);
+            panic!("Invalid opcode {} at {op_i}", byte);
         };
 
         let mut inst_str = vec![];
@@ -409,6 +408,7 @@ pub fn instructions_to_string_debug(
             })
             .collect::<Vec<_>>();
 
+        bytes += 1;
         bytes += op.nargs();
 
         inst_str.extend(args.iter().map(|arg| arg.to_string()));
@@ -434,7 +434,11 @@ pub fn instructions_to_string_debug(
                 let idx = args[0];
                 inst_str.push(format!(
                     "{:?}",
-                    compiler.borrow().locals[*idx as usize].name
+                    compiler
+                        .borrow()
+                        .locals
+                        .get(*idx as usize)
+                        .map(|l| l.name.clone())
                 ));
             }
             Opcode::GetUpvalue | Opcode::SetUpvalue => {
@@ -451,6 +455,21 @@ pub fn instructions_to_string_debug(
                 inst_str.push(format!("(to {})", dest_line));
             }
 
+            Opcode::JumpTest => {
+                let cond = args[0];
+                let idx = args[1];
+
+                let dest_line = get_final_dest_of_jump(insts, bytes - 1);
+                inst_str.pop();
+                inst_str.pop();
+                inst_str.push(format!(
+                    "{}",
+                    if *cond == 1 { "if true" } else { "if false" }
+                ));
+                inst_str.push(format!("{}", (*idx as i16 - JUMP_OFFSET)));
+                inst_str.push(format!("(to {})", dest_line));
+            }
+
             Opcode::TryCall => {
                 let nargs = args[0];
                 let idx = args[1];
@@ -459,19 +478,6 @@ pub fn instructions_to_string_debug(
                 inst_str.pop();
                 inst_str.push(format!("{}", nargs));
                 inst_str.push(format!("{}", (*idx as i16 - JUMP_OFFSET)));
-            }
-
-            Opcode::JumpTest => {
-                let idx = args[0];
-                let cond = args[1];
-
-                inst_str.pop();
-                inst_str.pop();
-                inst_str.push(format!("{}", (*idx as i16 - JUMP_OFFSET)));
-                inst_str.push(format!(
-                    "{}",
-                    if *cond == 1 { "if true" } else { "if false" }
-                ));
             }
 
             Opcode::BinOp => {
@@ -706,8 +712,8 @@ impl Instructions {
 
     pub fn emit_jump_test(&mut self, target: i16, cond: bool) {
         self.emit_opcode(Opcode::JumpTest);
-        self.emit_byte((target + JUMP_OFFSET) as OpcodeByteSize);
         self.emit_byte(cond as OpcodeByteSize);
+        self.emit_byte((target + JUMP_OFFSET) as OpcodeByteSize);
     }
 
     pub fn emit_jump_if_false(&mut self, target: i16) {

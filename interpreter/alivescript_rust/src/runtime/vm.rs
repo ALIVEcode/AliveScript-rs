@@ -1296,10 +1296,10 @@ impl VM {
                     }
                 }
                 Opcode::JumpTest => {
+                    let cond = fnc.code[frame.ip] == 1;
+                    frame.ip += 1;
                     let dist = fnc.code[frame.ip];
                     let dist = dist as i16 - JUMP_OFFSET;
-                    frame.ip += 1;
-                    let cond = fnc.code[frame.ip] == 1;
                     frame.ip += 1;
 
                     let ip = frame.ip;
