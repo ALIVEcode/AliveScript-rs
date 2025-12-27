@@ -361,4 +361,3 @@ fonction test()
 fin fonction
 
 
-test()

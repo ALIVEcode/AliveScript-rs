@@ -101,7 +101,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "alivescript_rust"
+name = "alive"
 version = "0.1.0"
 dependencies = [
  "bevy",

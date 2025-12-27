@@ -159,6 +159,15 @@ as_module! {
                     )))
                 }
             },
+            as_module_fonction! {
+                args(): Type::Liste => {
+                    Ok(Some(Value::liste(
+                        std::env::args()
+                            .map(|arg| Value::Texte(arg))
+                            .collect()
+                    )))
+                }
+            },
         ]
     }
 }
