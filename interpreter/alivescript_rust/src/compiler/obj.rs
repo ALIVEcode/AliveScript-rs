@@ -4,7 +4,7 @@ use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub};
 use std::sync::{Arc, RwLock};
 
 use crate::compiler::value::{
-    ArcClosureInst, ArcClosureMethod, ArcClosureProto, ArcDict, ArcModule, ArcNativeObjet,
+    ASDict, ArcClosureInst, ArcClosureMethod, ArcClosureProto, ArcDict, ArcModule, ArcNativeObjet,
     ArcObjet, ArcStructure, Closure, NativeFunction, NativeMethod, NativeObjet, Type,
 };
 use crate::runtime::err::RuntimeError;
@@ -433,6 +433,7 @@ impl PartialEq for Value {
                     == l2.read().unwrap().as_ref() as &Vec<Value>
             }
             (Value::Objet(o1), Value::Objet(o2)) => Arc::ptr_eq(o1, o2),
+            (Value::Dict(d1), Value::Dict(d2)) => d1.read().unwrap().eq(&d2.read().unwrap()),
             // (ASDict(d1), ASDict(d2)) => d1 == d2,
             // (ASFonc(f1), ASFonc(f2)) => f1 == f2,
             // (ASClasse(classe1), ASClasse(classe2)) => classe1 == classe2,

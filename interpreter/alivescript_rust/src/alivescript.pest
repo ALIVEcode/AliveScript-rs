@@ -324,15 +324,15 @@ finEssayer  = @{ "fin" ~ WHITESPACE+ ~ "essayer" }
 List = { "[" ~ NEWLINE* ~ (Expr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ Expr? ~ NEWLINE* ~ "]" }
 Dict = { "{" ~ NEWLINE* ~ (DictMember ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ DictMember? ~ NEWLINE* ~ "}" }
 
-DictMember = { (#key = Ident | Lit | "[" ~ Expr ~ "]") ~ ":" ~ (#val = Expr) }
+DictMember = { (#key = Ident | #key = Lit | "[" ~ #key = Expr ~ "]") ~ NEWLINE* ~ ":" ~ NEWLINE* ~ (#val = Expr) }
 
 Callable = {
     (Lit | List | Dict | StructInit | DebutBloc | Ident | "(" ~ NEWLINE* ~ Expr ~ NEWLINE* ~ ")") ~ (AccessProp)*
 }
 
-//termCallable = {
-//    Callable ~ FunctionArgs+ ~ (AccessProp ~ FunctionArgs)*
-//}
+// termCallable = {
+// Callable ~ FunctionArgs+ ~ (AccessProp ~ FunctionArgs)*
+// }
 
 FnCall = { (Callable ~ FunctionArgs+ ~ (AccessProp ~ FunctionArgs)*)+ }
 

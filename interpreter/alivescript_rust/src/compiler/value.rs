@@ -23,7 +23,7 @@ pub type ArcModule = Arc<RwLock<ASModule>>;
 pub type ArcNativeObjet = Arc<dyn NativeObjet>;
 pub type ArcDict = Arc<RwLock<ASDict>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ASDict {
     pub members: HashMap<String, Value>,
 }

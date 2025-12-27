@@ -67,6 +67,38 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
             }
         },
         as_fonction! {
+            décimal(val: Type::union_of(Type::Texte, Type::nombre())): Type::Decimal => {
+                Ok(Some(match val {
+                    Value::Entier(i) => Value::Decimal(*i as f64),
+                    Value::Decimal(f) => Value::Decimal(*f),
+                    Value::Texte(t) => {
+                        let f = t.parse::<f64>().map_err(|_| RuntimeError::generic_err(
+                            format!("Impossible de convertir {} en décimal.", val.repr())
+                        ))?;
+
+                        Value::Decimal(f)
+                    }
+                    _ => unreachable!()
+                }))
+            }
+        },
+        as_fonction! {
+            decimal(val: Type::union_of(Type::Texte, Type::nombre())): Type::Decimal => {
+                Ok(Some(match val {
+                    Value::Entier(i) => Value::Decimal(*i as f64),
+                    Value::Decimal(f) => Value::Decimal(*f),
+                    Value::Texte(t) => {
+                        let f = t.parse::<f64>().map_err(|_| RuntimeError::generic_err(
+                            format!("Impossible de convertir {} en décimal.", val.repr())
+                        ))?;
+
+                        Value::Decimal(f)
+                    }
+                    _ => unreachable!()
+                }))
+            }
+        },
+        as_fonction! {
             texte(val: Type::tout()): Type::Texte => {
                 Ok(Some(Value::Texte(val.to_string())))
             }
