@@ -146,7 +146,7 @@ enum AliveCommands {
 
 #[derive(Args, Debug)]
 struct DebugInfo {
-    /// Debug flags: 'b' (simple bytecode), 'B' (detailed bytecode), 't' (tokens), 'a' (all).
+    /// Debug flags: 'i' (only instructions), 'b' (simple bytecode), 'B' (detailed bytecode), 't' (tokens), 'a' (all).
     infos: String,
 
     /// The file containing the AliveScript code to debug.

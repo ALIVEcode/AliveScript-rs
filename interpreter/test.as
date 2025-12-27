@@ -64,7 +64,7 @@ var erreur_detectee : booleen = faux
 
 # Syntaxe cible : lire entier dans age, "msg" sinon ...
 # Ici on teste la logique que la VM exécutera
-si entree_utilisateur.est_numerique() alors
+si entree_utilisateur.estNumérique() alors
     age = entier(entree_utilisateur)
 sinon
     erreur_detectee = vrai
@@ -72,7 +72,7 @@ sinon
 fin si
 
 utiliser Texte
-si Texte.est_numerique(entree_utilisateur) alors
+si Texte.estNumérique(entree_utilisateur) alors
     age = entier(entree_utilisateur)
 sinon
     erreur_detectee = vrai

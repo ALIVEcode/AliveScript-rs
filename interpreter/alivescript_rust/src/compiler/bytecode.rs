@@ -3,7 +3,10 @@ use std::{cell::RefCell, fmt::Debug, rc::Rc};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use thiserror::Error;
 
-use crate::compiler::{Compiler, bitmasks::BitArray, utils::format_table};
+use crate::{
+    compiler::{Compiler, bitmasks::BitArray, utils::format_table},
+    utils::{MapIf, WrapWhere},
+};
 
 type OpcodeByteSize = u16;
 
@@ -276,14 +279,19 @@ pub fn instructions_to_string(insts: &[OpcodeByteSize]) -> Vec<String> {
     let mut iter = insts.iter();
 
     let mut op_i = 1;
+    let mut bytes = 0;
     while let Some(byte) = iter.next() {
         let Ok(op) = Opcode::try_from(*byte) else {
             panic!("Invalid opcode {}", byte);
         };
+        bytes += 1;
 
         let mut inst_str = vec![];
+        bytes += op.nargs();
 
-        inst_str.push(format!("{}. {}", op_i, op.name()));
+        inst_str.push(format!("({bytes})"));
+        inst_str.push(format!("{op_i}."));
+        inst_str.push(format!("{}", op.name()));
         let args = (0..op.nargs())
             .map(|_| {
                 iter.next()
@@ -291,14 +299,17 @@ pub fn instructions_to_string(insts: &[OpcodeByteSize]) -> Vec<String> {
             })
             .collect::<Vec<_>>();
 
+
         inst_str.extend(args.iter().map(|arg| arg.to_string()));
 
         match op {
             Opcode::JumpIfFalse | Opcode::Jump | Opcode::ReadCall | Opcode::ReadCallWithMsg => {
                 let idx = args[0];
 
-                inst_str.push((*idx as i16 - JUMP_OFFSET).to_string());
-                // inst_str.push(format!("(to {})", op_i + idx));
+                let dest_line = get_final_dest_of_jump(insts, bytes - 1);
+                inst_str.pop();
+                inst_str.push(format!("{}", (*idx as i16 - JUMP_OFFSET)));
+                inst_str.push(format!("(to {})", dest_line));
             }
 
             Opcode::JumpTest => {
@@ -339,6 +350,39 @@ pub fn instructions_to_string(insts: &[OpcodeByteSize]) -> Vec<String> {
     instructions
 }
 
+fn get_final_dest_of_jump(insts: &[OpcodeByteSize], jmp_idx: u16) -> usize {
+    let jmp_inst = insts[jmp_idx as usize];
+    dbg!(jmp_idx, jmp_inst);
+    let jmp_dist = (jmp_inst as i16 - JUMP_OFFSET + 1);
+
+    let dest = (jmp_idx as i16 + jmp_dist) as usize;
+
+    let mut iter = insts.iter();
+
+    let mut insts = 1;
+    let mut curr_idx = 0;
+    while let Some(byte) = iter.next() {
+        if curr_idx == dest {
+            return insts;
+        }
+
+        curr_idx += 1;
+        let Ok(op) = Opcode::try_from(*byte) else {
+            panic!("Invalid opcode {}", byte);
+        };
+
+        curr_idx += op.nargs() as usize;
+
+        for _ in 0..op.nargs() {
+            _ = iter.next();
+        }
+
+        insts += 1;
+    }
+
+    panic!("{dest} {jmp_idx} {jmp_dist}")
+}
+
 pub fn instructions_to_string_debug(
     insts: &[OpcodeByteSize],
     compiler: Rc<RefCell<Compiler>>,
@@ -347,14 +391,17 @@ pub fn instructions_to_string_debug(
     let mut iter = insts.iter();
 
     let mut op_i = 1;
+    let mut bytes = 0;
     while let Some(byte) = iter.next() {
+        bytes += 1;
         let Ok(op) = Opcode::try_from(*byte) else {
             panic!("Invalid opcode {}", byte);
         };
 
         let mut inst_str = vec![];
 
-        inst_str.push(format!("{}. {}", op_i, op.name()));
+        inst_str.push(format!("{op_i}."));
+        inst_str.push(format!("{}", op.name()));
         let args = (0..op.nargs())
             .map(|_| {
                 iter.next()
@@ -362,15 +409,26 @@ pub fn instructions_to_string_debug(
             })
             .collect::<Vec<_>>();
 
+        bytes += op.nargs();
+
         inst_str.extend(args.iter().map(|arg| arg.to_string()));
 
         match op {
             Opcode::Constant => {
                 let idx = args[0];
-                inst_str.push(format!(
-                    "{}",
-                    compiler.borrow().function.borrow().constants[*idx as usize]
-                ));
+                inst_str.push(
+                    format!(
+                        "{}",
+                        compiler.borrow().function.borrow().constants[*idx as usize].repr()
+                    )
+                    .map_if(|s| {
+                        if s.len() > 100 {
+                            Some(s[..100].to_string() + "...")
+                        } else {
+                            None
+                        }
+                    }),
+                );
             }
             Opcode::GetLocal | Opcode::SetLocal => {
                 let idx = args[0];
@@ -387,9 +445,10 @@ pub fn instructions_to_string_debug(
             Opcode::JumpIfFalse | Opcode::Jump | Opcode::ReadCall | Opcode::ReadCallWithMsg => {
                 let idx = args[0];
 
+                let dest_line = get_final_dest_of_jump(insts, bytes - 1);
                 inst_str.pop();
                 inst_str.push(format!("{}", (*idx as i16 - JUMP_OFFSET)));
-                // inst_str.push(format!("(to {})", op_i + idx));
+                inst_str.push(format!("(to {})", dest_line));
             }
 
             Opcode::TryCall => {

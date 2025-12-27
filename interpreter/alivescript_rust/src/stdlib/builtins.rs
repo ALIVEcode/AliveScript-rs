@@ -71,5 +71,10 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
                 Ok(Some(Value::Texte(val.to_string())))
             }
         },
+        as_fonction! {
+            erreur(msg: Type::tout()): Type::Type => {
+                Err(RuntimeError::generic_err(msg))
+            }
+        },
     ])
 });

@@ -1122,9 +1122,9 @@ impl VM {
                         .get(idx)
                         .cloned()
                         .ok_or(RuntimeError::generic_err(format!(
-                            "Variable sans valeur (ip={}, idx={})",
-                            ip - 1,
-                            idx
+                            "Variable sans valeur (slot={})\n{}\n",
+                            idx,
+                            CallFrame::get_trace(&self.frames),
                         )))?;
 
                     self.push(v);

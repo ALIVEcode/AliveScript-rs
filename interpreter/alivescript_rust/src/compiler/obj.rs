@@ -9,6 +9,7 @@ use crate::compiler::value::{
 };
 use crate::runtime::err::RuntimeError;
 use crate::runtime::vm::VM;
+use crate::utils::Apply;
 
 pub type ArcValue = Arc<RwLock<Value>>;
 pub type ArcUpvalue = Arc<RwLock<Upvalue>>;
@@ -211,7 +212,18 @@ impl Value {
     pub fn repr(&self) -> String {
         match self {
             Value::Nul => String::from("nul"),
-            Value::Texte(t) => format!("{:?}", t),
+            Value::Texte(t) => {
+                if t.contains('"') && !t.contains('\'') {
+                    format!(
+                        "'{}'",
+                        format!("{:?}", t)
+                            .apply(|t| t[1..t.len() - 1].to_string())
+                            .replace("\\\"", "\"")
+                    )
+                } else {
+                    format!("{:?}", t)
+                }
+            }
             Value::Liste(rw_lock) => format!(
                 "[{}]",
                 rw_lock
@@ -242,7 +254,7 @@ impl Display for Value {
                 vals.read()
                     .unwrap()
                     .iter()
-                    .map(|val| val.to_string())
+                    .map(|val| val.repr())
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
@@ -364,6 +376,27 @@ pub struct CallFrame {
     pub closure: ArcClosureInst,
     pub ip: usize,
     pub base: usize, // where this frame's locals start in VM.stack
+}
+
+impl CallFrame {
+    pub fn get_trace(frames: &Vec<CallFrame>) -> String {
+        frames
+            .iter()
+            .map(|frame| {
+                format!(
+                    "{} (ip={})",
+                    frame
+                        .closure
+                        .function
+                        .name
+                        .as_ref()
+                        .unwrap_or(&String::from("anonyme")),
+                    frame.ip
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n|> ")
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

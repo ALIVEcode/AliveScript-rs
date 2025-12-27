@@ -64,7 +64,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                est_numerique(inst: Type::Texte): Type::Booleen => {
+                estNumérique(inst: Type::Texte): Type::Booleen => {
                     let inst = inst.as_texte().unwrap();
                     Ok(Some(Value::Booleen(inst.chars().all(|c| c.is_ascii_digit()))))
                 }

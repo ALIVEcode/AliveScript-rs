@@ -21,7 +21,7 @@ use crate::{
             instructions_to_string, instructions_to_string_debug,
         },
         err::{CompilationError, CompilationErrorKind},
-        obj::{UpvalueSpec, Value},
+        obj::{Function, UpvalueSpec, Value},
         parser::{PRATT_EXPR_PARSER, PRATT_TYPE_PARSER},
         value::{
             ASFieldInfo, ASFunction, ASModule, ASStructure, ArcClosureProto, ArcStructure,
@@ -58,6 +58,9 @@ pub struct LocalType {
     depth: i32,
 }
 
+#[derive(Debug, Default)]
+pub struct CompilerOptions {}
+
 #[derive(Debug)]
 pub struct Compiler<'a> {
     pub source_name: String,
@@ -87,6 +90,8 @@ pub struct Compiler<'a> {
     pub jump_stack: Vec<usize>,     // offsets to patch later
     pub continue_stack: Vec<usize>, // offsets to patch later
     pub break_stack: Vec<usize>,    // offsets to patch later
+
+    pub options: CompilerOptions,
 }
 
 impl<'a> Compiler<'a> {
@@ -107,6 +112,28 @@ impl<'a> Compiler<'a> {
             continue_stack: vec![],
             break_stack: vec![],
             return_type: Type::Tout.into(),
+            options: CompilerOptions::default(),
+        }
+    }
+
+    pub fn new_with_options(input: &'a str, source_name: String, options: CompilerOptions) -> Self {
+        Self {
+            input,
+            source_name,
+            function: Rc::new(RefCell::new(ASFunction::new_anonymous(0))),
+            code: Instructions::new(),
+            parent: None,
+            locals: vec![],
+            local_types: vec![],
+            scope_depth: 0,
+            upvalues: vec![],
+            had_error: false,
+            panic_mode: false,
+            jump_stack: vec![],
+            continue_stack: vec![],
+            break_stack: vec![],
+            return_type: Type::Tout.into(),
+            options,
         }
     }
 
@@ -133,6 +160,7 @@ impl<'a> Compiler<'a> {
             continue_stack: vec![],
             break_stack: vec![],
             return_type,
+            options: CompilerOptions::default(),
         }
     }
 
@@ -240,29 +268,6 @@ impl<'a> Compiler<'a> {
 
         rc_self.borrow_mut().finish();
 
-        // println!("CLOSURE:");
-        // println!(
-        //     "| ----INSTRUCTIONS----\n| {}",
-        //     instructions_to_string_debug(
-        //         &rc_self.borrow().function.borrow().code,
-        //         Rc::clone(&rc_self)
-        //     )
-        //     .join("\n| ")
-        // );
-        // println!(
-        //     "| ----LOCALS----\n| {}",
-        //     format!("{:#?}", rc_self.borrow().locals).replace("\n", "\n| ")
-        // );
-        // println!(
-        //     "| ----CONSTANTS----\n| {}",
-        //     format!("{:#?}", rc_self.borrow().function.borrow().constants).replace("\n", "\n| ")
-        // );
-        // println!(
-        //     "| ----UPVALUES----\n| {}",
-        //     format!("{:#?}", rc_self.borrow().function.borrow().upvalue_specs).replace("\n", "\n| ")
-        // );
-        // println!();
-
         let x = ClosureProto::new(Arc::new(rc_self.borrow().function.borrow().clone()));
 
         Ok(x)
@@ -299,25 +304,64 @@ impl<'a> Compiler<'a> {
 
         println!("FUNCTION:");
         println!(
+            "| ----LOCALS----\n| {}",
+            format!("{:#?}", rc_self.borrow().locals).replace("\n", "\n| ")
+        );
+        println!(
+            "| ----CONSTANTS----\n| {}",
+            format!(
+                "{}",
+                rc_self
+                    .borrow()
+                    .function
+                    .borrow()
+                    .constants
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| format!("{i}. {}", c.repr()))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+            .replace("\n", "\n| ")
+        );
+        println!(
+            "| ----UPVALUES----\n| {}",
+            format!("{:#?}", rc_self.borrow().function.borrow().upvalue_specs)
+                .replace("\n", "\n| ")
+        );
+        println!(
+            "| ----SUB FUNCTIONS----\n| {}",
+            format!(
+                "{}",
+                rc_self
+                    .borrow()
+                    .function
+                    .borrow()
+                    .constants
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, c)| {
+                        match c {
+                            Value::Function(Function::ClosureProto(f)) => Some(format!(
+                                "---{}---\n {}\n",
+                                f.function.name.as_ref().unwrap_or(&"Anonyme".to_string()),
+                                instructions_to_string(&f.function.code).join("\n "),
+                            )),
+                            _ => None,
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+            .replace("\n", "\n| ")
+        );
+        println!(
             "| ----INSTRUCTIONS----\n| {}",
             instructions_to_string_debug(
                 &rc_self.borrow().function.borrow().code,
                 Rc::clone(&rc_self)
             )
             .join("\n| ")
-        );
-        println!(
-            "| ----LOCALS----\n| {}",
-            format!("{:#?}", rc_self.borrow().locals).replace("\n", "\n| ")
-        );
-        println!(
-            "| ----CONSTANTS----\n| {}",
-            format!("{:#?}", rc_self.borrow().function.borrow().constants).replace("\n", "\n| ")
-        );
-        println!(
-            "| ----UPVALUES----\n| {}",
-            format!("{:#?}", rc_self.borrow().function.borrow().upvalue_specs)
-                .replace("\n", "\n| ")
         );
         println!();
 
@@ -728,20 +772,20 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 let struct_name = struct_pair.as_str();
                 self.parse_top_expr(struct_pair)?;
 
-                let Some(s_type) = self.borrow().get_var_type(struct_name) else {
-                    panic!("Unknown struct {}", struct_name)
-                };
-
-                let s_c = s_type.clone();
-                let Type::Struct(..) = s_type
-                    .as_base_type()
-                    .map_err(|compilation_error_kind| compilation_error_kind.to_error(span))?
-                else {
-                    return Err(CompilationErrorKind::generic_error(format!(
-                        "Impossible de construire un type '{:?}'. Seule une structure peut être construite.",
-                        s_c,
-                    )).to_error(span));
-                };
+                // let Some(s_type) = self.borrow().get_var_type(struct_name) else {
+                //     panic!("Unknown struct {}", struct_name)
+                // };
+                //
+                // let s_c = s_type.clone();
+                // let Type::Struct(..) = s_type
+                //     .as_base_type()
+                //     .map_err(|compilation_error_kind| compilation_error_kind.to_error(span))?
+                // else {
+                //     return Err(CompilationErrorKind::generic_error(format!(
+                //         "Impossible de construire un type '{:?}'. Seule une structure peut être construite.",
+                //         s_c,
+                //     )).to_error(span));
+                // };
                 // TODO: check the fields are the correct types
 
                 let mut nb_fields = 0;
@@ -766,14 +810,32 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 let mut inner = primary.into_inner();
                 // func
                 self.parse_expr(inner.next().unwrap().into_inner())?;
-                let mut arg_len = 0;
-                // args
-                for arg in inner.next().unwrap().into_inner() {
-                    self.parse_expr(arg.into_inner())?;
-                    arg_len += 1;
+                while let Some(next) = inner.peek() {
+                    match next.as_rule() {
+                        Rule::FunctionArgs => {
+                            let mut arg_len = 0;
+                            // args
+                            for arg in inner.next().unwrap().into_inner() {
+                                self.parse_expr(arg.into_inner())?;
+                                arg_len += 1;
+                            }
+                            self.borrow_mut().code.emit_call(arg_len);
+                        }
+                        Rule::AccessProp => {
+                            let prop = inner.next().unwrap().into_inner().next().unwrap();
+                            if matches!(prop.as_node_tag(), Some("prop")) {
+                                let idx = self
+                                    .borrow_mut()
+                                    .get_or_add_const(Value::Texte(prop.as_str().to_string()));
+                                self.borrow_mut().code.emit_get_attr(idx);
+                            } else {
+                                Rc::clone(self).parse_expr(prop.into_inner())?;
+                                self.borrow_mut().code.emit_get_item();
+                            }
+                        }
+                        _ => break,
+                    }
                 }
-
-                self.borrow_mut().code.emit_call(arg_len);
             }
 
             Rule::DebutBloc => {
@@ -1468,7 +1530,6 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
     fn parse_if(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError> {
         let inner = pair.clone().into_inner();
-
         // cond
         self.parse_expr(
             inner
@@ -1481,6 +1542,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         let if_not_cond_jmp = self.borrow_mut().push_cond_jump();
 
         // then br
+        self.borrow_mut().begin_scope();
         self.build_ast_stmts(
             inner
                 .clone()
@@ -1488,6 +1550,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 .unwrap()
                 .into_inner(),
         )?;
+        self.borrow_mut().end_scope();
 
         let mut to_end_jmps = vec![self.borrow_mut().push_jump()];
         self.borrow_mut().patch_jump(if_not_cond_jmp);
@@ -1517,12 +1580,14 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     )?;
                     let elif_not_cond_jmp = self.borrow_mut().push_cond_jump();
                     // then br
+                    self.borrow_mut().begin_scope();
                     self.build_ast_stmts(
                         inner_elif
                             .find(|p| matches!(p.as_node_tag(), Some("body")))
                             .unwrap()
                             .into_inner(),
                     )?;
+                    self.borrow_mut().end_scope();
 
                     to_end_jmps.push(self.borrow_mut().push_jump());
                     self.borrow_mut().patch_jump(elif_not_cond_jmp);
@@ -1538,7 +1603,9 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 Rule::sinonBr => {
                     let body = curr_br.into_inner().next().unwrap();
                     if body.as_rule() == Rule::StmtBody {
+                        self.borrow_mut().begin_scope();
                         self.build_ast_stmts(body.into_inner())?;
+                        self.borrow_mut().end_scope();
                     } else {
                         self.build_ast_stmt(body)?;
                     }
