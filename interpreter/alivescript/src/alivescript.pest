@@ -367,7 +367,7 @@ typePostfix       = _{ TypeArgs }
 TypeArgs          =  { "<" ~ TypeExpr ~ ("," ~ TypeExpr)* ~ ","? ~ ">" }
 
 Bool      = @{ ("vrai" | "faux") ~ !IdentChar }
-Text      = @{ PUSH("\"" | "'") ~ ("\\" ~ ANY | !PEEK ~ ANY)* ~ POP }
+Text      = @{ PUSH("\"" | "'" | "`"+) ~ ("\\" ~ ANY | !PEEK ~ ANY)* ~ POP }
 Ident     = @{ !(keyword ~ !IdentChar) ~ (LETTER | "_") ~ (LETTER | ASCII_DIGIT | "_")* }
 IdentChar = _{ LETTER | ASCII_DIGIT | "_" }
 Integer   = @{ "-"? ~ ASCII_DIGIT+ }

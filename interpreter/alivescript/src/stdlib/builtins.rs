@@ -1,4 +1,5 @@
 use crate::as_fonction;
+use crate::runtime::vm::VM;
 use std::{collections::HashMap, sync::LazyLock};
 
 use crate::compiler::obj::Value;

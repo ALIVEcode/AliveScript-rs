@@ -55,6 +55,12 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
+                existe(filename: Type::Texte): Type::Booleen => {
+                    let filename = filename.as_texte().unwrap();
+                    Ok(Some(Value::Booleen(fs::exists(filename).unwrap_or(false))))
+                }
+            },
+            as_module_fonction! {
                 ouvrir(filename: Type::Texte, mode: Type::Texte): Type::Custom => {
                     let filename = filename.as_texte().unwrap();
                     let mode = mode.as_texte().unwrap();

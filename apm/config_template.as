@@ -1,0 +1,7 @@
+nom = ""
+version = ""
+
+versionAliveScript = ""
+
+dépendances = []
+

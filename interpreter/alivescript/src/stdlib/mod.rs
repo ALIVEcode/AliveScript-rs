@@ -6,6 +6,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use dyn_fmt::AsStrFormatExt;
 use rand::random_range;
 use uuid::timestamp;
 
@@ -21,7 +22,11 @@ use crate::{
 mod macros;
 
 pub mod builtins;
+mod env;
 mod io;
+mod os;
+mod texte;
+mod module;
 
 as_module! {
     module Test { }
@@ -46,27 +51,6 @@ as_module! {
                     } else {
                         Ok(None)
                     }
-                }
-            },
-        ]
-    }
-}
-
-as_module! {
-    module Texte {}
-
-    fn load(&self) {
-        [
-            as_module_fonction! {
-                taille(inst: Type::Texte): Type::Entier => {
-                    let inst = inst.as_texte().unwrap();
-                    Ok(Some(Value::Entier(inst.len() as i64)))
-                }
-            },
-            as_module_fonction! {
-                estNumérique(inst: Type::Texte): Type::Booleen => {
-                    let inst = inst.as_texte().unwrap();
-                    Ok(Some(Value::Booleen(inst.chars().all(|c| c.is_ascii_digit()))))
                 }
             },
         ]
@@ -190,7 +174,7 @@ as_module! {
 pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
     let mut stdlib: Vec<Arc<dyn LazyModule>> = Vec::new();
 
-    stdlib.push(Arc::new(Texte {}));
+    stdlib.push(Arc::new(texte::Texte {}));
     stdlib.push(Arc::new(Liste {}));
     stdlib.push(Arc::new(Dict {}));
     stdlib.push(Arc::new(Test {}));
@@ -198,6 +182,9 @@ pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
     stdlib.push(Arc::new(Aleatoire {}));
     stdlib.push(Arc::new(Debug {}));
     stdlib.push(Arc::new(io::ES {}));
+    stdlib.push(Arc::new(os::SE {}));
+    stdlib.push(Arc::new(env::Env {}));
+    stdlib.push(Arc::new(module::Module {}));
 
     HashMap::from_iter(
         stdlib

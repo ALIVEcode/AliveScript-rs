@@ -113,6 +113,10 @@ struct AliveCli {
     /// This captures the 'alive <FILE>' case.
     #[arg(default_value = None)]
     file_path: Option<PathBuf>,
+
+    /// All remaining arguments
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    rest: Vec<String>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -131,7 +135,7 @@ enum AliveCommands {
     #[command(name = "-D")]
     DebugOnly(DebugInfo),
 
-    #[command(name = "bench")]
+    #[command(name = "--bench")]
     Bench {
         /// The file containing the AliveScript code to debug.
         file: PathBuf,

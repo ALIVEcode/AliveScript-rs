@@ -1490,4 +1490,8 @@ impl VM {
             }
         }
     }
+
+    pub fn file(&self) -> &str {
+        &self.file
+    }
 }

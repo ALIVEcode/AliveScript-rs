@@ -3,6 +3,8 @@ use std::fmt::{Debug, Display};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub};
 use std::sync::{Arc, RwLock};
 
+use unindent::{Unindent, unindent};
+
 use crate::compiler::value::{
     ASDict, ArcClosureInst, ArcClosureMethod, ArcClosureProto, ArcDict, ArcModule, ArcNativeObjet,
     ArcObjet, ArcStructure, Closure, NativeFunction, NativeMethod, NativeObjet, Type,
@@ -12,6 +14,7 @@ use crate::runtime::vm::VM;
 use crate::utils::Apply;
 
 pub type ArcValue = Arc<RwLock<Value>>;
+pub type ArcListe = Arc<RwLock<Vec<Value>>>;
 pub type ArcUpvalue = Arc<RwLock<Upvalue>>;
 
 #[derive(Debug, Clone)]
@@ -22,7 +25,7 @@ pub enum Value {
     Nul,
     Texte(String),
     Function(Function),
-    Liste(Arc<RwLock<Vec<Value>>>),
+    Liste(ArcListe),
     Dict(ArcDict),
     TypeObj(Type),
     Structure(ArcStructure),
@@ -41,6 +44,18 @@ pub enum Function {
 }
 
 impl Value {
+    pub fn from_literal_texte(s: &str) -> Self {
+        let s = &s[1..s.len() - 1];
+
+        Self::Texte(
+            s.unindent()
+                .replace(r"\n", "\n")
+                .replace(r"\t", "\t")
+                .replace(r"\r", "\r")
+                .to_owned(),
+        )
+    }
+
     pub fn closure(closure: impl Into<ArcClosureProto>) -> Self {
         Self::Function(Function::ClosureProto(closure.into()))
     }
@@ -205,6 +220,13 @@ impl Value {
     pub fn as_texte(&self) -> Option<&str> {
         match &self {
             Value::Texte(s) => Some(&s),
+            _ => None,
+        }
+    }
+
+    pub fn as_liste(&self) -> Option<ArcListe> {
+        match &self {
+            Value::Liste(l) => Some(Arc::clone(l)),
             _ => None,
         }
     }

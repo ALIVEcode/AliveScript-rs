@@ -1430,16 +1430,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             Rule::Decimal => Value::Decimal(pair.as_str().parse::<f64>().unwrap()),
             Rule::Bool => Value::Booleen(pair.as_str() == "vrai"),
             Rule::Null => Value::Nul,
-            Rule::Text => {
-                let slice = pair.as_str();
-                let s: String = slice[1..slice.len() - 1].parse().unwrap();
-                Value::Texte(
-                    s.replace(r"\n", "\n")
-                        .replace(r"\t", "\t")
-                        .replace(r"\r", "\r")
-                        .to_owned(),
-                )
-            }
+            Rule::Text => Value::from_literal_texte(pair.as_str()),
             rule => Err(PestError::new_from_span(
                 PestErrorVariant::ParsingError {
                     positives: vec![Rule::Lit],
@@ -1680,11 +1671,11 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 let module_name = inner
                     .clone()
                     .find_first_tagged("module")
-                    .map(|m| m.as_str().replace(".", "/"))
+                    .map(|m| m.as_str().trim().replace(".", "/"))
                     .or_else(|| {
                         inner
                             .find_first_tagged("path")
-                            .map(|p| p.as_str().to_string())
+                            .map(|p| p.as_str().trim().to_string())
                     })
                     .unwrap();
 
