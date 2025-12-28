@@ -6,7 +6,7 @@ utiliser Système alias Sys
 utiliser Module
 
 fonction aide()
-  afficher "Gestionnaire de Packets d'AliveScript
+  afficher "Gestionnaire de Projets d'AliveScript
 
 COMMANDES:
  init : initialise un projet AliveScript
@@ -25,7 +25,7 @@ const commande = args[2]
 const CHEMIN_CONFIG = "config.as"
 
 fonction init()
-  si non ES.existe(cheminConfig) alors 
+  si non ES.existe(CHEMIN_CONFIG) alors 
     var fichier = ES.ouvrir(CHEMIN_CONFIG, "écriture")
 
     var contenu = `
@@ -46,6 +46,8 @@ fonction init()
     afficher "Le fichier de configuration existe déjà."
   fin si
 
+  config = Module.charger(CHEMIN_CONFIG)
+  source = config.src
   si non ES.existe(source) alors
     var fichierSource = ES.ouvrir(source, "écriture")
     fichierSource.écrire(`

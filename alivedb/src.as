@@ -1,0 +1,1 @@
+afficher "Bonjour d'AliveScript !"
