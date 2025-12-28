@@ -22,27 +22,29 @@ si tailleDe(args) == 2 alors
 fin si
 
 const commande = args[2]
+const CHEMIN_CONFIG = "config.as"
 
 fonction init()
-  cheminConfig = "config.as"
-  #si ES.existe(cheminConfig) alors erreur("Le fichier de configuration existe déjà.")
+  si non ES.existe(cheminConfig) alors 
+    var fichier = ES.ouvrir(CHEMIN_CONFIG, "écriture")
 
-  var fichier = ES.ouvrir(cheminConfig, "écriture")
+    var contenu = `
+      nom = "{}"
+      version = "{}"
+      
+      src = "{}"
+      versionAliveScript = "0.1.0"
+      
+      dépendances = []
+      `
 
-  var contenu = `
-    nom = "{}"
-    version = "{}"
-    
-    src = "{}"
-    versionAliveScript = "0.1.0"
-    
-    dépendances = []
-    `
-
-  var nom = Env.dossierActuel().diviser("/")[-1]
-  var version = "0.1.0"
-  var source = "src.as"
-  fichier.écrire(contenu.format([nom, version, source]))
+    var nom = Env.dossierActuel().diviser("/")[-1]
+    var version = "0.1.0"
+    var source = "src.as"
+    fichier.écrire(contenu.format([nom, version, source]))
+  sinon
+    afficher "Le fichier de configuration existe déjà."
+  fin si
 
   si non ES.existe(source) alors
     var fichierSource = ES.ouvrir(source, "écriture")
@@ -55,12 +57,12 @@ fin fonction
 
 fonction exec()
   # trouver config.as
-  si non ES.existe("config.as") alors erreur("Impossible de trouver 'config.as'.")
-  config = Module.charger("config.as")
+  si non ES.existe(CHEMIN_CONFIG) alors erreur("Impossible de trouver 'config.as'.")
+  config = Module.charger(CHEMIN_CONFIG)
   source = config.src
 
   Module.charger(source)
-fin fonction()
+fin fonction
 
 si commande == "init" alors
   init()
