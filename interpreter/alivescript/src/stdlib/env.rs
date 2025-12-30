@@ -41,6 +41,15 @@ as_module! {
                 }
             },
             as_module_fonction! {
+                args(): Type::Liste => {
+                    Ok(Some(Value::liste(
+                        std::env::args()
+                            .map(|arg| Value::Texte(arg))
+                            .collect()
+                    )))
+                }
+            },
+            as_module_fonction! {
                 var(name: Type::Texte): Type::Texte => {
                     Ok(Some(
                         env::var(name.to_string())

@@ -616,7 +616,7 @@ impl<'a> Compiler<'a> {
         );
     }
 
-    fn push_cond_jump(&mut self) -> usize {
+    fn push_jump_if_false(&mut self) -> usize {
         let jump_idx = self.code.inner().len() + 1;
         self.code.emit_jump_if_false(0);
         self.jump_stack.push(jump_idx);
@@ -626,6 +626,13 @@ impl<'a> Compiler<'a> {
     fn push_jump(&mut self) -> usize {
         let jump_idx = self.code.inner().len() + 1;
         self.code.emit_jump(0);
+        self.jump_stack.push(jump_idx);
+        self.jump_stack.len() - 1
+    }
+
+    fn push_jump_test(&mut self, cond: bool) -> usize {
+        let jump_idx = self.code.inner().len() + 2;
+        self.code.emit_jump_test(0, cond);
         self.jump_stack.push(jump_idx);
         self.jump_stack.len() - 1
     }
@@ -707,6 +714,8 @@ trait Parser<'a> {
     fn parse_type(&mut self, pairs: Pairs<Rule>) -> Result<TypeSpec, CompilationError>;
 
     fn parse_if(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
+
+    fn parse_quand(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
     fn build_ast_stmt(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
@@ -906,6 +915,10 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 self.borrow_mut().patch_jump(skip_sinon_jmp);
             }
 
+            Rule::QuandExpr => {
+                self.parse_quand(primary)?;
+            }
+
             Rule::FnExpr => {
                 self.parse_fn(primary.into_inner(), None)?;
             }
@@ -919,6 +932,127 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         };
 
         Ok(self.borrow().code.len_inner() - before)
+    }
+
+    fn parse_quand(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError> {
+        let mut inner = pair.into_inner();
+        let value = inner.find_first_tagged("quand_expr");
+
+        let is_quand_expr = value.is_some();
+
+        let mut to_end_jumps = vec![];
+        let mut to_next_branch_jump = vec![];
+
+        if let Some(quand_expr) = value {
+            // parse the expr we check over
+            self.parse_top_expr(quand_expr)?;
+
+            // this is the form `quand expr ...`
+            for case in inner
+                .clone()
+                .filter(|node| node.as_rule() == Rule::QuandCasBloc)
+            {
+                for to_next_branch_jump in to_next_branch_jump.drain(..) {
+                    self.borrow_mut().patch_jump(to_next_branch_jump);
+                }
+
+                let mut inner_case = case.into_inner();
+                let mut cond = inner_case.next().unwrap().into_inner();
+
+                let block_type = cond.next().unwrap();
+
+                let mut to_body_jumps = vec![];
+                match block_type.as_rule() {
+                    Rule::vaut => {
+                        for expr in cond.take_while(|node| node.as_rule() == Rule::Expr) {
+                            self.borrow_mut().code.emit_dup();
+                            self.parse_top_expr(expr)?;
+                            self.borrow_mut().code.emit_bincomp(BinCompcode::NotEq);
+                            to_body_jumps.push(self.borrow_mut().push_jump_if_false());
+                        }
+                    }
+                    Rule::dans => {}
+                    Rule::pasDans => {}
+                    _ => unreachable!(),
+                }
+
+                to_next_branch_jump.push(self.borrow_mut().push_jump());
+
+                // jumps to the guard if present or the body otherwise
+                for to_body_jump in to_body_jumps {
+                    self.borrow_mut().patch_jump(to_body_jump);
+                }
+
+                let mut next = inner_case.next().unwrap();
+                if next.as_rule() == Rule::QuandGuarde {
+                    let guard = next.into_inner().next().unwrap();
+                    self.parse_top_expr(guard)?;
+                    to_next_branch_jump.push(self.borrow_mut().push_jump_if_false());
+                    next = inner_case.next().unwrap();
+                }
+
+                let body = next;
+                // we pop the expr on top
+                self.borrow_mut().code.emit_pop();
+                self.parse_top_expr(body)?;
+                to_end_jumps.push(self.borrow_mut().push_jump());
+            }
+        } else {
+            // this is the form `quand ...`
+            todo!()
+        }
+
+        for to_next_branch_jump in to_next_branch_jump.drain(..) {
+            self.borrow_mut().patch_jump(to_next_branch_jump);
+        }
+        if is_quand_expr {
+            // we pop the expr on top
+            self.borrow_mut().code.emit_pop();
+        }
+
+        // the `sinon si ...`
+        for case in inner
+            .clone()
+            .filter(|node| node.as_rule() == Rule::QuandSinonGuarde)
+        {
+            for to_next_branch_jump in to_next_branch_jump.drain(..) {
+                self.borrow_mut().patch_jump(to_next_branch_jump);
+            }
+            let mut cond = case.into_inner();
+            // skip the `sinon`
+            _ = cond.next().unwrap();
+
+            let guard = cond.next().unwrap().into_inner().next().unwrap();
+            self.parse_top_expr(guard)?;
+            to_next_branch_jump.push(self.borrow_mut().push_jump_if_false());
+
+            let body = cond.next().unwrap();
+            self.parse_top_expr(body)?;
+            to_end_jumps.push(self.borrow_mut().push_jump());
+        }
+
+        // the `sinon...`
+        if let Some(sinon) = inner
+            .clone()
+            .find(|node| node.as_rule() == Rule::QuandSinon)
+        {
+            for to_next_branch_jump in to_next_branch_jump.drain(..) {
+                self.borrow_mut().patch_jump(to_next_branch_jump);
+            }
+            let mut cond = sinon.into_inner();
+            // skip the `sinon`
+            _ = cond.next().unwrap();
+
+            let guard = cond.next().unwrap();
+            let body = cond.next().unwrap();
+            self.parse_top_expr(body)?;
+        }
+
+        for to_end_jump in to_end_jumps {
+            self.borrow_mut().patch_jump(to_end_jump);
+        }
+
+        Ok(())
     }
 
     fn parse_cond_jump(
@@ -1530,7 +1664,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 .into_inner(),
         )?;
 
-        let if_not_cond_jmp = self.borrow_mut().push_cond_jump();
+        let if_not_cond_jmp = self.borrow_mut().push_jump_if_false();
 
         // then br
         self.borrow_mut().begin_scope();
@@ -1569,7 +1703,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                             .unwrap()
                             .into_inner(),
                     )?;
-                    let elif_not_cond_jmp = self.borrow_mut().push_cond_jump();
+                    let elif_not_cond_jmp = self.borrow_mut().push_jump_if_false();
                     // then br
                     self.borrow_mut().begin_scope();
                     self.build_ast_stmts(
@@ -1962,7 +2096,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     compiler.code.emit_const(num1);
                     compiler.code.emit_bincomp(BinCompcode::Geq);
 
-                    if_not_cond_jmp = Some(compiler.push_cond_jump());
+                    if_not_cond_jmp = Some(compiler.push_jump_if_false());
                 } else {
                     before_cond = self.borrow().code.inner().len();
                 }
@@ -2012,7 +2146,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                         .into_inner(),
                 )?;
 
-                let if_not_cond_jmp = self.borrow_mut().push_cond_jump();
+                let if_not_cond_jmp = self.borrow_mut().push_jump_if_false();
 
                 if let Some(body) = inner.clone().find(|p| p.as_rule() == Rule::StmtBody) {
                     self.build_ast_stmts(body.into_inner())?;
@@ -2106,6 +2240,10 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     self.parse_expr(expr.into_inner())?;
                 }
                 self.borrow_mut().code.emit_return();
+            }
+            Rule::QuandExpr => {
+                self.parse_quand(pair)?;
+                self.borrow_mut().code.emit_pop();
             }
             Rule::Expr => {
                 self.parse_expr(pair.into_inner())?;

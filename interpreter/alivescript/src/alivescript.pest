@@ -19,6 +19,7 @@ stmtBloc = _{
     UtiliserStmt
   | DeclStmt
   | AssignStmt
+  | QuandExpr
   | SiStmt
   | PourStmt
   | RepeterStmt
@@ -70,10 +71,9 @@ UtiliserMembers = { "{" ~ ((#member = Ident) ~ ",")* ~ (#member = Ident)? ~ "}" 
 TypeStmt = { "type" ~ typeTerm ~ Assign ~ TypeExpr }
 
 FnDef    =  {
-    Docs? ~ eos* ~ PUSH(fonction) ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ (":" ~ (#body = Expr) ~ DROP | eos ~ (#body = StmtBody)? ~ finFn)
+    Docs? ~ eos* ~ PUSH(fonction) ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ (":" ~ (#body = Expr) ~ DROP | eos ~ (#body = StmtBody)? ~ finPop)
 }
 fonction = @{ ("fonction" | "fn") ~ !IdentChar }
-finFn    = @{ "fin" ~ WHITESPACE+ ~ POP }
 
 StructureDef  =  {
     Docs? ~ eos* ~ "structure" ~ (#name = Ident) ~ eos+ ~ StructureBody
@@ -137,15 +137,42 @@ sinonInner = _{
   | (eos+ ~ (#body = StmtBody) ~ finSi)
 }
 
+QuandExpr = {
+    PUSH(quand) ~ (eos+ ~ (QuandExprBloc ~ eos+)* | (#quand_expr = Expr) ~ eos+ ~ (QuandCasBloc ~ eos*)*) ~ QuandSinonGuarde* ~ QuandSinon? ~ finPop
+}
+
+QuandSinonGuarde = { sinon ~ QuandGuarde ~ "->" ~ eos* ~ (#body = Expr) }
+QuandSinon       = { sinon ~ "->" ~ eos* ~ (#body = Expr) }
+QuandExprBloc    = { Expr ~ QuandGuarde? ~ "->" ~ eos* ~ (#body = Expr) }
+QuandCasBloc     = { QuandCondition ~ QuandGuarde? ~ "->" ~ eos* ~ (#body = Expr) }
+
+QuandCondition = {
+    vaut ~ Expr ~ ("," ~ Expr)*
+  | dans ~ Expr
+  | pasDans ~ Expr
+}
+
+vaut    = @{ "vaut" ~ !IdentChar }
+dans    = @{ "dans" ~ !IdentChar }
+pasDans = @{ "pas" ~ WHITESPACE+ ~ "dans" ~ !IdentChar }
+sinon   = @{ "sinon" ~ !IdentChar }
+
+QuandGuarde = {
+    "si" ~ Expr
+}
+
+quand = @{ "quand" ~ !IdentChar }
+
+finPop = @{ "fin" ~ WHITESPACE+ ~ POP }
+
 PourStmt =  {
     "pour" ~ "chaque"? ~ (#vars = declVar) ~ "dans" ~ (#iter = PourIter) ~ "faire"? ~ eos+ ~ StmtBody? ~ finPour
 }
 finPour  = @{ "fin" ~ WHITESPACE+ ~ "pour" }
 
-RepeterStmt =  {
-    PUSH("repeter" | "répéter") ~ (#nb_iter = Expr)? ~ eos+ ~ StmtBody? ~ finRepeter
+RepeterStmt = {
+    PUSH("repeter" | "répéter") ~ (#nb_iter = Expr)? ~ eos+ ~ StmtBody? ~ finPop
 }
-finRepeter  = @{ "fin" ~ WHITESPACE+ ~ POP }
 // "repeter" | "répéter"
 
 TantQueStmt =  {
@@ -294,8 +321,8 @@ AssignOp = ${
 Assign   = @{ ":=" | "=" | "<-" | "←" }
 
 term = _{
-  
-  | EssayerExpr
+    EssayerExpr
+  | QuandExpr
   | FnExpr
   | FnCall
   | Lit
@@ -415,4 +442,5 @@ keyword = @{
   | "vrai"
   | "faux"
   | "nul"
+  | "vaut"
 }

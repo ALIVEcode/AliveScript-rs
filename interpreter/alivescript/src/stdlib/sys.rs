@@ -26,15 +26,6 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                args(): Type::Liste => {
-                    Ok(Some(Value::liste(
-                        std::env::args()
-                            .map(|arg| Value::Texte(arg))
-                            .collect()
-                    )))
-                }
-            },
-            as_module_fonction! {
                 quitter(code: Type::Entier): Type::Entier => {
                     exit(code.as_entier()? as i32)
                 }
