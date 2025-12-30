@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
-    fs, hint,
+    env, fs, hint,
     io::{self, Write, stdin},
     path::{self, Path},
     sync::{Arc, LazyLock, RwLock},
@@ -120,11 +120,11 @@ impl VM {
         }
     }
 
-    fn load_module(&mut self, module_name: &str) -> Result<Value, RuntimeError> {
+    fn lookup_module(&mut self, module_name: &str) -> Result<ArcModule, RuntimeError> {
         let module_name = module_name.strip_suffix(".as").unwrap_or(module_name);
 
         if let Some(module) = self.loaded_modules.get(module_name) {
-            return Ok(Value::Module(Arc::clone(&module)));
+            return Ok(Arc::clone(&module));
         }
 
         if let Some(lazy_module) = self.preloaded_modules.get(module_name) {
@@ -133,25 +133,64 @@ impl VM {
             self.loaded_modules
                 .insert(module_name.to_string(), Arc::clone(&module));
 
-            return Ok(Value::Module(module));
+            return Ok(module);
         }
 
         let module_file = Path::new(&self.file)
             .parent()
-            .unwrap()
-            .join(format!("{}.as", module_name));
+            .map(|p| format!("{}/{}.as", p.display(), module_name))
+            .unwrap_or(format!("./{}.as", module_name));
 
-        let abs_module_file = fs::canonicalize(&module_file)
-            .map_err(|io_err| RuntimeError::module_load_error(module_name, io_err))?;
+        let abs_module_file = if let Ok(path) = fs::canonicalize(&module_file) {
+            path.display().to_string()
+        } else {
+            let std_modules = env::var("ALIVESCRIPT_MODULES_STD").unwrap_or_else(|_| {
+                let exe_folder = env::current_exe()
+                    .map(|e| format!("{}/stdlib", e.parent().unwrap().display()))
+                    .unwrap_or_default();
+                format!("{}", vec![exe_folder].join(":"))
+            });
+
+            let search_dirs = env::var("ALIVESCRIPT_MODULES").or_else(|_| {
+                let modules_folder = env::current_dir()
+                    .map(|e| format!("{}/modules", e.display()))
+                    .unwrap_or_default();
+                Ok(format!("{}", vec![modules_folder].join(":")))
+            })?;
+
+            let modules_path = vec![std_modules, search_dirs].join(":");
+
+            let mut found = None;
+            for search_dir in modules_path.split(":") {
+                let path = format!("{}/{}", search_dir, module_file);
+                if let Ok(path) = fs::canonicalize(&path) {
+                    found = Some(path.display().to_string());
+                    break;
+                }
+            }
+
+            if let Some(path) = found {
+                path
+            } else {
+                return Err(RuntimeError::module_load_error(
+                    module_name,
+                    format!(
+                        "fichier non trouvé dans le répertoire courant ou dans {}",
+                        modules_path
+                    ),
+                ));
+            }
+        };
+
         let module_file_content = fs::read_to_string(&abs_module_file)
             .map_err(|io_err| RuntimeError::module_load_error(module_name, io_err))?;
 
-        let compiler = Compiler::new(&module_file_content, module_file.display().to_string());
+        let compiler = Compiler::new(&module_file_content, module_file.to_string());
         let module_closure = compiler
             .parse_and_compile_to_module()
             .map_err(|err| RuntimeError::module_load_error(module_name, err))?;
 
-        let mut other_vm = VM::new(module_file.display().to_string());
+        let mut other_vm = VM::new(module_file.to_string());
         other_vm.run(module_closure.load_fn)?;
 
         let mut members = HashMap::new();
@@ -171,6 +210,11 @@ impl VM {
         self.loaded_modules
             .insert(module_name.to_string(), Arc::clone(&module));
 
+        Ok(module)
+    }
+
+    fn load_module(&mut self, module_name: &str) -> Result<Value, RuntimeError> {
+        let module = self.lookup_module(module_name)?;
         Ok(Value::Module(module))
     }
 
@@ -519,39 +563,7 @@ impl VM {
     }
 
     pub fn run_file_to_module(&mut self, file_path: &str) -> Result<ArcModule, RuntimeError> {
-        let module_file = file_path;
-        let module_name = file_path.strip_suffix(".as").unwrap_or(file_path);
-
-        let abs_module_file = fs::canonicalize(&module_file)
-            .map_err(|io_err| RuntimeError::module_load_error(module_name, io_err))?;
-        let module_file_content = fs::read_to_string(&abs_module_file)
-            .map_err(|io_err| RuntimeError::module_load_error(module_name, io_err))?;
-
-        let compiler = Compiler::new(&module_file_content, module_file.to_string());
-        let module_closure = compiler
-            .parse_and_compile_to_module()
-            .map_err(|err| RuntimeError::module_load_error(module_name, err))?;
-
-        self.run(module_closure.load_fn)?;
-
-        let mut members = HashMap::new();
-        for (member_name, member) in module_closure.exported_members {
-            let value = self.stack[member.value_idx].clone();
-            members.insert(
-                member_name,
-                ASField::new(member.is_const, member.field_type, value),
-            );
-        }
-
-        let module = Arc::new(RwLock::new(ASModule {
-            name: module_name.to_string(),
-            members,
-        }));
-
-        self.loaded_modules
-            .insert(module_name.to_string(), Arc::clone(&module));
-
-        Ok(module)
+        self.lookup_module(file_path)
     }
 
     fn run_main(&mut self, closure: ArcClosureInst) -> Result<Value, RuntimeError> {
@@ -1433,7 +1445,7 @@ impl VM {
 
                     let next_state = match iter_val {
                         Value::Texte(txt) => {
-                            let state_idx = iter_state_val.as_entier().ok_or_else(|| {
+                            let state_idx = iter_state_val.as_entier().map_err(|_| {
                                 RuntimeError::generic_err(format!(
                                     "il faut que l'état soit une entier, pas '{}'",
                                     iter_state_val.get_type()
@@ -1452,7 +1464,7 @@ impl VM {
                             }
                         }
                         Value::Liste(lst) => {
-                            let state_idx = iter_state_val.as_entier().ok_or_else(|| {
+                            let state_idx = iter_state_val.as_entier().map_err(|_| {
                                 RuntimeError::generic_err(format!(
                                     "il faut que l'état soit une entier, pas '{}'",
                                     iter_state_val.get_type()

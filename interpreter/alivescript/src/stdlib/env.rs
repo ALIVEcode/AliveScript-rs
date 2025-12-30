@@ -58,6 +58,14 @@ as_module! {
                     )))
                 }
             },
+            as_module_fonction! {
+                changerVar(name: Type::Texte, val: Type::Texte): Type::Texte => {
+                    unsafe {
+                        env::set_var(name.to_string(), val.to_string());
+                    }
+                    Ok(None)
+                }
+            },
         ]
     }
 }

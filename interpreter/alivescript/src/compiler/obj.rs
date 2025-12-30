@@ -60,6 +60,12 @@ impl Value {
         Self::Function(Function::ClosureProto(closure.into()))
     }
 
+    pub fn dict(values: Vec<(&str, Value)>) -> Self {
+        Self::Dict(ArcDict::new(RwLock::new(ASDict {
+            members: HashMap::from_iter(values.into_iter().map(|(k, v)| (k.to_string(), v))),
+        })))
+    }
+
     pub fn liste(values: Vec<Value>) -> Self {
         Self::Liste(Arc::new(RwLock::new(values)))
     }
@@ -201,33 +207,65 @@ impl Value {
         }
     }
 
-    pub fn as_entier(&self) -> Option<i64> {
+    pub fn as_entier(&self) -> Result<i64, RuntimeError> {
         match &self {
-            Value::Entier(i) => Some(*i as i64),
-            Value::Decimal(d) => Some(*d as i64),
-            _ => None,
+            Value::Entier(i) => Ok(*i as i64),
+            Value::Decimal(d) => Ok(*d as i64),
+            _ => Err(RuntimeError::type_error(format!(
+                "impossible de convertir '{}' en entier",
+                self.get_type()
+            ))),
         }
     }
 
-    pub fn as_decimal(&self) -> Option<f64> {
+    pub fn as_decimal(&self) -> Result<f64, RuntimeError> {
         match &self {
-            Value::Entier(i) => Some(*i as f64),
-            Value::Decimal(d) => Some(*d as f64),
-            _ => None,
+            Value::Entier(i) => Ok(*i as f64),
+            Value::Decimal(d) => Ok(*d as f64),
+            _ => Err(RuntimeError::type_error(format!(
+                "impossible de convertir '{}' en décimal",
+                self.get_type()
+            ))),
         }
     }
 
-    pub fn as_texte(&self) -> Option<&str> {
+    pub fn as_bool(&self) -> Result<bool, RuntimeError> {
         match &self {
-            Value::Texte(s) => Some(&s),
-            _ => None,
+            Value::Booleen(b) => Ok(*b),
+            _ => Err(RuntimeError::type_error(format!(
+                "impossible de convertir '{}' en booléen",
+                self.get_type()
+            ))),
         }
     }
 
-    pub fn as_liste(&self) -> Option<ArcListe> {
+    pub fn as_texte(&self) -> Result<&str, RuntimeError> {
         match &self {
-            Value::Liste(l) => Some(Arc::clone(l)),
-            _ => None,
+            Value::Texte(s) => Ok(&s),
+            _ => Err(RuntimeError::type_error(format!(
+                "impossible de convertir '{}' en texte",
+                self.get_type()
+            ))),
+        }
+    }
+
+    pub fn as_liste(&self) -> Result<ArcListe, RuntimeError> {
+        match &self {
+            Value::Liste(l) => Ok(Arc::clone(l)),
+            _ => Err(RuntimeError::type_error(format!(
+                "impossible de convertir '{}' en liste",
+                self.get_type()
+            ))),
+        }
+    }
+
+    pub fn as_dict(&self) -> Result<ArcDict, RuntimeError> {
+        match &self {
+            Value::Dict(d) => Ok(Arc::clone(d)),
+            _ => Err(RuntimeError::type_error(format!(
+                "impossible de convertir '{}' en dict",
+                self.get_type()
+            ))),
         }
     }
 

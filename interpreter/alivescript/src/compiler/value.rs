@@ -541,6 +541,10 @@ impl Type {
         Self::Liste(Box::new(Type::Tout))
     }
 
+    pub fn dict_val_tout() -> Self {
+        Self::Dict(Box::new(Type::Texte), Box::new(Type::Tout))
+    }
+
     pub fn dict_tout() -> Self {
         Self::Dict(Box::new(Type::Tout), Box::new(Type::Tout))
     }

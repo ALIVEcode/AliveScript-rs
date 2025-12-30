@@ -1,7 +1,7 @@
-nom = "gpa"
+nom = "alive"
 version = "0.1.0"
 
-src = "gpa.as"
+src = "alive.as"
 versionAliveScript = "0.1.0"
 
 dépendances = []

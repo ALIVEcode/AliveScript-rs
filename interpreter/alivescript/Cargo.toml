@@ -43,5 +43,5 @@ rand = "0.9.2"
 # build-binary = ["dep:console"]
 #
 [[bin]]
-name = "alive"
+name = "alivec"
 path = "src/main.rs"

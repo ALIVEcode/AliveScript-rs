@@ -2,6 +2,7 @@ use core::time;
 use std::{
     collections::HashMap,
     marker::PhantomData,
+    process::exit,
     sync::{Arc, LazyLock},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -24,12 +25,15 @@ mod macros;
 pub mod builtins;
 mod env;
 mod io;
+mod module;
 mod os;
 mod texte;
-mod module;
+mod sys;
+mod datetime;
+mod subprocess;
 
 as_module! {
-    module Test { }
+    module Test {}
 
     fn load(&self) {
         [
@@ -129,34 +133,6 @@ as_module! {
 }
 
 as_module! {
-    module Systeme as "Système" {}
-
-    fn load(&self) {
-        [
-            as_module_fonction! {
-                temps(): Type::Entier => {
-                    Ok(Some(Value::Entier(
-                        SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap()
-                            .as_millis() as i64
-                    )))
-                }
-            },
-            as_module_fonction! {
-                args(): Type::Liste => {
-                    Ok(Some(Value::liste(
-                        std::env::args()
-                            .map(|arg| Value::Texte(arg))
-                            .collect()
-                    )))
-                }
-            },
-        ]
-    }
-}
-
-as_module! {
     module Debug as "Débug" {}
 
     fn load(&self) {
@@ -178,7 +154,7 @@ pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
     stdlib.push(Arc::new(Liste {}));
     stdlib.push(Arc::new(Dict {}));
     stdlib.push(Arc::new(Test {}));
-    stdlib.push(Arc::new(Systeme {}));
+    stdlib.push(Arc::new(sys::Systeme {}));
     stdlib.push(Arc::new(Aleatoire {}));
     stdlib.push(Arc::new(Debug {}));
     stdlib.push(Arc::new(io::ES {}));

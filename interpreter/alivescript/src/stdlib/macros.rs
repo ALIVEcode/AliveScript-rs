@@ -45,6 +45,20 @@ macro_rules! unpack {
 }
 
 #[macro_export]
+macro_rules! unpack_native {
+    ($var:ident: &$t:ty = $expr:expr) => {
+        $crate::unpack!(Value::NativeObjet(inner) = $expr);
+        let inner = ::std::sync::Arc::clone(&inner).as_any();
+        let Some($var) = inner.downcast_ref::<$t>() else {
+            return Err($crate::runtime::err::RuntimeError::generic_err(format!(
+                "Objet invalide {:?}",
+                inner
+            )));
+        };
+    };
+}
+
+#[macro_export]
 macro_rules! as_fonction {
     ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
      : $return_type:expr => $body:block) => {{
@@ -59,7 +73,7 @@ macro_rules! as_fonction {
                     $(
                     let $param_name = {
                         let p = args.pop_front();
-                        $crate::optional_body!($($default)?, {p.unwrap_or_else(|| $($default)?)}, {p.unwrap()})
+                        $crate::optional_body!($($default)?, {p.unwrap_or_else(|| $(&$default)?)}, {p.unwrap()})
                     };
                     if !$crate::compiler::value::Type::type_match(&$param_type, &$param_name.get_type()) {
                         return Err($crate::runtime::err::RuntimeError::invalid_arg_type(
@@ -82,7 +96,7 @@ macro_rules! as_fonction {
 #[macro_export]
 macro_rules! as_module_fonction {
     ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
-     : $return_type:expr => $body:block) => {{
+     $(: $return_type:expr)? => $body:block) => {{
          $($($prefix)*)?;
          (
             String::from(std::stringify!($name)),
@@ -91,11 +105,20 @@ macro_rules! as_module_fonction {
                 name: std::sync::Arc::new(String::from(std::stringify!($name))),
                 desc: std::sync::Arc::new($crate::opt_value!($($desc.to_string())?)),
                 func: std::sync::Arc::new(move |_vm: &mut $crate::runtime::vm::VM, args: std::vec::Vec<$crate::compiler::obj::Value>| {
-                    let mut args = std::collections::VecDeque::from_iter(args.iter());
+                    let mut args = std::collections::VecDeque::from_iter(args.into_iter());
                     $(
                     let $param_name = {
-                        let p = args.pop_front();
-                        $crate::optional_body!($($default)?, {p.unwrap_or_else(|| $($default)?)}, {p.unwrap()})
+                        if let Some(p) = args.pop_front() {
+                            p
+                        } else {
+                            $crate::optional_body!($($default)?,
+                                { $($default)? },
+                                {
+                                    return Err($crate::runtime::err::RuntimeError::call_error(stringify!($name), format!("valeur manquante pour le paramètre '{}'", stringify!($param_name))));
+                                }
+                            )
+                        }
+                        
                     };
                     if !$crate::compiler::value::Type::type_match(&$param_type, &$param_name.get_type()) {
                         return Err($crate::runtime::err::RuntimeError::invalid_arg_type(

@@ -14,7 +14,7 @@ use crate::{
     },
     runtime::err::RuntimeError,
     stdlib::LazyModule,
-    unpack,
+    unpack, unpack_native,
 };
 
 #[derive(Debug)]
@@ -81,11 +81,7 @@ as_module! {
             },
             as_module_fonction! {
                 écrire(inst: Type::Objet(String::from("ES.Fichier")), msg: Type::Texte): Type::Entier => {
-                    unpack!(Value::NativeObjet(fh) = inst);
-                    let fh = Arc::clone(fh).as_any();
-                    let Some(f) = fh.downcast_ref::<FileHandle>() else {
-                        return Err(RuntimeError::generic_err(format!("Objet invalide (Fichier attendu) {:?}", fh)));
-                    };
+                    unpack_native!(f: &FileHandle = inst);
 
                     let msg = msg.as_texte().unwrap();
                     let nb_bytes = f.file.write().unwrap().write(msg.as_bytes()).unwrap();
@@ -95,11 +91,7 @@ as_module! {
             },
             as_module_fonction! {
                 écrireLigne(inst: Type::Objet(String::from("ES.Fichier")), msg: Type::Texte): Type::Entier => {
-                    unpack!(Value::NativeObjet(fh) = inst);
-                    let fh = Arc::clone(fh).as_any();
-                    let Some(f) = fh.downcast_ref::<FileHandle>() else {
-                        return Err(RuntimeError::generic_err(format!("Objet invalide (Fichier attendu) {:?}", fh)));
-                    };
+                    unpack_native!(f: &FileHandle = inst);
 
                     let msg = String::from(msg.as_texte().unwrap()) + "\n";
                     let nb_bytes = f.file.write().unwrap().write(msg.as_bytes()).unwrap();
@@ -109,11 +101,7 @@ as_module! {
             },
             as_module_fonction! {
                 lireLigne(inst: Type::Objet(String::from("ES.Fichier"))): Type::Texte => {
-                    unpack!(Value::NativeObjet(fh) = inst);
-                    let fh = Arc::clone(fh).as_any();
-                    let Some(f) = fh.downcast_ref::<FileHandle>() else {
-                        return Err(RuntimeError::generic_err(format!("Objet invalide (Fichier attendu) {:?}", fh)));
-                    };
+                    unpack_native!(f: &FileHandle = inst);
 
                     let mut file = f.file.write().unwrap();
                     let mut line = String::new();
@@ -140,11 +128,7 @@ as_module! {
             },
             as_module_fonction! {
                 lignes(inst: Type::Objet(String::from("ES.Fichier"))): Type::Liste => {
-                    unpack!(Value::NativeObjet(fh) = inst);
-                    let fh = Arc::clone(fh).as_any();
-                    let Some(f) = fh.downcast_ref::<FileHandle>() else {
-                        return Err(RuntimeError::generic_err(format!("Objet invalide (Fichier attendu) {:?}", fh)));
-                    };
+                    unpack_native!(f: &FileHandle = inst);
 
                     let mut file = f.file.write().unwrap();
                     let mut s = String::new();
@@ -161,11 +145,7 @@ as_module! {
             },
             as_module_fonction! {
                 lireTout(inst: Type::Objet(String::from("ES.Fichier"))): Type::Texte => {
-                    unpack!(Value::NativeObjet(fh) = inst);
-                    let fh = Arc::clone(fh).as_any();
-                    let Some(f) = fh.downcast_ref::<FileHandle>() else {
-                        return Err(RuntimeError::generic_err(format!("Objet invalide (Fichier attendu) {:?}", fh)));
-                    };
+                    unpack_native!(f: &FileHandle = inst);
 
                     let mut file = f.file.write().unwrap();
                     let mut s = String::new();
@@ -182,11 +162,7 @@ as_module! {
             },
             as_module_fonction! {
                 lire(inst: Type::Objet(String::from("ES.Fichier")), nbcars: Type::Entier): Type::Texte => {
-                    unpack!(Value::NativeObjet(fh) = inst);
-                    let fh = Arc::clone(fh).as_any();
-                    let Some(f) = fh.downcast_ref::<FileHandle>() else {
-                        return Err(RuntimeError::generic_err(format!("Objet invalide (Fichier attendu) {:?}", fh)));
-                    };
+                    unpack_native!(f: &FileHandle = inst);
 
                     let mut file = f.file.write().unwrap();
                     let mut s = vec![0; nbcars.as_entier().unwrap() as usize];
@@ -205,11 +181,7 @@ as_module! {
             },
             as_module_fonction! {
                 fermer(inst: Type::Objet(String::from("ES.Fichier"))): Type::Nul => {
-                    unpack!(Value::NativeObjet(fh) = inst);
-                    let fh = Arc::clone(fh).as_any();
-                    let Some(f) = fh.downcast_ref::<FileHandle>() else {
-                        return Err(RuntimeError::generic_err(format!("Objet invalide (Fichier attendu) {:?}", fh)));
-                    };
+                    unpack_native!(f: &FileHandle = inst);
 
                     f.file.write().unwrap().flush();
                     drop(f.file.write().unwrap());
