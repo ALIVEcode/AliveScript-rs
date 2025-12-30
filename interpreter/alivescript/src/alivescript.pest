@@ -138,7 +138,7 @@ sinonInner = _{
 }
 
 QuandExpr = {
-    PUSH(quand) ~ (eos+ ~ (QuandExprBloc ~ eos+)* | (#quand_expr = Expr) ~ eos+ ~ (QuandCasBloc ~ eos*)*) ~ QuandSinonGuarde* ~ QuandSinon? ~ finPop
+    PUSH(quand) ~ (eos+ ~ (QuandExprBloc ~ eos+)* | (#quand_expr = Expr) ~ eos+ ~ (QuandCasBloc ~ eos*)*) ~ (QuandSinonGuarde ~ eos*)* ~ (QuandSinon ~ eos+)? ~ finPop
 }
 
 QuandSinonGuarde = { sinon ~ QuandGuarde ~ "->" ~ eos* ~ (#body = Expr) }

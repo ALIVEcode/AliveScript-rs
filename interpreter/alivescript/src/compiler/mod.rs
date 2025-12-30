@@ -962,18 +962,19 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 let block_type = cond.next().unwrap();
 
                 let mut to_body_jumps = vec![];
-                match block_type.as_rule() {
-                    Rule::vaut => {
-                        for expr in cond.take_while(|node| node.as_rule() == Rule::Expr) {
-                            self.borrow_mut().code.emit_dup();
-                            self.parse_top_expr(expr)?;
-                            self.borrow_mut().code.emit_bincomp(BinCompcode::NotEq);
-                            to_body_jumps.push(self.borrow_mut().push_jump_if_false());
-                        }
-                    }
-                    Rule::dans => {}
-                    Rule::pasDans => {}
+                // we select the inverse because we do a jump if false
+                let compop = match block_type.as_rule() {
+                    Rule::vaut => BinCompcode::NotEq,
+                    Rule::dans => BinCompcode::PasDans,
+                    Rule::pasDans => BinCompcode::Dans,
                     _ => unreachable!(),
+                };
+
+                for expr in cond.take_while(|node| node.as_rule() == Rule::Expr) {
+                    self.borrow_mut().code.emit_dup();
+                    self.parse_top_expr(expr)?;
+                    self.borrow_mut().code.emit_bincomp(compop);
+                    to_body_jumps.push(self.borrow_mut().push_jump_if_false());
                 }
 
                 to_next_branch_jump.push(self.borrow_mut().push_jump());
@@ -1043,12 +1044,14 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             // skip the `sinon`
             _ = cond.next().unwrap();
 
-            let guard = cond.next().unwrap();
             let body = cond.next().unwrap();
             self.parse_top_expr(body)?;
         }
 
-        for to_end_jump in to_end_jumps {
+        for to_end_jump in to_end_jumps
+            .into_iter()
+            .chain(to_next_branch_jump.into_iter())
+        {
             self.borrow_mut().patch_jump(to_end_jump);
         }
 
