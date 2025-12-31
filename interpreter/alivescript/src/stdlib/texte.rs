@@ -104,6 +104,22 @@ as_module! {
                     Ok(Some(Value::Texte(val)))
                 }
             },
+            as_module_fonction! {
+                sansPréfix(inst: Type::Texte, pat: Type::optional(Type::Texte)) => {
+                    let inst = inst.as_texte()?;
+                    let pat = pat.as_texte()?;
+
+                    Ok(Some(Value::Texte(inst.strip_prefix(pat).unwrap_or(inst).to_string())))
+                }
+            },
+            as_module_fonction! {
+                sansSuffix(inst: Type::Texte, pat: Type::Texte) => {
+                    let inst = inst.as_texte()?;
+                    let pat = pat.as_texte()?;
+
+                    Ok(Some(Value::Texte(inst.strip_suffix(pat).unwrap_or(inst).to_string())))
+                }
+            },
         ]
     }
 }

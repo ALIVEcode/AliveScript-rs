@@ -168,7 +168,7 @@ pub enum Opcode {
     /// 3. it pushes the loaded module on the stack
     LoadModule,
 
-    /// arg: iter_idx
+    /// arg: iter_idx, nb_vars
     /// iter_idx + 1 => iter_state
     /// updates iter_state and gets the next value for the next iteration
     ///
@@ -254,7 +254,7 @@ impl Opcode {
             Opcode::Jump | Opcode::JumpIfFalse => 1,
             Opcode::JumpTest => 2,
 
-            Opcode::ForNext => 1,
+            Opcode::ForNext => 2,
 
             Opcode::Closure => 1,
             Opcode::Close => 1,
@@ -776,9 +776,10 @@ impl Instructions {
         self.emit_byte(jmp);
     }
 
-    pub fn emit_for_next(&mut self, first_var_slot: OpcodeByteSize) {
+    pub fn emit_for_next(&mut self, first_var_slot: OpcodeByteSize, nb_vars: u8) {
         self.emit_opcode(Opcode::ForNext);
         self.emit_byte(first_var_slot);
+        self.emit_byte(nb_vars as OpcodeByteSize);
     }
 }
 

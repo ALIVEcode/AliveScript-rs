@@ -34,7 +34,7 @@ pub enum RuntimeError {
     #[error("Explosion de la pile d'appel: {0}")]
     StackOverflow(String),
 
-    #[error("Erreur lors de l'exécution: {0}")]
+    #[error("Erreur lors de l'exécution:\n{0}")]
     RuntimeError(String),
 }
 

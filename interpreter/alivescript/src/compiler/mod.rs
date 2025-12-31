@@ -1198,7 +1198,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                             self.borrow_mut().code.emit_get_attr(idx);
                             nb_inst += 2
                         } else {
-                            Rc::clone(self).parse_expr(prop.into_inner())?;
+                            nb_inst += Rc::clone(self).parse_expr(prop.into_inner())?;
                             self.borrow_mut().code.emit_get_item();
                             nb_inst += 1
                         }
@@ -2252,11 +2252,19 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 // loop
                 let start_loop = self.borrow().code.len_inner();
 
-                self.borrow_mut().code.emit_for_next(iter_idx);
-                let end_loop_jmp = self.borrow_mut().push_jump();
-
                 // vars
                 let vars = inner.find_first_tagged("vars").unwrap();
+
+                self.borrow_mut().code.emit_for_next(
+                    iter_idx,
+                    vars.clone()
+                        .into_inner()
+                        .flatten()
+                        .filter(|v| v.as_rule() == Rule::DeclIdent)
+                        .count() as u8,
+                );
+                let end_loop_jmp = self.borrow_mut().push_jump();
+
                 self.parse_assign(vars)?;
 
                 if let Some(body) = inner.clone().find(|p| p.as_rule() == Rule::StmtBody) {

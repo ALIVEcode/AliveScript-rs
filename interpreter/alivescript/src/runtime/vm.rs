@@ -1518,8 +1518,13 @@ impl VM {
                     frame.ip += 1;
                     let base = frame.base;
 
+                    let nb_vars = fnc.code[frame.ip];
+                    frame.ip += 1;
+
                     let iter_val = self.stack[base + iter_var_idx as usize].clone();
                     let iter_state_val = &self.stack[base + iter_var_idx as usize + 1];
+
+                    let is_first = iter_state_val == &Value::Entier(0);
 
                     let next_state = match iter_val {
                         Value::Texte(txt) => {
@@ -1575,6 +1580,10 @@ impl VM {
                         self.push(next_state);
                         // skip the jump
                         self.get_frame().unwrap().ip += 2;
+                    } else if is_first {
+                        for _ in 0..nb_vars {
+                            self.push(Value::Nul);
+                        }
                     }
                 }
             }

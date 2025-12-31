@@ -73,6 +73,10 @@ as_module! {
                             .map_err(|err| RuntimeError::generic_err(format!(
                                 "Erreur lors de l'ouverture du fichier '{}'\n{}", filename, err
                             )))?,
+                        "ajout" | "a" => fs::File::options().append(true).open(filename)
+                            .map_err(|err| RuntimeError::generic_err(format!(
+                                "Erreur lors de l'ouverture du fichier '{}'\n{}", filename, err
+                            )))?,
                         _ => return Err(RuntimeError::generic_err(format!("Mode d'ouverture invalide '{}'", mode)))
                     };
                     let fh = FileHandle { file: RwLock::new(file) };
