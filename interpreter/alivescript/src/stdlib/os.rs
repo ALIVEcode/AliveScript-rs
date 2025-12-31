@@ -22,11 +22,6 @@ as_module! {
 
     fn load(&self) {
         [
-            as_module_fonction! {
-                fichierActuel[vm](): Type::Texte => {
-                    Ok(Some(Value::Texte(vm.file().to_string())))
-                }
-            },
         ]
     }
 }

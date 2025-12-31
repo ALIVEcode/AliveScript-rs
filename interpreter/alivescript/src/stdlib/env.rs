@@ -23,7 +23,12 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                execActuel(): Type::Texte => {
+                fichierActuel[vm](): Type::Texte => {
+                    Ok(Some(Value::Texte(vm.file().to_string())))
+                }
+            },
+            as_module_fonction! {
+                cheminExec(): Type::Texte => {
                     Ok(Some(Value::Texte(
                         env::current_exe()
                             .map(|p| p.display().to_string())
@@ -32,7 +37,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                dossierActuel(): Type::Texte => {
+                dossierDeTravail(): Type::Texte => {
                     Ok(Some(Value::Texte(
                         env::current_dir()
                             .map(|p| p.display().to_string())

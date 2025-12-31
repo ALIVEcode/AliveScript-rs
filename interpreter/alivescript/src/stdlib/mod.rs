@@ -23,14 +23,15 @@ use crate::{
 mod macros;
 
 pub mod builtins;
+mod datetime;
 mod env;
 mod io;
+mod liste;
 mod module;
 mod os;
-mod texte;
-mod sys;
-mod datetime;
 mod subprocess;
+mod sys;
+mod texte;
 
 as_module! {
     module Test {}
@@ -55,31 +56,6 @@ as_module! {
                     } else {
                         Ok(None)
                     }
-                }
-            },
-        ]
-    }
-}
-
-as_module! {
-    module Liste {}
-
-    fn load(&self) {
-        [
-            as_module_fonction! {
-                taille(inst: Type::liste_tout()): Type::Entier => {
-                    unpack!(Value::Liste(lst) = inst);
-
-                    Ok(Some(Value::Entier(lst.read().unwrap().len() as i64)))
-                }
-            },
-            as_module_fonction! {
-                ajouter(inst: Type::liste_tout(), val: Type::Tout): Type::Nul => {
-                    unpack!(Value::Liste(lst) = inst);
-
-                    lst.write().unwrap().push(val.clone());
-
-                    Ok(Some(Value::Nul))
                 }
             },
         ]
@@ -151,7 +127,7 @@ pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
     let mut stdlib: Vec<Arc<dyn LazyModule>> = Vec::new();
 
     stdlib.push(Arc::new(texte::Texte {}));
-    stdlib.push(Arc::new(Liste {}));
+    stdlib.push(Arc::new(liste::Liste {}));
     stdlib.push(Arc::new(Dict {}));
     stdlib.push(Arc::new(Test {}));
     stdlib.push(Arc::new(sys::Systeme {}));
@@ -161,6 +137,7 @@ pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
     stdlib.push(Arc::new(os::SE {}));
     stdlib.push(Arc::new(env::Env {}));
     stdlib.push(Arc::new(module::Module {}));
+    stdlib.push(Arc::new(subprocess::Processus {}));
 
     HashMap::from_iter(
         stdlib

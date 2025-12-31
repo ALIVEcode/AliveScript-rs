@@ -1,5 +1,11 @@
 use std::{
-    any::Any, collections::VecDeque, fs, io::{self, BufRead, BufReader, Read, Write}, ops::Deref, process::{Child, Command}, sync::{Arc, RwLock}
+    any::Any,
+    collections::VecDeque,
+    fs,
+    io::{self, BufRead, BufReader, Read, Write},
+    ops::Deref,
+    process::{Child, Command},
+    sync::{Arc, RwLock},
 };
 
 use crate::{
@@ -84,7 +90,7 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                créer(cmd: Type::Texte, args: Type::liste_tout()) => {
+                créer(cmd: Type::Texte, args: Type::liste(Type::Texte) => Value::liste(vec![])) => {
                     let mut command = Command::new(cmd.as_texte()?);
                     command.args(args.as_liste()?
                             .read()
@@ -117,7 +123,7 @@ as_module! {
                     opt: Type::dict_val_tout() => Value::dict(vec![("texte", Value::Booleen(true))])
                 ) => {
                     unpack_native!(cmd: &ProcessHandle = inst);
-                    
+
                     let child = cmd.cmd.write()
                         .unwrap()
                         .spawn()

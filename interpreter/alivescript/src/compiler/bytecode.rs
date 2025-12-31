@@ -83,6 +83,11 @@ pub enum Opcode {
     Neg,
     BinComp,
     Not,
+    /// arg: has_step
+    Range,
+
+    /// arg: has_step
+    RangeEq,
 
     /// arg: nb_elements
     /// stack: `[el_n, ..., el_2, el_1]`
@@ -195,6 +200,8 @@ impl Opcode {
             Opcode::Return => "RETURN",
             Opcode::BinOp => "BINOP",
             Opcode::BinComp => "BINCOMP",
+            Opcode::Range => "RANGE",
+            Opcode::RangeEq => "RANGE_EQ",
             Opcode::Not => "NOT",
             Opcode::Neg => "NEG",
             Opcode::Jump => "JUMP",
@@ -250,6 +257,7 @@ impl Opcode {
             Opcode::Return => 0,
 
             Opcode::BinOp | Opcode::BinComp => 1,
+            Opcode::Range | Opcode::RangeEq => 1,
 
             Opcode::Dup | Opcode::Pop => 0,
 
@@ -703,6 +711,16 @@ impl Instructions {
         self.emit_opcode(Opcode::BinComp);
         // The BinOpcode OpcodeByteSize value represent the operation done
         self.emit_byte(op as OpcodeByteSize);
+    }
+
+    pub fn emit_range(&mut self, has_step: bool) {
+        self.emit_opcode(Opcode::Range);
+        self.emit_byte(has_step as OpcodeByteSize);
+    }
+
+    pub fn emit_range_eq(&mut self, has_step: bool) {
+        self.emit_opcode(Opcode::RangeEq);
+        self.emit_byte(has_step as OpcodeByteSize);
     }
 
     pub fn emit_jump(&mut self, target: i16) {

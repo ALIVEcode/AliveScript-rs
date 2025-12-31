@@ -1,0 +1,85 @@
+use core::time;
+use std::{
+    collections::HashMap,
+    marker::PhantomData,
+    sync::{Arc, LazyLock},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
+
+use dyn_fmt::AsStrFormatExt;
+use rand::random_range;
+use uuid::timestamp;
+
+use crate::{as_module, as_module_fonction, unpack};
+use crate::{
+    compiler::{
+        obj::Value,
+        value::{ASModule, ArcModule, Type},
+    },
+    runtime::err::RuntimeError,
+};
+
+as_module! {
+    module Liste {}
+
+    fn load(&self) {
+        [
+            as_module_fonction! {
+                taille(inst: Type::liste_tout()): Type::Entier => {
+                    unpack!(Value::Liste(lst) = inst);
+
+                    Ok(Some(Value::Entier(lst.read().unwrap().len() as i64)))
+                }
+            },
+            as_module_fonction! {
+                ajouter(inst: Type::liste_tout(), val: Type::Tout): Type::Nul => {
+                    unpack!(Value::Liste(lst) = inst);
+
+                    lst.write().unwrap().push(val.clone());
+
+                    Ok(Some(Value::Nul))
+                }
+            },
+            as_module_fonction! {
+                joindre(inst: Type::liste(Type::Texte), sep: Type::Texte => Value::Texte(String::from(" "))) => {
+                    unpack!(Value::Liste(lst) = inst);
+
+                    Ok(Some(Value::Texte(lst.read().unwrap()
+                        .iter()
+                        .map(|v| v.to_string())
+                        .collect::<Vec<_>>()
+                        .join(sep.as_texte()?))))
+                }
+            },
+            as_module_fonction! {
+                map[vm](inst: Type::liste_tout(), map: Type::Fonction) => {
+                    unpack!(Value::Liste(lst) = inst);
+                    unpack!(Value::Function(map) = map);
+
+                    Ok(Some(Value::liste(lst.read().unwrap()
+                        .iter()
+                        .map(|v| vm.run_fn(vec![v.clone()], &map))
+                        .collect::<Result<_,_>>()?)))
+                }
+            },
+            as_module_fonction! {
+                filtrer[vm](inst: Type::liste_tout(), filtre: Type::Fonction) => {
+                    unpack!(Value::Liste(lst) = inst);
+                    unpack!(Value::Function(filtre) = filtre);
+
+                    Ok(Some(Value::liste(lst.read().unwrap()
+                        .iter()
+                        .filter_map(|v| {
+                            let result = vm.run_fn(vec![v.clone()], &filtre);
+                            match result {
+                                Ok(r) if r.to_bool() => Some(Ok(v.clone())),
+                                Ok(r) => None,
+                                Err(e) => Some(Err(e))
+                            }
+                        })
+                        .collect::<Result<_,_>>()?)))
+                }
+            },
+        ]
+    }
+}

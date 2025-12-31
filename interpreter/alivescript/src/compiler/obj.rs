@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
-use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub};
+use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Range, RangeInclusive, Rem, Shl, Shr, Sub};
 use std::sync::{Arc, RwLock};
 
+use rand::distr::uniform::SampleRange;
 use unindent::{Unindent, unindent};
 
 use crate::compiler::value::{
@@ -11,7 +12,7 @@ use crate::compiler::value::{
 };
 use crate::runtime::err::RuntimeError;
 use crate::runtime::vm::VM;
-use crate::utils::Apply;
+use crate::utils::{Apply, MapIf};
 
 pub type ArcValue = Arc<RwLock<Value>>;
 pub type ArcListe = Arc<RwLock<Vec<Value>>>;
@@ -156,6 +157,34 @@ impl Value {
             (V::Decimal(x), V::Decimal(y)) => V::Decimal(x.powf(y)),
             (_, rhs) => Err(RuntimeError::invalid_op(
                 "++",
+                self.get_type(),
+                rhs.get_type(),
+            ))?,
+        })
+    }
+
+    pub fn range(&self, rhs: Self, step: Self, inclusive: bool) -> Result<Value, RuntimeError> {
+        use Value as V;
+
+        Ok(match (self, rhs) {
+            (V::Entier(x), V::Entier(y)) => V::liste(
+                if inclusive { *x..=y } else { *x..=y - 1 }
+                    .map(|i| Value::Entier(i))
+                    .collect(),
+            ),
+            // (V::Decimal(x), V::Entier(y)) => V::liste(
+            //     if inclusive {
+            //         *x..=y as f64
+            //     } else {
+            //         *x..=y as f64 - 1.0
+            //     }
+            //     .map(|f| Value::Decimal(f))
+            //     .collect(),
+            // ),
+            // (V::Entier(x), V::Decimal(y)) => V::Decimal((*x as f64).powf(y)),
+            // (V::Decimal(x), V::Decimal(y)) => V::Decimal(x.powf(y)),
+            (_, rhs) => Err(RuntimeError::invalid_op(
+                "suite",
                 self.get_type(),
                 rhs.get_type(),
             ))?,

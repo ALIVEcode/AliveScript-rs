@@ -1136,6 +1136,17 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 let len_lhs = lhs?;
                 let len_rhs = rhs?;
 
+                if matches!(infix.as_rule(), Rule::Range | Rule::RangeEq) {
+                    let mut inner = infix.into_inner();
+                    let step_size = if let Some(step) = inner.next() {
+                        Some(Rc::clone(self).parse_top_expr(step)?)
+                    } else {
+                        None
+                    };
+                    self.borrow_mut().code.emit_range(step_size.is_some());
+                    return Ok(len_lhs + len_rhs + 2 + step_size.unwrap_or(0));
+                }
+
                 if let Ok(op) = BinOpcode::try_from(&infix) {
                     self.borrow_mut().code.emit_binop(op);
                     return Ok(len_lhs + len_rhs + 2);

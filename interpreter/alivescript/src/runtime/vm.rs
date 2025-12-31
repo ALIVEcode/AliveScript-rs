@@ -1284,6 +1284,32 @@ impl VM {
                         .into(),
                     );
                 }
+                Opcode::Range | Opcode::RangeEq => {
+                    let has_step = fnc.code[frame.ip];
+                    frame.ip += 1;
+
+                    let inclusive = op == Opcode::RangeEq;
+
+                    let step = if has_step == 1 {
+                        self.pop().ok_or_else(|| {
+                            RuntimeError::generic_err(format!("Missing step in {:?}", op))
+                        })?
+                    } else {
+                        Value::Entier(1)
+                    };
+
+                    let rhs = self.pop().ok_or_else(|| {
+                        RuntimeError::generic_err(format!("Missing rhs in {:?}", op))
+                    })?;
+
+                    let lhs = self.pop().ok_or_else(|| {
+                        RuntimeError::generic_err(format!("Missing rhs in {:?}", op))
+                    })?;
+
+                    let result = lhs.range(rhs, step, inclusive)?;
+
+                    self.push(result);
+                }
                 Opcode::Not => {
                     let val = self.pop().expect("val");
                     self.push(Value::Booleen(!val.to_bool()));
