@@ -1,7 +1,7 @@
 x = 21
 
-quand x
-  vaut 1 -> afficher("wow")
+y = quand x
+  vaut 1 -> afficher "wow"
 
   dans [21] faire 
     afficher "from " + x
@@ -16,5 +16,7 @@ quand x
     afficher ""
 
 fin quand
+
+afficher y
 
 afficher "fin"

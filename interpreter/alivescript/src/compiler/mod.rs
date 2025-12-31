@@ -950,7 +950,10 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             self.borrow_mut().code.pop_if_op_is(Opcode::Pop);
         } else {
             // body is an expr body
-            self.parse_top_expr(body.next().unwrap())?;
+            self.borrow_mut().begin_scope();
+            self.build_ast_stmt(body.next().unwrap())?;
+            self.borrow_mut().end_scope();
+            self.borrow_mut().code.pop_if_op_is(Opcode::Pop);
         }
         Ok(())
     }

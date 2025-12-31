@@ -44,6 +44,20 @@ as_module! {
                 }
             },
             as_module_fonction! {
+                commencePar(inst: Type::Texte, prefix: Type::Texte) => {
+                    let inst = inst.as_texte().unwrap();
+                    let prefix = prefix.as_texte().unwrap();
+                    Ok(Some(Value::Booleen(inst.starts_with(prefix))))
+                }
+            },
+            as_module_fonction! {
+                finiPar(inst: Type::Texte, prefix: Type::Texte) => {
+                    let inst = inst.as_texte().unwrap();
+                    let prefix = prefix.as_texte().unwrap();
+                    Ok(Some(Value::Booleen(inst.ends_with(prefix))))
+                }
+            },
+            as_module_fonction! {
                 diviser(inst: Type::Texte, pat: Type::Texte): Type::Liste => {
                     let inst = inst.as_texte().unwrap();
                     let pat = pat.as_texte().unwrap();
