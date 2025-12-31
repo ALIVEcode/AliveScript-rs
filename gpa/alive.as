@@ -133,7 +133,7 @@ fonction départ()
   quand commande
     vaut "init" -> init()
     vaut "exec" -> exec()
-    vaut "installer" -> installer()
+    vaut "installer", "i" -> installer()
   fin quand
 fin fonction
 
