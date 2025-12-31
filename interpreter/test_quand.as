@@ -20,3 +20,6 @@ fin quand
 afficher y
 
 afficher "fin"
+
+vaut = 12
+afficher vaut
