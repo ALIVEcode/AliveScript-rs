@@ -3,5 +3,7 @@ version = ""
 
 versionAliveScript = ""
 
-dépendances = []
+dépendances = [
+  { nom: "Test", url: "https://github.com/..." }
+]
 

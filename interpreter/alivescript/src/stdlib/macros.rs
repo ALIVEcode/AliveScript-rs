@@ -47,8 +47,8 @@ macro_rules! unpack {
 #[macro_export]
 macro_rules! unpack_native {
     ($var:ident: &$t:ty = $expr:expr) => {
-        $crate::unpack!(Value::NativeObjet(inner) = $expr);
-        let inner = ::std::sync::Arc::clone(&inner).as_any();
+        $crate::unpack!(Value::NativeObjet(ref inner) = $expr);
+        let inner = ::std::sync::Arc::clone(inner).as_any();
         let Some($var) = inner.downcast_ref::<$t>() else {
             return Err($crate::runtime::err::RuntimeError::generic_err(format!(
                 "Objet invalide {:?}",

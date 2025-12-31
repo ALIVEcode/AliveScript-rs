@@ -138,12 +138,12 @@ sinonInner = _{
 }
 
 QuandExpr = {
-    PUSH(quand) ~ (eos+ ~ (QuandExprBloc ~ eos+)* | (#quand_expr = Expr) ~ eos+ ~ QuandCasBloc*) ~ QuandSinonGuarde* ~ QuandSinon? ~ finPop
+    PUSH(quand) ~ (#quand_expr = Expr) ~ eos+ ~ QuandCasBloc* ~ QuandSinonGuarde* ~ QuandSinon? ~ finPop
 }
 
 QuandSinonGuarde = { sinon ~ QuandGuarde ~ QuandBlocBody }
 QuandSinon       = { sinon ~ QuandBlocBody }
-QuandExprBloc    = { Expr ~ QuandGuarde? ~ QuandBlocBody }
+//QuandExprBloc    = { Expr ~ QuandGuarde? ~ QuandBlocBody }
 QuandCasBloc     = { QuandCondition ~ QuandGuarde? ~ QuandBlocBody }
 
 QuandBlocBody = {
@@ -354,7 +354,7 @@ FnExpr = {
     PUSH(fonction) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ #body = (":" ~ Expr ~ DROP | eos ~ StmtBody ~ "fin" ~ POP)
 }
 
-EssayerExpr =  { essayer ~ (#expr = Expr) ~ "sinon" ~ ((#essayer_body = Expr) | eos ~ (#essayer_body = StmtBody) ~ finEssayer) }
+EssayerExpr =  { essayer ~ (#expr = Expr) ~ ("sinon" ~ ((#essayer_body = Expr) | eos ~ (#essayer_body = StmtBody) ~ finEssayer))? }
 essayer     = @{ "essayer" ~ !IdentChar }
 finEssayer  = @{ "fin" ~ WHITESPACE+ ~ "essayer" }
 

@@ -31,6 +31,7 @@ pub struct VM {
     global_table: HashMap<String, Value>,
     loaded_modules: HashMap<String, ArcModule>,
     preloaded_modules: HashMap<String, Arc<dyn LazyModule>>,
+    module_searcher: Option<Function>,
 }
 
 impl VM {
@@ -44,6 +45,7 @@ impl VM {
             global_table: builtins,
             loaded_modules: HashMap::new(),
             preloaded_modules: get_stdlib(),
+            module_searcher: None,
         };
 
         // let texte_module = s.load_module("Texte").expect("The Texte module");
@@ -120,6 +122,22 @@ impl VM {
         }
     }
 
+    fn close_upvalue(&mut self, i: usize) {
+        let refer = {
+            let uv = self.open_upvalues[i].read().unwrap();
+            match uv.location {
+                UpvalueLocation::Open(idx) => idx == i,
+                UpvalueLocation::Closed(_) => false,
+            }
+        };
+        if refer {
+            // close it
+            self.open_upvalues[i].write().unwrap().close(self);
+            // remove from open_upvalues
+            self.open_upvalues.remove(i);
+        }
+    }
+
     fn lookup_module(&mut self, module_name: &str) -> Result<ArcModule, RuntimeError> {
         let module_name = module_name.strip_suffix(".as").unwrap_or(module_name);
 
@@ -151,14 +169,13 @@ impl VM {
                 format!("{}", vec![exe_folder].join(":"))
             });
 
-            let search_dirs = env::var("ALIVESCRIPT_MODULES").or_else(|_| {
-                let modules_folder = env::current_dir()
-                    .map(|e| format!("{}/modules", e.display()))
-                    .unwrap_or_default();
-                Ok(format!("{}", vec![modules_folder].join(":")))
-            })?;
+            let search_dirs = env::var("ALIVESCRIPT_MODULES").unwrap_or_default();
 
-            let modules_path = vec![std_modules, search_dirs].join(":");
+            let modules_path = if !search_dirs.is_empty() {
+                format!("{}:{}", std_modules, search_dirs)
+            } else {
+                std_modules
+            };
 
             let mut found = None;
             for search_dir in modules_path.split(":") {
@@ -171,6 +188,30 @@ impl VM {
 
             if let Some(path) = found {
                 path
+            } else if let Some(searcher) = &self.module_searcher {
+                let result = self.run_fn(
+                    vec![Value::Texte(module_name.to_string())],
+                    &searcher.clone(),
+                )?;
+
+                match result {
+                    Value::Module(m) => {
+                        self.loaded_modules
+                            .insert(module_name.to_string(), Arc::clone(&m));
+
+                        return Ok(m);
+                    }
+                    Value::Texte(t) if !t.trim().is_empty() => t.trim().to_string(),
+                    _ => {
+                        return Err(RuntimeError::module_load_error(
+                            module_name,
+                            format!(
+                                "fichier non trouvé dans le répertoire courant ou dans {}",
+                                modules_path
+                            ),
+                        ));
+                    }
+                }
             } else {
                 return Err(RuntimeError::module_load_error(
                     module_name,
@@ -191,6 +232,7 @@ impl VM {
             .map_err(|err| RuntimeError::module_load_error(module_name, err))?;
 
         let mut other_vm = VM::new(module_file.to_string());
+        other_vm.set_module_searcher(self.module_searcher.clone());
         other_vm.run(module_closure.load_fn)?;
 
         let mut members = HashMap::new();
@@ -591,6 +633,13 @@ impl VM {
                 }
                 Opcode::Dup => {
                     self.push(self.peek(0).clone());
+                }
+                Opcode::Close => {
+                    let upval_idx = fnc.code[frame.ip];
+                    frame.ip += 1;
+
+                    self.close_upvalue(upval_idx as usize);
+                    self.pop();
                 }
 
                 Opcode::Constant => {
@@ -1534,5 +1583,9 @@ impl VM {
 
     pub fn file(&self) -> &str {
         &self.file
+    }
+
+    pub fn set_module_searcher(&mut self, module_searcher: Option<Function>) {
+        self.module_searcher = module_searcher;
     }
 }

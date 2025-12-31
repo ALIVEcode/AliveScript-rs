@@ -302,7 +302,17 @@ impl Value {
         match &self {
             Value::TypeObj(t) => Ok(t),
             _ => Err(RuntimeError::type_error(format!(
-                "impossible de convertir '{}' en texte",
+                "impossible de convertir '{}' en type",
+                self.get_type()
+            ))),
+        }
+    }
+
+    pub fn as_fonc(&self) -> Result<&Function, RuntimeError> {
+        match &self {
+            Value::Function(f) => Ok(f),
+            _ => Err(RuntimeError::type_error(format!(
+                "impossible de convertir '{}' en fonction",
                 self.get_type()
             ))),
         }

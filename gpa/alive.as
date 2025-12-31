@@ -4,6 +4,7 @@ utiliser ES
 utiliser Env
 utiliser Système alias Sys
 utiliser Module
+utiliser Processus
 
 fonction aide()
   afficher "Gestionnaire de Projets d'AliveScript
@@ -38,9 +39,9 @@ fonction init()
       dépendances = []
       `
 
-    var nom = Env.dossierActuel().diviser("/")[-1]
+    var nom = Env.dossierDeTravail().diviser("/")[-1]
     var version = "0.1.0"
-    var source = "src.as"
+    var source = "src/init.as"
     fichier.écrire(contenu.format([nom, version, source]))
   sinon
     afficher "Le fichier de configuration existe déjà."
@@ -49,6 +50,10 @@ fonction init()
   config = Module.charger(CHEMIN_CONFIG)
   source = config.src
   si non ES.existe(source) alors
+    var chemin = source.diviser("/")
+    var parent = chemin[0..tailleDe(chemin) - 1]
+    ES.créerDossier(parent.joindre("/"))
+
     var fichierSource = ES.ouvrir(source, "écriture")
     fichierSource.écrire(`
     afficher "Bonjour d'AliveScript !"
@@ -59,18 +64,78 @@ fin fonction
 
 fonction exec()
   # trouver config.as
-  si non ES.existe(CHEMIN_CONFIG) alors erreur("Impossible de trouver 'config.as'.")
-  config = Module.charger(CHEMIN_CONFIG)
+  si non ES.existe(CHEMIN_CONFIG) alors erreur("Impossible de trouver '{}'.".format([CHEMIN_CONFIG]))
+  config = essayer Module.charger(CHEMIN_CONFIG) sinon 
+    erreur "Impossible de charger le fichier de configuration"
+  fin essayer
+
   source = config.src
 
-  Module.charger(source)
+  const mod = Module.créer(source)
+
+  mod.rechercheModule(fn(chemin)
+    utiliser Module
+    utiliser ES
+    const fichier = "modules/{}/config.as".format([chemin])
+    si ES.existe(fichier) alors
+      const config = essayer Module.charger(fichier)
+      const source = "modules/{}/{}".format([chemin, config.src])
+      retourner essayer Module.charger(source)
+    fin si
+  fin fn)
+
+  mod.charger()
 fin fonction
 
-si commande == "init" alors
-  init()
-sinon si commande == "exec" alors
-  exec()
-fin si
+fonction gérerDepUrl(dep: dict)
+  const url = dep.url
+  const nom = dep.nom.raser()
+
+  si nom == "" alors erreur "Le nom ne doit pas être vide"
+
+  var existe = faux
+  si ES.existe("modules/{}".format([nom])) alors existe = vrai
+
+  si ".git" dans url alors
+    const p = quand existe 
+      vaut vrai -> Processus.créer("git", ["pull"], "modules/{}".format([nom]))
+      vaut faux -> Processus.créer("git", ["clone", url, "modules/{}".format([nom])])
+    fin quand
+
+    out, err = p.execAvecSortie()
+    si err alors afficher err
+    si out alors 
+      afficher out
+    fin si
+    
+  sinon
+    erreur "L'url doit être un repo git"
+  fin si
+fin fonction
+
+fonction installer()
+  # trouver config.as
+  si non ES.existe(CHEMIN_CONFIG) alors erreur("Impossible de trouver 'config.as'.")
+  config = Module.charger(CHEMIN_CONFIG)
+  deps = config.dépendances
+
+  ES.créerDossier("modules")
+
+  pour chaque dep dans deps 
+    quand dep 
+      est dict -> gérerDepUrl(dep)
+      sinon -> erreur "Chaque dépendances doit être un dict avec les clés \"nom\" et \"url\""
+    fin quand
+  fin pour
+fin fonction
+
+fonction départ()
+  quand commande
+    vaut "init" -> init()
+    vaut "exec" -> exec()
+    vaut "installer" -> installer()
+  fin quand
+fin fonction
 
 
-
+départ()

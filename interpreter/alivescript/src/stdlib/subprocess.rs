@@ -90,8 +90,17 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                créer(cmd: Type::Texte, args: Type::liste(Type::Texte) => Value::liste(vec![])) => {
+                créer(
+                    cmd: Type::Texte,
+                    args: Type::liste(Type::Texte) => Value::liste(vec![]),
+                    dir: Type::optional(Type::Texte) => Value::Nul
+                ) => {
+                    let dir = dir.as_texte();
+
                     let mut command = Command::new(cmd.as_texte()?);
+                    if let Ok(dir) = dir {
+                        command.current_dir(dir);
+                    }
                     command.args(args.as_liste()?
                             .read()
                             .unwrap()

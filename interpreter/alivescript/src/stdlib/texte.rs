@@ -68,6 +68,42 @@ as_module! {
                     )))
                 }
             },
+            as_module_fonction! {
+                raser(inst: Type::Texte, pat: Type::optional(Type::Texte) => Value::Nul) => {
+                    let inst = inst.as_texte().unwrap();
+                    let pat = pat.as_texte();
+                    let val = match pat {
+                        Ok(pat) => inst.trim_start_matches(pat).trim_end_matches(pat).to_string(),
+                        Err(_) => inst.trim().to_string(),
+                    };
+
+                    Ok(Some(Value::Texte(val)))
+                }
+            },
+            as_module_fonction! {
+                raserDébut(inst: Type::Texte, pat: Type::optional(Type::Texte)) => {
+                    let inst = inst.as_texte().unwrap();
+                    let pat = pat.as_texte();
+                    let val = match pat {
+                        Ok(pat) => inst.trim_start_matches(pat).to_string(),
+                        Err(_) => inst.trim_start().to_string(),
+                    };
+
+                    Ok(Some(Value::Texte(val)))
+                }
+            },
+            as_module_fonction! {
+                raserFin(inst: Type::Texte, pat: Type::optional(Type::Texte) => Value::Nul) => {
+                    let inst = inst.as_texte().unwrap();
+                    let pat = pat.as_texte();
+                    let val = match pat {
+                        Ok(pat) => inst.trim_end_matches(pat).to_string(),
+                        Err(_) => inst.trim_end().to_string(),
+                    };
+
+                    Ok(Some(Value::Texte(val)))
+                }
+            },
         ]
     }
 }

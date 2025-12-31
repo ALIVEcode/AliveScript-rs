@@ -32,6 +32,10 @@ pub enum Opcode {
     /// 3. it pushes the closure instance on the stack
     Closure,
 
+    /// arg: upvalue_idx
+    /// 1. closes `upvalue_idx`
+    Close,
+
     Read,
     /// stack: `[msg]`
     ReadWithMsg,
@@ -185,6 +189,7 @@ impl Opcode {
             Opcode::Pop => "POP",
             Opcode::Constant => "CONST",
             Opcode::Closure => "CLOSURE",
+            Opcode::Close => "CLOSE",
             Opcode::Read => "READ",
             Opcode::ReadWithMsg => "READ_MSG",
             Opcode::ReadCall => "READ_CALL",
@@ -252,6 +257,7 @@ impl Opcode {
             Opcode::ForNext => 1,
 
             Opcode::Closure => 1,
+            Opcode::Close => 1,
             Opcode::Call => 1,
 
             Opcode::Return => 0,
@@ -699,6 +705,11 @@ impl Instructions {
 
     pub fn emit_pop(&mut self) {
         self.emit_opcode(Opcode::Pop);
+    }
+
+    pub fn emit_close(&mut self, idx: usize) {
+        self.emit_opcode(Opcode::Close);
+        self.emit_byte(idx as OpcodeByteSize);
     }
 
     pub fn emit_binop(&mut self, op: BinOpcode) {

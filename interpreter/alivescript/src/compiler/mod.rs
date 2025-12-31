@@ -450,13 +450,14 @@ impl<'a> Compiler<'a> {
         self.scope_depth -= 1;
 
         // Pop locals from this scope.
-        while let Some(local) = self.locals.last() {
+        while let Some((i, local)) = self.locals.iter().enumerate().last() {
             if local.depth <= self.scope_depth as i32 {
                 break;
             }
 
             if local.is_captured {
-                println!("emit: CLOSE_UPVALUE");
+                self.code.emit_close(i);
+                //println!("emit: CLOSE_UPVALUE");
             } else {
                 self.code.emit_pop();
             }
@@ -904,14 +905,18 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
                 let skip_sinon_jmp = self.borrow_mut().push_jump();
                 self.borrow_mut().patch_jump(jump_to_sinon);
-                let Some(essayer_sinon_body) = inner.find_first_tagged("essayer_body") else {
-                    return Err(CompilationErrorKind::generic_error("Syntax error").to_error(span));
-                };
-                if essayer_sinon_body.as_rule() == Rule::StmtBody {
-                    self.build_ast_stmts(essayer_sinon_body.into_inner());
-                    self.borrow_mut().code.pop_if_op_is(Opcode::Pop);
-                } else {
-                    self.parse_top_expr(essayer_sinon_body);
+                match inner.find_first_tagged("essayer_body") {
+                    Some(essayer_sinon_body) => {
+                        if essayer_sinon_body.as_rule() == Rule::StmtBody {
+                            self.build_ast_stmts(essayer_sinon_body.into_inner());
+                            self.borrow_mut().code.pop_if_op_is(Opcode::Pop);
+                        } else {
+                            self.parse_top_expr(essayer_sinon_body);
+                        }
+                    }
+                    None => {
+                        self.borrow_mut().code.emit_return();
+                    }
                 }
                 self.borrow_mut().patch_jump(skip_sinon_jmp);
             }
@@ -967,79 +972,75 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         let mut to_end_jumps = vec![];
         let mut to_next_branch_jump = vec![];
 
-        if let Some(quand_expr) = value {
-            // parse the expr we check over
-            self.parse_top_expr(quand_expr)?;
+        let quand_expr = value.unwrap();
+        // parse the expr we check over
+        self.parse_top_expr(quand_expr)?;
 
-            // this is the form `quand expr ...`
-            for case in inner
-                .clone()
-                .filter(|node| node.as_rule() == Rule::QuandCasBloc)
-            {
-                for to_next_branch_jump in to_next_branch_jump.drain(..) {
-                    self.borrow_mut().patch_jump(to_next_branch_jump);
-                }
+        // this is the form `quand expr ...`
+        for case in inner
+            .clone()
+            .filter(|node| node.as_rule() == Rule::QuandCasBloc)
+        {
+            for to_next_branch_jump in to_next_branch_jump.drain(..) {
+                self.borrow_mut().patch_jump(to_next_branch_jump);
+            }
 
-                let mut inner_case = case.into_inner();
-                let mut cond = inner_case.next().unwrap().into_inner();
+            let mut inner_case = case.into_inner();
+            let mut cond = inner_case.next().unwrap().into_inner();
 
-                let block_type = cond.next().unwrap();
+            let block_type = cond.next().unwrap();
 
-                let mut to_body_jumps = vec![];
-                // we select the inverse because we do a jump if false
-                let compop = match block_type.as_rule() {
-                    Rule::est => BinCompcode::TypeIs,
-                    Rule::vaut => BinCompcode::NotEq,
-                    Rule::dans => BinCompcode::PasDans,
-                    Rule::pasDans => BinCompcode::Dans,
-                    _ => unreachable!(),
-                };
+            let mut to_body_jumps = vec![];
+            // we select the inverse because we do a jump if false
+            let compop = match block_type.as_rule() {
+                Rule::est => BinCompcode::TypeIs,
+                Rule::vaut => BinCompcode::NotEq,
+                Rule::dans => BinCompcode::PasDans,
+                Rule::pasDans => BinCompcode::Dans,
+                _ => unreachable!(),
+            };
 
-                if cond.peek().unwrap().as_rule() == Rule::TypeExpr {
+            if cond.peek().unwrap().as_rule() == Rule::TypeExpr {
+                self.borrow_mut().code.emit_dup();
+                let next = cond.next().unwrap();
+                let span = next.as_span();
+                let ty = self.parse_type(next.into_inner())?;
+                self.borrow_mut().push_const(Value::TypeObj(
+                    ty.as_base_type().map_err(|err| err.to_error(span))?,
+                ));
+                self.borrow_mut().code.emit_bincomp(compop);
+                to_body_jumps.push(self.borrow_mut().push_jump_if_false());
+            } else {
+                for expr in cond.take_while(|node| node.as_rule() == Rule::Expr) {
                     self.borrow_mut().code.emit_dup();
-                    let next = cond.next().unwrap();
-                    let span = next.as_span();
-                    let ty = self.parse_type(next.into_inner())?;
-                    self.borrow_mut().push_const(Value::TypeObj(
-                        ty.as_base_type().map_err(|err| err.to_error(span))?,
-                    ));
+                    self.parse_top_expr(expr)?;
                     self.borrow_mut().code.emit_bincomp(compop);
                     to_body_jumps.push(self.borrow_mut().push_jump_if_false());
-                } else {
-                    for expr in cond.take_while(|node| node.as_rule() == Rule::Expr) {
-                        self.borrow_mut().code.emit_dup();
-                        self.parse_top_expr(expr)?;
-                        self.borrow_mut().code.emit_bincomp(compop);
-                        to_body_jumps.push(self.borrow_mut().push_jump_if_false());
-                    }
                 }
-
-                to_next_branch_jump.push(self.borrow_mut().push_jump());
-
-                // jumps to the guard if present or the body otherwise
-                for to_body_jump in to_body_jumps {
-                    self.borrow_mut().patch_jump(to_body_jump);
-                }
-
-                let mut next = inner_case.next().unwrap();
-                if next.as_rule() == Rule::QuandGuarde {
-                    let guard = next.into_inner().next().unwrap();
-                    self.parse_top_expr(guard)?;
-                    to_next_branch_jump.push(self.borrow_mut().push_jump_if_false());
-                    next = inner_case.next().unwrap();
-                }
-
-                let body = next;
-                // we pop the expr on top
-                self.borrow_mut().code.emit_pop();
-
-                self.parse_quand_clause_body(body)?;
-
-                to_end_jumps.push(self.borrow_mut().push_jump());
             }
-        } else {
-            // this is the form `quand ...`
-            todo!()
+
+            to_next_branch_jump.push(self.borrow_mut().push_jump());
+
+            // jumps to the guard if present or the body otherwise
+            for to_body_jump in to_body_jumps {
+                self.borrow_mut().patch_jump(to_body_jump);
+            }
+
+            let mut next = inner_case.next().unwrap();
+            if next.as_rule() == Rule::QuandGuarde {
+                let guard = next.into_inner().next().unwrap();
+                self.parse_top_expr(guard)?;
+                to_next_branch_jump.push(self.borrow_mut().push_jump_if_false());
+                next = inner_case.next().unwrap();
+            }
+
+            let body = next;
+            // we pop the expr on top
+            self.borrow_mut().code.emit_pop();
+
+            self.parse_quand_clause_body(body)?;
+
+            to_end_jumps.push(self.borrow_mut().push_jump());
         }
 
         for to_next_branch_jump in to_next_branch_jump.drain(..) {
