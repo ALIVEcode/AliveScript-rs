@@ -129,11 +129,47 @@ fonction installer()
   fin pour
 fin fonction
 
+fonction ajouter()
+  # trouver config.as
+  si non ES.existe(CHEMIN_CONFIG) alors erreur("Impossible de trouver 'config.as'.")
+  const config = Module.charger(CHEMIN_CONFIG)
+  const deps = config.dépendances
+
+  si tailleDe(args) < 4 alors erreur("Url manquante")
+  const url = args[3]
+
+  var nom = ""
+  si tailleDe(args) >= 4 alors 
+    nom = args[4]
+  sinon
+    nom = (url.diviser("/")[-1]).sansSuffix(".git").raser()
+  fin si
+
+  afficher nom
+
+  pour chaque dep dans deps 
+    si dep.nom == nom alors 
+      erreur("Une autre débendance a déjà le nom '{}' (url='{}')".format([nom, dep.url]))
+    fin si
+  fin pour
+
+  const fichier = essayer ES.ouvrir(CHEMIN_CONFIG, "ajout") sinon
+    erreur "Impossible d'ouvrir le fichier de configuration"
+  fin essayer
+
+  fichier.écrire('\ndépendances.ajouter({{ nom: "{}", url: "{}" }})'.format([
+    nom,
+    url,
+  ]))
+
+fin fonction
+
 fonction départ()
   quand commande
     vaut "init" -> init()
     vaut "exec" -> exec()
     vaut "installer", "i" -> installer()
+    vaut "ajouter", "a" -> ajouter()
   fin quand
 fin fonction
 
