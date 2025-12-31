@@ -1,4 +1,4 @@
-#!alive
+#!alivec
 
 utiliser ES
 utiliser Env
@@ -14,7 +14,7 @@ COMMANDES:
 "
 fin fonction
 
-const args = Sys.args()
+const args = Env.args()
 
 si tailleDe(args) == 2 alors
   aide()
