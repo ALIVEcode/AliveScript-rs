@@ -716,6 +716,7 @@ trait Parser<'a> {
     fn parse_if(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
     fn parse_quand(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
+    fn parse_quand_clause_body(&mut self, body: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
     fn build_ast_stmt(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
@@ -934,6 +935,26 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         Ok(self.borrow().code.len_inner() - before)
     }
 
+    fn parse_quand_clause_body(&mut self, body: Pair<'a, Rule>) -> Result<(), CompilationError> {
+        let mut body = body.into_inner();
+        // --- PARSE BODY ---
+        if body.peek().unwrap().as_rule() == Rule::faire {
+            // skip the "faire"
+            body.next();
+            // body is a stmt body
+            self.borrow_mut().begin_scope();
+            self.build_ast_stmts(body)?;
+            self.borrow_mut().end_scope();
+            // we prevent the cleanup of the last value because we want to return
+            // it as the value of this expression
+            self.borrow_mut().code.pop_if_op_is(Opcode::Pop);
+        } else {
+            // body is an expr body
+            self.parse_top_expr(body.next().unwrap())?;
+        }
+        Ok(())
+    }
+
     fn parse_quand(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError> {
         let mut inner = pair.into_inner();
         let value = inner.find_first_tagged("quand_expr");
@@ -995,7 +1016,9 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 let body = next;
                 // we pop the expr on top
                 self.borrow_mut().code.emit_pop();
-                self.parse_top_expr(body)?;
+
+                self.parse_quand_clause_body(body)?;
+
                 to_end_jumps.push(self.borrow_mut().push_jump());
             }
         } else {
@@ -1028,7 +1051,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             to_next_branch_jump.push(self.borrow_mut().push_jump_if_false());
 
             let body = cond.next().unwrap();
-            self.parse_top_expr(body)?;
+            self.parse_quand_clause_body(body)?;
             to_end_jumps.push(self.borrow_mut().push_jump());
         }
 
@@ -1045,7 +1068,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             _ = cond.next().unwrap();
 
             let body = cond.next().unwrap();
-            self.parse_top_expr(body)?;
+            self.parse_quand_clause_body(body)?;
         }
 
         for to_end_jump in to_end_jumps
@@ -1145,13 +1168,19 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                                 .borrow_mut()
                                 .get_or_add_const(Value::Texte(prop.as_str().to_string()));
                             self.borrow_mut().code.emit_get_attr(idx);
-                            nb_inst += 1
+                            nb_inst += 2
                         } else {
                             Rc::clone(self).parse_expr(prop.into_inner())?;
                             self.borrow_mut().code.emit_get_item();
                             nb_inst += 1
                         }
                     }
+                    // Rule::Command => {
+                    //     // arg
+                    //     nb_inst += Rc::clone(self).parse_expr(postfix.into_inner())?;
+                    //     self.borrow_mut().code.emit_call(1);
+                    //     nb_inst += 2;
+                    // }
                     _ => unreachable!(),
                 }
                 Ok(nb_inst)

@@ -47,7 +47,7 @@ subStmt = _{
 }
 
 CommandStmt = {
-    Ident ~ !"(" ~ term ~ postfix?
+    Ident ~ !"(" ~ Expr
 }
 
 LireStmt    =  {
@@ -141,10 +141,21 @@ QuandExpr = {
     PUSH(quand) ~ (eos+ ~ (QuandExprBloc ~ eos+)* | (#quand_expr = Expr) ~ eos+ ~ (QuandCasBloc ~ eos*)*) ~ (QuandSinonGuarde ~ eos*)* ~ (QuandSinon ~ eos+)? ~ finPop
 }
 
-QuandSinonGuarde = { sinon ~ QuandGuarde ~ "->" ~ eos* ~ (#body = Expr) }
-QuandSinon       = { sinon ~ "->" ~ eos* ~ (#body = Expr) }
-QuandExprBloc    = { Expr ~ QuandGuarde? ~ "->" ~ eos* ~ (#body = Expr) }
-QuandCasBloc     = { QuandCondition ~ QuandGuarde? ~ "->" ~ eos* ~ (#body = Expr) }
+QuandSinonGuarde = { sinon ~ QuandGuarde ~ QuandBlocBody }
+QuandSinon       = { sinon ~ QuandBlocBody }
+QuandExprBloc    = { Expr ~ QuandGuarde? ~ QuandBlocBody }
+QuandCasBloc     = { QuandCondition ~ QuandGuarde? ~ QuandBlocBody }
+//QuandSinonGuarde = { sinon ~ QuandGuarde ~ "->" ~ eos* ~ (#body = Expr) }
+//QuandSinon       = { sinon ~ "->" ~ eos* ~ (#body = Expr) }
+//QuandExprBloc    = { Expr ~ QuandGuarde? ~ "->" ~ eos* ~ (#body = Expr) }
+//QuandCasBloc     = { QuandCondition ~ QuandGuarde? ~ "->" ~ eos* ~ (#body = Expr) }
+
+QuandBlocBody = {
+    "->" ~ Expr
+  | faire ~ eos* ~ (!(vaut | dans | pasDans | sinon) ~ stmtBloc ~ eos+)*
+}
+
+faire = @{ "faire" ~ !IdentChar }
 
 QuandCondition = {
     vaut ~ Expr ~ ("," ~ Expr)*

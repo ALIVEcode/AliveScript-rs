@@ -18,6 +18,9 @@ lazy_static::lazy_static! {
             // Logic op
             .op(Op::infix(Rule::Or, Left))
             .op(Op::infix(Rule::And, Left))
+
+            // .op(Op::postfix(Rule::Command))
+
             .op(Op::prefix(Rule::Not))
 
             // Comparaison op
