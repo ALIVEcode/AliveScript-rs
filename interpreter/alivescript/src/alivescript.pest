@@ -147,7 +147,7 @@ QuandExprBloc    = { Expr ~ QuandGuarde? ~ QuandBlocBody }
 QuandCasBloc     = { QuandCondition ~ QuandGuarde? ~ QuandBlocBody }
 
 QuandBlocBody = {
-    "->" ~ Expr ~ eos+
+    "->" ~ eos* ~ Expr ~ eos+
   | faire ~ eos* ~ (!(vaut | dans | pasDans | sinon | finPeek) ~ stmtBloc ~ eos+)*
 }
 
