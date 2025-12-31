@@ -148,7 +148,7 @@ QuandCasBloc     = { QuandCondition ~ QuandGuarde? ~ QuandBlocBody }
 
 QuandBlocBody = {
     "->" ~ eos* ~ stmtBloc ~ eos+
-  | faire ~ eos* ~ (!(vaut | dans | pasDans | sinon | finPeek) ~ stmtBloc ~ eos+)*
+  | faire ~ eos* ~ (!(vaut | est | dans | pasDans | sinon | finPeek) ~ stmtBloc ~ eos+)*
 }
 
 faire = @{ "faire" ~ !IdentChar }
@@ -157,8 +157,10 @@ QuandCondition = {
     vaut ~ Expr ~ ("," ~ Expr)*
   | dans ~ Expr
   | pasDans ~ Expr
+  | est ~ TypeExpr
 }
 
+est     = @{ "est" ~ !IdentChar }
 vaut    = @{ "vaut" ~ !IdentChar }
 dans    = @{ "dans" ~ !IdentChar }
 pasDans = @{ "pas" ~ WHITESPACE+ ~ "dans" ~ !IdentChar }

@@ -988,17 +988,30 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 let mut to_body_jumps = vec![];
                 // we select the inverse because we do a jump if false
                 let compop = match block_type.as_rule() {
+                    Rule::est => BinCompcode::TypeIs,
                     Rule::vaut => BinCompcode::NotEq,
                     Rule::dans => BinCompcode::PasDans,
                     Rule::pasDans => BinCompcode::Dans,
                     _ => unreachable!(),
                 };
 
-                for expr in cond.take_while(|node| node.as_rule() == Rule::Expr) {
+                if cond.peek().unwrap().as_rule() == Rule::TypeExpr {
                     self.borrow_mut().code.emit_dup();
-                    self.parse_top_expr(expr)?;
+                    let next = cond.next().unwrap();
+                    let span = next.as_span();
+                    let ty = self.parse_type(next.into_inner())?;
+                    self.borrow_mut().push_const(Value::TypeObj(
+                        ty.as_base_type().map_err(|err| err.to_error(span))?,
+                    ));
                     self.borrow_mut().code.emit_bincomp(compop);
                     to_body_jumps.push(self.borrow_mut().push_jump_if_false());
+                } else {
+                    for expr in cond.take_while(|node| node.as_rule() == Rule::Expr) {
+                        self.borrow_mut().code.emit_dup();
+                        self.parse_top_expr(expr)?;
+                        self.borrow_mut().code.emit_bincomp(compop);
+                        to_body_jumps.push(self.borrow_mut().push_jump_if_false());
+                    }
                 }
 
                 to_next_branch_jump.push(self.borrow_mut().push_jump());

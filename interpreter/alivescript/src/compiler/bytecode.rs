@@ -815,6 +815,7 @@ pub enum BinCompcode {
     Leq,
     Dans,
     PasDans,
+    TypeIs,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

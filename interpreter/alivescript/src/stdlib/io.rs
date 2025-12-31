@@ -80,6 +80,17 @@ as_module! {
                 }
             },
             as_module_fonction! {
+                créerDossier(chemin: Type::Texte) => {
+                    let chemin = chemin.as_texte().unwrap();
+                    fs::create_dir_all(chemin).map_err(|e|
+                        RuntimeError::generic_err(format!(
+                            "Erreur lors de la création du dossier '{}'\n{}", chemin, e
+                        )))?;
+
+                    Ok(Some(Value::Nul))
+                }
+            },
+            as_module_fonction! {
                 écrire(inst: Type::Objet(String::from("ES.Fichier")), msg: Type::Texte): Type::Entier => {
                     unpack_native!(f: &FileHandle = inst);
 

@@ -14,7 +14,7 @@ use crate::{
         obj::{ArcUpvalue, CallFrame, Function, Upvalue, UpvalueLocation, UpvalueSpec, Value},
         value::{
             ASDict, ASField, ASModule, ASObjet, ArcClosureInst, ArcClosureProto, ArcModule,
-            ArcStructure, ClosureInst, ClosureProto, ModuleProto, NativeMethod,
+            ArcStructure, ClosureInst, ClosureProto, ModuleProto, NativeMethod, Type,
         },
     },
     runtime::err::RuntimeError,
@@ -1280,6 +1280,9 @@ impl VM {
                             BinCompcode::Leq => arg1 <= arg2,
                             BinCompcode::Dans => arg2.contains(&arg1)?,
                             BinCompcode::PasDans => !arg2.contains(&arg1)?,
+                            BinCompcode::TypeIs => {
+                                Type::type_match(&arg1.get_type(), arg2.as_type()?)
+                            }
                         })
                         .into(),
                     );

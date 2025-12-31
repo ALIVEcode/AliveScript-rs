@@ -298,6 +298,16 @@ impl Value {
         }
     }
 
+    pub fn as_type(&self) -> Result<&Type, RuntimeError> {
+        match &self {
+            Value::TypeObj(t) => Ok(t),
+            _ => Err(RuntimeError::type_error(format!(
+                "impossible de convertir '{}' en texte",
+                self.get_type()
+            ))),
+        }
+    }
+
     pub fn repr(&self) -> String {
         match self {
             Value::Nul => String::from("nul"),
