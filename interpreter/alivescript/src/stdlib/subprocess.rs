@@ -99,7 +99,7 @@ as_module! {
 
                     let mut command = Command::new(cmd.as_texte()?);
                     if let Ok(dir) = dir {
-                        command.current_dir(dir);
+                        command.current_dir(fs::canonicalize(dir).unwrap());
                     }
                     command.args(args.as_liste()?
                             .read()

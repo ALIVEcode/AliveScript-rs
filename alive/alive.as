@@ -15,6 +15,10 @@ COMMANDES:
 "
 fin fonction
 
+fonction aff(msg: texte) 
+  ES.sortieStd().écrire(msg)
+fin fonction
+
 const args = Env.args()
 
 si tailleDe(args) == 2 alors
@@ -93,19 +97,32 @@ fonction gérerDepUrl(dep: dict)
 
   si nom == "" alors erreur "Le nom ne doit pas être vide"
 
+  const dossierModule = "{}/modules/{}".format([Env.dossierDeTravail(), nom])
+
   var existe = faux
   si ES.existe("modules/{}".format([nom])) alors existe = vrai
 
   si ".git" dans url alors
+    afficher "| Installation de '{}' ('{}')".format([nom, url])
+
     const p = quand existe 
-      vaut vrai -> Processus.créer("git", ["pull"], "modules/{}".format([nom]))
-      vaut faux -> Processus.créer("git", ["clone", url, "modules/{}".format([nom])])
+      vaut vrai -> Processus.créer("git", ["pull"], dossierModule)
+      vaut faux -> Processus.créer("git", ["clone", url, dossierModule])
     fin quand
 
     out, err = p.execAvecSortie()
-    si err alors afficher err
+    si err alors aff "> " + err
     si out alors 
-      afficher out
+      aff "  > " + out
+    fin si
+
+    const exe = Env.cheminExec()
+    const alive = args[1]
+    const p = Processus.créer(exe, [alive, "installer"], dossierModule)
+    out, err = p.execAvecSortie()
+    si err alors aff err
+    si out alors 
+      afficher out.diviser("\n").map(fn(ln): "  " + ln).joindre("\n")
     fin si
     
   sinon
@@ -121,12 +138,15 @@ fonction installer()
 
   ES.créerDossier("modules")
 
+  afficher "Installation des dépendances de '{}'".format([config.nom])
   pour chaque dep dans deps 
     quand dep 
       est dict -> gérerDepUrl(dep)
       sinon -> erreur "Chaque dépendances doit être un dict avec les clés \"nom\" et \"url\""
     fin quand
   fin pour
+
+  afficher "Dépendances de '{}' installées !".format([config.nom])
 fin fonction
 
 fonction ajouter()
@@ -149,7 +169,7 @@ fonction ajouter()
 
   pour chaque dep dans deps 
     si dep.nom == nom alors 
-      erreur("Une autre débendance a déjà le nom '{}' (url='{}')".format([nom, dep.url]))
+      erreur "Une autre débendance a déjà le nom '{}' (url='{}')".format([nom, dep.url])
     fin si
   fin pour
 
@@ -162,6 +182,7 @@ fonction ajouter()
     url,
   ]))
 
+  installer()
 fin fonction
 
 fonction départ()
