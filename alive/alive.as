@@ -107,6 +107,7 @@ fonction gérerDepUrl(dep: dict)
     const p = quand existe 
       vaut vrai -> Processus.créer("git", ["pull"], dossierModule)
       vaut faux -> Processus.créer("git", ["clone", url, dossierModule])
+      sinon -> !
     fin quand
 
     out, err = p.execAvecSortie()
@@ -158,10 +159,10 @@ fonction ajouter()
   const url = args[3]
 
   var nom = ""
-  si tailleDe(args) >= 4 alors 
+  si tailleDe(args) > 4 alors 
     nom = args[4]
   sinon
-    nom = (url.diviser("/")[-1]).sansSuffix(".git").raser()
+    nom = url.diviser("/")[-1].sansSuffix(".git").raser()
   fin si
 
   afficher nom
