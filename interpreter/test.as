@@ -198,7 +198,7 @@ fonction generateur_puissance(exposant : entier) -> fonction
         fonction calcul(n : entier) -> texte
             var resultat : entier = 1
             répéter exposant
-                resultat = resultat * n
+                resultat *= n
             fin répéter
             retourner prefixe + texte(resultat)
         fin fonction
@@ -216,7 +216,7 @@ const au_cube = generateur_puissance(3)
 const label_cube = au_cube("Cube : ")
 
 Test.affirmerÉgaux(label_carre(4), "Résultat : 16", "Capture multi-niveau (carré) échouée")
-Test.affirmerÉgaux(label_cube(2), "Cube : 8.0", "Capture multi-niveau (cube) échouée")
+Test.affirmerÉgaux(label_cube(2), "Cube : 8", "Capture multi-niveau (cube) échouée")
 
 
 # --- 14. TEST : ÉTAT PARTAGÉ (MUTATION DANS UNE CLOSURE) ---
@@ -283,3 +283,17 @@ fin essayer
 Test.affirmerÉgaux(z, 1.0, "Essayer valide avec sinon bloc")
 
 afficher "Tests des blocs 'essayer' terminés !"
+
+
+utiliser Iter
+
+const prochain = Iter.iter([1, 2, 3, 4])
+
+répéter
+  const [i, el] = quand prochain()
+    vaut nul -> sortir
+    sinon avec p -> p
+  fin quand
+
+  afficher i + " " + el
+fin répéter

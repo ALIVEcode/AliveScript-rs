@@ -21,6 +21,7 @@ use crate::{
     stdlib::{LazyModule, builtins::BUILTINS, get_stdlib},
 };
 
+const VERSION: &'static str = "0.1.0";
 pub const MAX_DEPTH: usize = 2000;
 
 pub struct VM {
@@ -162,12 +163,9 @@ impl VM {
         let abs_module_file = if let Ok(path) = fs::canonicalize(&module_file) {
             path.display().to_string()
         } else {
-            let std_modules = env::var("ALIVESCRIPT_MODULES_STD").unwrap_or_else(|_| {
-                let exe_folder = env::current_exe()
-                    .map(|e| format!("{}/stdlib", e.parent().unwrap().display()))
-                    .unwrap_or_default();
-                format!("{}", vec![exe_folder].join(":"))
-            });
+            let home = std::env::var("HOME").unwrap();
+            let std_modules = env::var("ALIVESCRIPT_LIB")
+                .unwrap_or(format!("{}/.local/share/alivescript{}/lib", home, VERSION));
 
             let search_dirs = env::var("ALIVESCRIPT_MODULES").unwrap_or_default();
 

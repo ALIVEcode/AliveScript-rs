@@ -416,7 +416,7 @@ impl<'a> Compiler<'a> {
             .constants
             .iter()
             .enumerate()
-            .find(|(_, o)| **o == obj)
+            .find(|(_, o)| **o == obj && o.get_type() == obj.get_type())
             .map(|(i, _)| i);
         if let Some(idx) = idx {
             return idx as u16;
@@ -1135,7 +1135,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     let (line, col) = span.start_pos().line_col();
                     let source = self.borrow().source_name.clone();
                     _ = self.borrow_mut().push_const(Value::Texte(format!(
-                        "Exécution de la branche 'sinon!' d'un bloc 'quand' (dans {}:{}:{}).",
+                        "Exécution de la branche '!' d'un bloc 'quand' (dans {}:{}:{}).",
                         source, line, col
                     )));
 
@@ -1153,7 +1153,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             return Err(CompilationErrorKind::missing_cases(
                 "quand",
                 "le bloc est utilisé comme une expression, mais certains cas ne sont pas gérés. \
-Si c'est intentionnel, utiliser la forme `sinon!`",
+Si c'est intentionnel, utiliser la forme `sinon -> !`",
             )
             .to_error(span));
         }

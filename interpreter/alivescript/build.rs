@@ -1,20 +1,19 @@
-// use lalrpop;
+const VERSION: &'static str = "0.1.0";
 
-#[cfg(not(feature = "no-ast"))]
 fn main() {
-    let out_dir = std::env::var("OUT_DIR").unwrap();
-    std::fs::create_dir_all(format!("{}/stdlib", out_dir)).unwrap();
-    for file in std::fs::read_dir("./stdlib/").unwrap() {
+    let home = std::env::var("HOME").unwrap();
+    let out_dir = std::env::var("ALIVESCRIPT_LIB")
+        .unwrap_or(format!("{}/.local/share/alivescript{}", home, VERSION));
+
+    std::fs::create_dir_all(format!("{}/lib", out_dir)).unwrap();
+
+    for file in std::fs::read_dir("./stdlib").unwrap() {
         let file = file.unwrap();
         let path = file.path();
         let name = path.file_name().unwrap().to_str().unwrap();
         if name.ends_with(".as") {
-            let out = format!("{}/stdlib/{}", out_dir, name);
+            let out = format!("{}/lib/{}", out_dir, name);
             std::fs::copy(path, out).unwrap();
         }
     }
-    // lalrpop::Configuration::new().process_dir("./src/").unwrap();
 }
-
-#[cfg(feature = "no-ast")]
-fn main() {}
