@@ -36,7 +36,7 @@ tant que i != nul
     sinon avec p si tailleDe(p) == 1 faire
       afficher tailleDe(p) == 1
       p
-    sinon!
+    sinon -> !
   fin quand
 
   afficher i + " " + el

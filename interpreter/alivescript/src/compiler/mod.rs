@@ -1035,7 +1035,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
 
                 self.borrow_mut().mark_initialized(idx);
                 self.borrow_mut().code.emit_set_local(idx);
-                // we do a get to make sure the original value is still on top of 
+                // we do a get to make sure the original value is still on top of
                 // the stack if we don't go in this branch
                 self.borrow_mut().code.emit_get_local(idx);
 
@@ -1127,11 +1127,17 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                     self.parse_quand_clause_body(body)?;
                 }
                 Rule::bang => {
-                    let erreur_idx = self.borrow_mut().get_or_add_const(Value::Texte("erreur".into()));
-                    self.borrow_mut().code.emit_get_global(erreur_idx);
-                    _ = self
+                    let erreur_idx = self
                         .borrow_mut()
-                        .push_const(Value::Texte("Accès à une branche invalide.".into()));
+                        .get_or_add_const(Value::Texte("erreur".into()));
+                    self.borrow_mut().code.emit_get_global(erreur_idx);
+
+                    let (line, col) = span.start_pos().line_col();
+                    let source = self.borrow().source_name.clone();
+                    _ = self.borrow_mut().push_const(Value::Texte(format!(
+                        "Exécution de la branche 'sinon!' d'un bloc 'quand' (dans {}:{}:{}).",
+                        source, line, col
+                    )));
 
                     self.borrow_mut().code.emit_call(1);
                 }
@@ -1148,7 +1154,8 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 "quand",
                 "le bloc est utilisé comme une expression, mais certains cas ne sont pas gérés. \
 Si c'est intentionnel, utiliser la forme `sinon!`",
-            ).to_error(span));
+            )
+            .to_error(span));
         }
 
         for to_end_jump in to_end_jumps

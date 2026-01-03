@@ -142,7 +142,7 @@ QuandExpr = {
 }
 
 QuandSinonGuarde = { sinon ~ QuandCapture? ~ QuandGuarde ~ QuandBlocBody }
-QuandSinon       = { sinon ~ (bang ~ eos+ | QuandCapture? ~ QuandBlocBody) }
+QuandSinon       = { sinon ~ ("->" ~ bang ~ eos+ | QuandCapture? ~ QuandBlocBody) }
 QuandCasBloc     = { QuandCondition ~ QuandCapture? ~ QuandGuarde? ~ QuandBlocBody }
 
 bang          = @{ "!" }
