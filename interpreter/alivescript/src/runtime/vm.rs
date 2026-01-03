@@ -163,9 +163,10 @@ impl VM {
         let abs_module_file = if let Ok(path) = fs::canonicalize(&module_file) {
             path.display().to_string()
         } else {
-            let home = std::env::var("HOME").unwrap();
-            let std_modules = env::var("ALIVESCRIPT_LIB")
-                .unwrap_or(format!("{}/.local/share/alivescript{}/lib", home, VERSION));
+            let std_modules = env::var("ALIVESCRIPT_LIB").unwrap_or_else(|_| {
+                let home = std::env::home_dir().unwrap();
+                format!("{}/.local/share/alivescript{}/lib", home.display(), VERSION)
+            });
 
             let search_dirs = env::var("ALIVESCRIPT_MODULES").unwrap_or_default();
 
