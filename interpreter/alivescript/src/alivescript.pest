@@ -141,12 +141,13 @@ QuandExpr = {
     PUSH(quand) ~ (#quand_expr = Expr) ~ eos+ ~ QuandCasBloc* ~ QuandSinonGuarde* ~ QuandSinon? ~ finPop
 }
 
-QuandSinonGuarde = { sinon ~ QuandGuarde ~ QuandBlocBody }
-QuandSinon       = { sinon ~ QuandBlocBody }
-//QuandExprBloc    = { Expr ~ QuandGuarde? ~ QuandBlocBody }
-QuandCasBloc     = { QuandCondition ~ QuandGuarde? ~ QuandBlocBody }
+QuandSinonGuarde = { sinon ~ QuandCapture? ~ QuandGuarde ~ QuandBlocBody }
+QuandSinon       = { sinon ~ (bang ~ eos+ | QuandCapture? ~ QuandBlocBody) }
+QuandCasBloc     = { QuandCondition ~ QuandCapture? ~ QuandGuarde? ~ QuandBlocBody }
 
-QuandBlocBody = {
+bang          = @{ "!" }
+QuandCapture  =  { "avec" ~ Ident }
+QuandBlocBody =  {
     "->" ~ eos* ~ stmtBloc ~ eos+
   | faire ~ eos* ~ (!(vaut | est | dans | pasDans | sinon | finPeek) ~ stmtBloc ~ eos+)*
 }
@@ -389,19 +390,23 @@ TypeExpr =  { typePrefix? ~ typeTerm ~ typePostfix? ~ (typeInfix ~ typePrefix? ~
 typeTerm = _{
     QualifiedTypeName
   | Ident
+  | TypeList
   | TypeFonction
   | Lit
   | "(" ~ TypeExpr ~ ")"
 }
 
-QualifiedTypeName =  {
+QualifiedTypeName = {
     Ident ~ "." ~ Ident ~ ("." ~ Ident)*
 }
-TypeFonction      =  { fonction ~ ("(" ~ (TypeExpr ~ ",")* ~ TypeExpr? ~ ")" ~ ("->" ~ TypeExpr)?)? }
-typeInfix         = _{ Pipe }
-typePrefix        = _{ "@" }
-typePostfix       = _{ TypeArgs }
-TypeArgs          =  { "<" ~ TypeExpr ~ ("," ~ TypeExpr)* ~ ","? ~ ">" }
+
+TypeList     = { "[" ~ NEWLINE* ~ ((Ident ~ ":")? ~ TypeExpr ~ "," ~ NEWLINE*)* ~ NEWLINE* ~ ((Ident ~ ":")? ~ TypeExpr)? ~ NEWLINE* ~ "]" }
+TypeFonction = { fonction ~ ("(" ~ (TypeExpr ~ ",")* ~ TypeExpr? ~ ")" ~ ("->" ~ TypeExpr)?)? }
+
+typeInfix   = _{ Pipe }
+typePrefix  = _{ "@" }
+typePostfix = _{ TypeArgs }
+TypeArgs    =  { "<" ~ TypeExpr ~ ("," ~ TypeExpr)* ~ ","? ~ ">" }
 
 Bool      = @{ ("vrai" | "faux") ~ !IdentChar }
 Text      = @{ PUSH("\"" | "'" | "`"+) ~ ("\\" ~ ANY | !PEEK ~ ANY)* ~ POP }

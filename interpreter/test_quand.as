@@ -39,3 +39,23 @@ fin fonction
 
 
 afficher abc()
+
+
+y = quand x
+  vaut 2 -> afficher z
+
+  dans [2] faire 
+    afficher "from " + x
+
+  sinon si x == 2 faire
+    afficher "oups"
+
+    44
+
+  sinon avec z faire 
+    afficher "z = " + z
+    z
+
+fin quand
+
+afficher y

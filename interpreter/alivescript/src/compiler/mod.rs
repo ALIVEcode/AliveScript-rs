@@ -716,7 +716,7 @@ trait Parser<'a> {
 
     fn parse_if(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
-    fn parse_quand(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
+    fn parse_quand(&mut self, pair: Pair<'a, Rule>, in_expr: bool) -> Result<(), CompilationError>;
     fn parse_quand_clause_body(&mut self, body: Pair<'a, Rule>) -> Result<(), CompilationError>;
 
     fn build_ast_stmt(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError>;
@@ -922,7 +922,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             }
 
             Rule::QuandExpr => {
-                self.parse_quand(primary)?;
+                self.parse_quand(primary, true)?;
             }
 
             Rule::FnExpr => {
@@ -963,11 +963,10 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
         Ok(())
     }
 
-    fn parse_quand(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError> {
+    fn parse_quand(&mut self, pair: Pair<'a, Rule>, in_expr: bool) -> Result<(), CompilationError> {
+        let span = pair.as_span();
         let mut inner = pair.into_inner();
         let value = inner.find_first_tagged("quand_expr");
-
-        let is_quand_expr = value.is_some();
 
         let mut to_end_jumps = vec![];
         let mut to_next_branch_jump = vec![];
@@ -1027,6 +1026,22 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             }
 
             let mut next = inner_case.next().unwrap();
+
+            if next.as_rule() == Rule::QuandCapture {
+                let varname = next.into_inner().next().unwrap().as_str();
+                let idx = self
+                    .borrow_mut()
+                    .declare_local(varname, Type::tout().into(), true);
+
+                self.borrow_mut().mark_initialized(idx);
+                self.borrow_mut().code.emit_set_local(idx);
+                // we do a get to make sure the original value is still on top of 
+                // the stack if we don't go in this branch
+                self.borrow_mut().code.emit_get_local(idx);
+
+                next = inner_case.next().unwrap();
+            }
+
             if next.as_rule() == Rule::QuandGuarde {
                 let guard = next.into_inner().next().unwrap();
                 self.parse_top_expr(guard)?;
@@ -1034,21 +1049,14 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 next = inner_case.next().unwrap();
             }
 
-            let body = next;
             // we pop the expr on top
             self.borrow_mut().code.emit_pop();
+
+            let body = next;
 
             self.parse_quand_clause_body(body)?;
 
             to_end_jumps.push(self.borrow_mut().push_jump());
-        }
-
-        for to_next_branch_jump in to_next_branch_jump.drain(..) {
-            self.borrow_mut().patch_jump(to_next_branch_jump);
-        }
-        if is_quand_expr {
-            // we pop the expr on top
-            self.borrow_mut().code.emit_pop();
         }
 
         // the `sinon si ...`
@@ -1063,9 +1071,27 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             // skip the `sinon`
             _ = cond.next().unwrap();
 
-            let guard = cond.next().unwrap().into_inner().next().unwrap();
+            let mut next = cond.next().unwrap();
+
+            if next.as_rule() == Rule::QuandCapture {
+                let varname = next.into_inner().next().unwrap().as_str();
+                let idx = self
+                    .borrow_mut()
+                    .declare_local(varname, Type::tout().into(), true);
+
+                self.borrow_mut().mark_initialized(idx);
+                self.borrow_mut().code.emit_set_local(idx);
+                self.borrow_mut().code.emit_get_local(idx);
+
+                next = cond.next().unwrap().into_inner().next().unwrap();
+            }
+
+            let guard = next;
             self.parse_top_expr(guard)?;
             to_next_branch_jump.push(self.borrow_mut().push_jump_if_false());
+
+            // we pop the expr on top
+            self.borrow_mut().code.emit_pop();
 
             let body = cond.next().unwrap();
             self.parse_quand_clause_body(body)?;
@@ -1084,8 +1110,45 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
             // skip the `sinon`
             _ = cond.next().unwrap();
 
-            let body = cond.next().unwrap();
-            self.parse_quand_clause_body(body)?;
+            let mut next = cond.next().unwrap();
+            match next.as_rule() {
+                Rule::QuandCapture => {
+                    let varname = next.into_inner().next().unwrap().as_str();
+                    let idx = self
+                        .borrow_mut()
+                        .declare_local(varname, Type::tout().into(), true);
+
+                    self.borrow_mut().mark_initialized(idx);
+                    self.borrow_mut().code.emit_set_local(idx);
+
+                    next = cond.next().unwrap();
+
+                    let body = next;
+                    self.parse_quand_clause_body(body)?;
+                }
+                Rule::bang => {
+                    let erreur_idx = self.borrow_mut().get_or_add_const(Value::Texte("erreur".into()));
+                    self.borrow_mut().code.emit_get_global(erreur_idx);
+                    _ = self
+                        .borrow_mut()
+                        .push_const(Value::Texte("Accès à une branche invalide.".into()));
+
+                    self.borrow_mut().code.emit_call(1);
+                }
+                _ => {
+                    // we pop the expr on top
+                    self.borrow_mut().code.emit_pop();
+
+                    let body = next;
+                    self.parse_quand_clause_body(body)?;
+                }
+            }
+        } else if in_expr {
+            return Err(CompilationErrorKind::missing_cases(
+                "quand",
+                "le bloc est utilisé comme une expression, mais certains cas ne sont pas gérés. \
+Si c'est intentionnel, utiliser la forme `sinon!`",
+            ).to_error(span));
         }
 
         for to_end_jump in to_end_jumps
@@ -1668,6 +1731,23 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                         )
                     })?
                     .into()),
+                Rule::TypeList => {
+                    let types = primary
+                        .into_inner()
+                        .filter_map(|arg| {
+                            if arg.as_rule() != Rule::TypeExpr {
+                                None
+                            } else {
+                                let span = arg.as_span();
+                                Some(Rc::clone(self).parse_type(arg.into_inner()).and_then(|a| {
+                                    a.as_base_type().map_err(|err| err.to_error(span))
+                                }))
+                            }
+                        })
+                        .collect::<Result<_, _>>()?;
+
+                    Ok(Type::Array(types).into())
+                }
                 Rule::TypeFonction => Ok(Type::Fonction.into()),
                 // Rule::Lit => Ok(Box::new(Type::Lit(self.parse_lit(
                 //     primary.into_inner().next().unwrap(),
@@ -2310,7 +2390,7 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 self.borrow_mut().code.emit_return();
             }
             Rule::QuandExpr => {
-                self.parse_quand(pair)?;
+                self.parse_quand(pair, false)?;
                 self.borrow_mut().code.emit_pop();
             }
             Rule::Expr => {

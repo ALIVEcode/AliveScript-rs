@@ -168,6 +168,9 @@ pub enum CompilationErrorKind {
     )]
     InvalidImplBlock { struct_name: String },
 
+    #[error("Dans le bloc {block_name}: {msg}")]
+    MissingCases { block_name: String, msg: String },
+
     #[error("{0}")]
     CompilationError(String),
 }
@@ -190,6 +193,13 @@ impl CompilationErrorKind {
     pub fn assign_to_const(var_name: impl ToString) -> Self {
         Self::AssignToConst {
             var_name: var_name.to_string(),
+        }
+    }
+
+    pub fn missing_cases(block_name: impl ToString, msg: impl ToString) -> Self {
+        Self::MissingCases {
+            block_name: block_name.to_string(),
+            msg: msg.to_string(),
         }
     }
 

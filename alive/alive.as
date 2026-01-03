@@ -63,7 +63,6 @@ fonction init()
     afficher "Bonjour d'AliveScript !"
     `)
   fin si
-  
 fin fonction
 
 fonction exec()
