@@ -7,6 +7,8 @@ use std::{
     usize,
 };
 
+use num_enum::TryFromPrimitive;
+
 use crate::{
     compiler::{
         Compiler, CompilerOptions,
@@ -175,7 +177,11 @@ impl VM {
         }
     }
 
-    fn lookup_module(&mut self, module_name: &str, config: VMConfig) -> Result<ArcModule, RuntimeError> {
+    fn lookup_module(
+        &mut self,
+        module_name: &str,
+        config: VMConfig,
+    ) -> Result<ArcModule, RuntimeError> {
         let module_name = module_name.strip_suffix(".as").unwrap_or(module_name);
 
         if self
@@ -662,7 +668,11 @@ impl VM {
         self.lookup_module(file_path, self.config.clone())
     }
 
-    pub fn run_file_to_module_with_config(&mut self, file_path: &str, config: VMConfig) -> Result<ArcModule, RuntimeError> {
+    pub fn run_file_to_module_with_config(
+        &mut self,
+        file_path: &str,
+        config: VMConfig,
+    ) -> Result<ArcModule, RuntimeError> {
         self.lookup_module(file_path, config)
     }
 
@@ -1347,21 +1357,28 @@ impl VM {
                         RuntimeError::generic_err(format!("Missing rhs in {:?}", op))
                     })?;
 
-                    self.push(match binop {
-                        BinOpcode::Mul => arg1 * arg2,
-                        BinOpcode::Div => arg1 / arg2,
-                        BinOpcode::DivInt => arg1.div_int(arg2),
-                        BinOpcode::Add => arg1 + arg2,
-                        BinOpcode::Sub => arg1 - arg2,
-                        BinOpcode::Exp => arg1.pow(arg2),
-                        BinOpcode::Mod => arg1 % arg2,
-                        BinOpcode::Extend => arg1.extend(arg2),
-                        BinOpcode::BitwiseOr => arg1 | arg2,
-                        BinOpcode::BitwiseAnd => arg1 & arg2,
-                        BinOpcode::BitwiseXor => arg1 ^ arg2,
-                        BinOpcode::ShiftLeft => arg1 << arg2,
-                        BinOpcode::ShiftRight => arg1 >> arg2,
-                    }?);
+                    if let Value::NativeObjet(o) = arg1 {
+                        let result =
+                            o.do_op(self, BinOpcode::try_from_primitive(op).unwrap(), arg2)?;
+
+                        self.push(result);
+                    } else {
+                        self.push(match binop {
+                            BinOpcode::Mul => arg1 * arg2,
+                            BinOpcode::Div => arg1 / arg2,
+                            BinOpcode::DivInt => arg1.div_int(arg2),
+                            BinOpcode::Add => arg1 + arg2,
+                            BinOpcode::Sub => arg1 - arg2,
+                            BinOpcode::Exp => arg1.pow(arg2),
+                            BinOpcode::Mod => arg1 % arg2,
+                            BinOpcode::Extend => arg1.extend(arg2),
+                            BinOpcode::BitwiseOr => arg1 | arg2,
+                            BinOpcode::BitwiseAnd => arg1 & arg2,
+                            BinOpcode::BitwiseXor => arg1 ^ arg2,
+                            BinOpcode::ShiftLeft => arg1 << arg2,
+                            BinOpcode::ShiftRight => arg1 >> arg2,
+                        }?);
+                    }
                 }
                 Opcode::BinComp => {
                     let op = fnc.code[frame.ip];

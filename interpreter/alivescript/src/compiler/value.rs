@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
 use crate::compiler::Local;
-use crate::compiler::bytecode::instructions_to_string;
+use crate::compiler::bytecode::{BinOpcode, instructions_to_string};
 use crate::compiler::err::CompilationErrorKind;
 use crate::compiler::obj::{ArcUpvalue, Function, UpvalueSpec, Value};
 use crate::runtime::err::RuntimeError;
@@ -769,5 +769,17 @@ pub trait NativeObjet: Debug + Any {
 
     fn display(&self) -> String {
         format!("objet natif {}", self.type_name())
+    }
+
+    fn do_op(
+        self: Arc<Self>,
+        vm: &mut VM,
+        op: BinOpcode,
+        other: Value,
+    ) -> Result<Value, RuntimeError> {
+        Err(RuntimeError::generic_err(format!(
+            "Cet objet ne supporte pas l'opération {:?}",
+            op
+        )))
     }
 }

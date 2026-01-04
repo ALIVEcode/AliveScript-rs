@@ -16,6 +16,7 @@ use uuid::timestamp;
 use crate::{
     as_module, as_module_fonction,
     compiler::{
+        bytecode::BinOpcode,
         obj::Function,
         value::{NativeMethod, NativeObjet},
     },
@@ -56,6 +57,33 @@ impl NativeObjet for ASPath {
             }
             v => Ok(v),
         }
+    }
+
+    fn do_op(
+        self: Arc<Self>,
+        vm: &mut VM,
+        op: crate::compiler::bytecode::BinOpcode,
+        other: Value,
+    ) -> Result<Value, RuntimeError> {
+        match op {
+            BinOpcode::Div => {
+                unpack_native!(chemin: &ASPath = other => {
+                    chemin.0.clone()
+                } else {
+                    PathBuf::from(other.as_texte()?)
+                });
+
+                Ok(Value::native_objet(Self(self.0.join(chemin))))
+            }
+            _ => Err(RuntimeError::generic_err(format!(
+                "Cet objet ne supporte pas l'opération {:?}",
+                op
+            ))),
+        }
+    }
+
+    fn display(&self) -> String {
+        self.0.display().to_string()
     }
 
     fn as_any(self: Arc<Self>) -> Arc<dyn Any> {
