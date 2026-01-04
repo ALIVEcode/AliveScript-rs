@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     env, fs, hint,
     io::{self, Write, stdin},
     path::{self, Path},
@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     compiler::{
-        Compiler,
+        Compiler, CompilerOptions,
         bytecode::{BinCompcode, BinOpcode, JUMP_OFFSET, Opcode, instructions_to_string},
         obj::{ArcUpvalue, CallFrame, Function, Upvalue, UpvalueLocation, UpvalueSpec, Value},
         value::{
@@ -17,7 +17,10 @@ use crate::{
             ArcStructure, ClosureInst, ClosureProto, ModuleProto, NativeMethod, Type,
         },
     },
-    runtime::err::RuntimeError,
+    runtime::{
+        config::{PermissionSet, VMAction, VMConfig},
+        err::RuntimeError,
+    },
     stdlib::{LazyModule, builtins::BUILTINS, get_stdlib},
 };
 
@@ -30,9 +33,11 @@ pub struct VM {
     frames: Vec<CallFrame>,
     open_upvalues: Vec<ArcUpvalue>, // track upvalues that point to stack slots
     global_table: HashMap<String, Value>,
+    exported_globals: HashSet<String>,
     loaded_modules: HashMap<String, ArcModule>,
     preloaded_modules: HashMap<String, Arc<dyn LazyModule>>,
     module_searcher: Option<Function>,
+    config: VMConfig,
 }
 
 impl VM {
@@ -44,9 +49,38 @@ impl VM {
             frames: Vec::new(),
             open_upvalues: Vec::new(),
             global_table: builtins,
+            exported_globals: HashSet::new(),
             loaded_modules: HashMap::new(),
             preloaded_modules: get_stdlib(),
             module_searcher: None,
+            config: VMConfig::default(),
+        };
+
+        // let texte_module = s.load_module("Texte").expect("The Texte module");
+        // s.global_table.insert(String::from("Texte"), texte_module);
+
+        s
+    }
+
+    pub fn new_with_config(file: String, config: VMConfig) -> Self {
+        let builtins = BUILTINS.clone();
+        let mut stdlib = get_stdlib();
+
+        if let Some(allowed_modules) = config.allowed_modules.as_ref() {
+            stdlib.retain(|k, v| allowed_modules.includes(k));
+        }
+
+        let mut s = Self {
+            file,
+            stack: Vec::new(),
+            frames: Vec::new(),
+            open_upvalues: Vec::new(),
+            global_table: builtins,
+            exported_globals: HashSet::new(),
+            loaded_modules: HashMap::new(),
+            preloaded_modules: stdlib,
+            module_searcher: None,
+            config,
         };
 
         // let texte_module = s.load_module("Texte").expect("The Texte module");
@@ -73,6 +107,11 @@ impl VM {
 
     pub fn get_global(&mut self, name: &str) -> Option<&Value> {
         self.global_table.get(name)
+    }
+
+    pub fn insert_exported_global(&mut self, (name, val): (impl ToString, Value)) -> Option<Value> {
+        self.exported_globals.insert(name.to_string());
+        self.global_table.insert(name.to_string(), val)
     }
 
     fn push(&mut self, v: Value) {
@@ -139,8 +178,20 @@ impl VM {
         }
     }
 
-    fn lookup_module(&mut self, module_name: &str) -> Result<ArcModule, RuntimeError> {
+    fn lookup_module(&mut self, module_name: &str, config: VMConfig) -> Result<ArcModule, RuntimeError> {
         let module_name = module_name.strip_suffix(".as").unwrap_or(module_name);
+
+        if self
+            .config
+            .allowed_modules
+            .as_ref()
+            .is_some_and(|allowed_modules| !allowed_modules.includes(module_name))
+        {
+            return Err(RuntimeError::module_load_error(
+                module_name,
+                format!("Ce module n'est pas dans la liste des modules autorisés pour ce script."),
+            ));
+        }
 
         if let Some(module) = self.loaded_modules.get(module_name) {
             return Ok(Arc::clone(&module));
@@ -230,7 +281,7 @@ impl VM {
             .parse_and_compile_to_module()
             .map_err(|err| RuntimeError::module_load_error(module_name, err))?;
 
-        let mut other_vm = VM::new(module_file.to_string());
+        let mut other_vm = VM::new_with_config(module_file.to_string(), config);
         other_vm.set_module_searcher(self.module_searcher.clone());
         other_vm.run(module_closure.load_fn)?;
 
@@ -240,6 +291,13 @@ impl VM {
             members.insert(
                 member_name,
                 ASField::new(member.is_const, member.field_type, value),
+            );
+        }
+        for global_name in other_vm.exported_globals.iter() {
+            let value = other_vm.global_table[global_name].clone();
+            members.insert(
+                global_name.to_string(),
+                ASField::new(true, Type::tout().into(), value),
             );
         }
 
@@ -255,7 +313,7 @@ impl VM {
     }
 
     fn load_module(&mut self, module_name: &str) -> Result<Value, RuntimeError> {
-        let module = self.lookup_module(module_name)?;
+        let module = self.lookup_module(module_name, self.config.clone())?;
         Ok(Value::Module(module))
     }
 
@@ -604,7 +662,11 @@ impl VM {
     }
 
     pub fn run_file_to_module(&mut self, file_path: &str) -> Result<ArcModule, RuntimeError> {
-        self.lookup_module(file_path)
+        self.lookup_module(file_path, self.config.clone())
+    }
+
+    pub fn run_file_to_module_with_config(&mut self, file_path: &str, config: VMConfig) -> Result<ArcModule, RuntimeError> {
+        self.lookup_module(file_path, config)
     }
 
     fn run_main(&mut self, closure: ArcClosureInst) -> Result<Value, RuntimeError> {
@@ -1418,6 +1480,20 @@ impl VM {
                 }
 
                 Opcode::Read | Opcode::ReadWithMsg => {
+                    if self
+                        .config
+                        .permissions
+                        .as_ref()
+                        .is_some_and(|permission_set| {
+                            !permission_set.includes(&VMAction::ReadStdin)
+                        })
+                    {
+                        return Err(RuntimeError::permission_error(
+                            format!("{:?}", VMAction::ReadStdin),
+                            "Ce script ne possède pas les permissions pour faire cette action",
+                        ));
+                    }
+
                     let msg = if op == Opcode::ReadWithMsg {
                         let msg = self.pop().expect("A message");
                         msg.to_string()
@@ -1448,6 +1524,20 @@ impl VM {
                     } else {
                         String::from("> ")
                     };
+
+                    if self
+                        .config
+                        .permissions
+                        .as_ref()
+                        .is_some_and(|permission_set| {
+                            !permission_set.includes(&VMAction::ReadStdin)
+                        })
+                    {
+                        return Err(RuntimeError::permission_error(
+                            format!("{:?}", VMAction::ReadStdin),
+                            "Ce script ne possède pas les permissions pour faire cette action",
+                        ));
+                    }
 
                     print!("{}", msg);
                     _ = io::stdout().flush();
@@ -1595,5 +1685,9 @@ impl VM {
 
     pub fn set_module_searcher(&mut self, module_searcher: Option<Function>) {
         self.module_searcher = module_searcher;
+    }
+
+    pub fn config(&self) -> &VMConfig {
+        &self.config
     }
 }

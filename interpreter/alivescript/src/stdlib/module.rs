@@ -1,8 +1,9 @@
 use core::time;
 use std::{
     any::Any,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     marker::PhantomData,
+    str::FromStr,
     sync::{Arc, LazyLock, RwLock},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -17,7 +18,10 @@ use crate::{
         obj::Function,
         value::{NativeMethod, NativeObjet},
     },
-    runtime::vm::VM,
+    runtime::{
+        config::{PermissionSet, VMAction, VMConfig},
+        vm::VM,
+    },
     unpack, unpack_native,
 };
 use crate::{
@@ -32,6 +36,7 @@ use crate::{
 struct ModuleBuilder {
     path: String,
     module_searcher: RwLock<Option<Function>>,
+    vm_config: RwLock<VMConfig>,
 }
 
 impl NativeObjet for ModuleBuilder {
@@ -67,12 +72,68 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                créer(chemin: Type::Texte) => {
+                configurer(chemin: Type::Texte, obj: Type::dict_val_tout()) => {
+                    unpack!(Value::Dict(d) = obj);
+
                     let mut vm = VM::new(String::new());
-                    Ok(Some(Value::NativeObjet(Arc::new(ModuleBuilder{
+                    let mut builder = ModuleBuilder{
                         path: chemin.as_texte()?.to_string(),
-                        module_searcher: RwLock::new(None)
-                    }))))
+                        module_searcher: RwLock::new(None),
+                        vm_config: RwLock::new(vm.config().clone()),
+                    };
+
+                    let d = d.read().unwrap();
+                    let included_modules = d.get("modulesPermis");
+                    let excluded_modules = d.get("modulesInterdits");
+
+                    if included_modules.as_ref().is_some_and(|_| excluded_modules.as_ref().is_some()){
+                        return Err(RuntimeError::generic_err(
+                            "impossible de spécifier à la fois les modules permis et interdits. Veuillez seulement spécifier un des deux."
+                        ));
+                    }
+
+                    let included_perms = d.get("actionsPermises");
+                    let excluded_perms = d.get("actionsInterdites");
+
+                    if included_perms.as_ref().is_some_and(|_| excluded_perms.as_ref().is_some()){
+                        return Err(RuntimeError::generic_err(
+                            "impossible de spécifier à la fois les actions permises et interdites. Veuillez seulement spécifier un des deux."
+                        ));
+                    }
+
+                    if let Some(included_modules) = included_modules {
+                        let included_modules = included_modules.as_liste()?
+                            .read()
+                            .unwrap()
+                            .iter()
+                            .map(|v| v.as_texte().map(ToString::to_string)).collect::<Result<HashSet<_>, _>>()?;
+                        builder.vm_config.write().unwrap().allowed_modules = Some(PermissionSet::Include(included_modules))
+                    } else if let Some(excluded_modules) = excluded_modules {
+                        let excluded_modules = excluded_modules.as_liste()?
+                            .read()
+                            .unwrap()
+                            .iter()
+                            .map(|v| v.as_texte().map(ToString::to_string)).collect::<Result<HashSet<_>, _>>()?;
+                        builder.vm_config.write().unwrap().allowed_modules = Some(PermissionSet::Exclude(excluded_modules))
+                    }
+
+                    if let Some(included_perms) = included_perms {
+                        let included_perms = included_perms.as_liste()?
+                            .read()
+                            .unwrap()
+                            .iter()
+                            .map(|v| v.as_texte().and_then(|s| VMAction::from_str(s))).collect::<Result<HashSet<_>, _>>()?;
+                        builder.vm_config.write().unwrap().permissions = Some(PermissionSet::Include(included_perms))
+                    } else if let Some(excluded_perms) = excluded_perms {
+                        let excluded_perms = excluded_perms.as_liste()?
+                            .read()
+                            .unwrap()
+                            .iter()
+                            .map(|v| v.as_texte().and_then(|s| VMAction::from_str(s))).collect::<Result<HashSet<_>, _>>()?;
+                        builder.vm_config.write().unwrap().permissions = Some(PermissionSet::Exclude(excluded_perms))
+                    }
+
+                    Ok(Some(Value::NativeObjet(Arc::new(builder))))
                 }
             },
             as_module_fonction! {
@@ -96,13 +157,13 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                charger(chemin: Type::union_of(Type::Texte, Type::Objet(String::from("Module.Constructeur")))): Type::Module => {
+                charger[current_vm](chemin: Type::union_of(Type::Texte, Type::Objet(String::from("Module.Constructeur")))): Type::Module => {
                     match chemin {
                         obj @ Value::NativeObjet(..) => {
                             unpack_native!(builder: &ModuleBuilder = obj);
-                            let mut vm = VM::new(String::new());
+                            let mut vm = VM::new_with_config(String::new(), current_vm.config().clone());
                             vm.set_module_searcher(builder.module_searcher.read().unwrap().clone());
-                            let module = vm.run_file_to_module(&builder.path)?;
+                            let module = vm.run_file_to_module_with_config(&builder.path, builder.vm_config.read().unwrap().clone())?;
                             Ok(Some(Value::Module(module)))
                         }
                         Value::Texte(chemin) => {

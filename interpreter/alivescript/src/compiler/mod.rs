@@ -58,8 +58,10 @@ pub struct LocalType {
     depth: i32,
 }
 
-#[derive(Debug, Default)]
-pub struct CompilerOptions {}
+#[derive(Debug, Default, Clone)]
+pub struct CompilerOptions {
+    forbidden_ops: Vec<Opcode>
+}
 
 #[derive(Debug)]
 pub struct Compiler<'a> {

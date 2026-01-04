@@ -4,6 +4,6 @@ version = ""
 versionAliveScript = ""
 
 dépendances = [
-  { nom: "Test", url: "https://github.com/..." }
+  { nom: "Test", url: "https://github.com/..." },
 ]
 

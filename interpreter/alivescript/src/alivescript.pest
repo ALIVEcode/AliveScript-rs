@@ -418,7 +418,6 @@ Null      = @{ "nul" }
 
 keyword = @{
     "utiliser"
-  | "alias"
   | "type"
   | "fonction"
   | "methode"

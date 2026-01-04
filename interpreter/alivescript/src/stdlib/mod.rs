@@ -29,6 +29,7 @@ mod io;
 mod liste;
 mod module;
 mod os;
+mod projet;
 mod subprocess;
 mod sys;
 mod texte;
@@ -72,6 +73,30 @@ as_module! {
                     unpack!(Value::Dict(d) = inst);
 
                     Ok(Some(Value::Entier(d.read().unwrap().members.len() as i64)))
+                }
+            },
+            as_module_fonction! {
+                clés(inst: Type::dict_tout()) => {
+                    unpack!(Value::Dict(d) = inst);
+
+                    Ok(Some(Value::liste(d.read().unwrap().members.keys().map(|k| Value::Texte(k.clone())).collect())))
+                }
+            },
+            as_module_fonction! {
+                valeurs(inst: Type::dict_tout()) => {
+                    unpack!(Value::Dict(d) = inst);
+
+                    Ok(Some(Value::liste(d.read().unwrap().members.values().map(|v| v.clone()).collect())))
+                }
+            },
+            as_module_fonction! {
+                entrées(inst: Type::dict_tout()) => {
+                    unpack!(Value::Dict(d) = inst);
+
+                    Ok(Some(Value::liste(d.read().unwrap().members
+                        .iter()
+                        .map(|(k, v)| 
+                            Value::liste(vec![Value::Texte(k.clone()), v.clone()])).collect())))
                 }
             },
         ]
@@ -138,6 +163,7 @@ pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
     stdlib.push(Arc::new(env::Env {}));
     stdlib.push(Arc::new(module::Module {}));
     stdlib.push(Arc::new(subprocess::Processus {}));
+    stdlib.push(Arc::new(projet::Projet {}));
 
     HashMap::from_iter(
         stdlib

@@ -34,6 +34,12 @@ pub enum RuntimeError {
     #[error("Explosion de la pile d'appel: {0}")]
     StackOverflow(String),
 
+    #[error("Erreur de permission ({permission_name}): {msg}")]
+    PermissionError {
+        permission_name: String,
+        msg: String,
+    },
+
     #[error("Erreur lors de l'exécution:\n{0}")]
     RuntimeError(String),
 }
@@ -118,6 +124,13 @@ impl RuntimeError {
         Self::TypeError(format!(
             "dans la fonction '{func}', le paramètre '{param_name}' est de type '{param_type}', mais l'argument passé est de type '{arg_type}'",
         ))
+    }
+
+    pub fn permission_error(permission_name: impl ToString, msg: impl ToString) -> Self {
+        Self::PermissionError {
+            permission_name: permission_name.to_string(),
+            msg: msg.to_string(),
+        }
     }
 
     pub fn generic_err(msg: impl ToString) -> Self {

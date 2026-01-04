@@ -1,7 +1,11 @@
-nom = "alive"
-version = "0.1.0"
+utiliser Projet
 
-src = "alive.as"
-versionAliveScript = "0.1.0"
+Projet.configurer({
+  nom: "alive",
+  version: "0.1.0",
+  versionAliveScript: "",
+  source: "alive.as",
+})
 
-dépendances = []
+
+Projet.ajouterDépendance({ url: "https://github.com/...", alias: "Utils" })

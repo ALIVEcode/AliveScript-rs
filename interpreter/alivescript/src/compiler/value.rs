@@ -28,6 +28,12 @@ pub struct ASDict {
     pub members: HashMap<String, Value>,
 }
 
+impl ASDict {
+    pub fn get(&self, key: &str) -> Option<&Value> {
+        self.members.get(key)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ASField {
     pub value: Value,
