@@ -3,6 +3,7 @@ use std::{
     any::Any,
     collections::{HashMap, HashSet},
     marker::PhantomData,
+    path::PathBuf,
     str::FromStr,
     sync::{Arc, LazyLock, RwLock},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -22,6 +23,7 @@ use crate::{
         config::{PermissionSet, VMAction, VMConfig},
         vm::VM,
     },
+    stdlib::path::ASPath,
     unpack, unpack_native,
 };
 use crate::{
@@ -71,12 +73,23 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                configurer(chemin: Type::Texte, obj: Type::dict_val_tout()) => {
+                configurer(
+                    chemin: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin")),
+                    obj: Type::dict_val_tout()
+                ) => {
                     unpack!(Value::Dict(d) = obj);
+                    let chemin = match chemin {
+                        Value::Texte(t) => PathBuf::from(t),
+                        c @ Value::NativeObjet(..) => {
+                            unpack_native!(c: &ASPath = c);
+                            c.0.clone()
+                        }
+                        _ => unreachable!()
+                    };
 
                     let mut vm = VM::new(String::new());
                     let mut builder = ModuleBuilder{
-                        path: chemin.as_texte()?.to_string(),
+                        path: chemin.display().to_string(),
                         vm_config: RwLock::new(vm.config().clone()),
                     };
 
@@ -135,7 +148,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                rechercheModule(inst: Type::Objet(String::from("Module.Constructeur")), f: Type::Fonction) => {
+                rechercheModule(inst: Type::objet("Module.Constructeur"), f: Type::Fonction) => {
                     unpack_native!(builder: &ModuleBuilder = inst);
 
                     let f = f.as_fonc()?;
@@ -155,9 +168,11 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                charger[current_vm](chemin: Type::union_of(Type::Texte, Type::Objet(String::from("Module.Constructeur")))): Type::Module => {
+                charger[current_vm](
+                    chemin: Type::union(vec![Type::Texte, Type::objet("Module.Constructeur"), Type::objet("Chemin.Chemin")])
+                ): Type::Module => {
                     match chemin {
-                        obj @ Value::NativeObjet(..) => {
+                        obj @ Value::NativeObjet(..) if Type::type_match(&obj.get_type(), &Type::objet("Module.Constructeur")) => {
                             unpack_native!(builder: &ModuleBuilder = obj);
                             let module = current_vm.run_file_to_module_with_config(&builder.path, builder.vm_config.read().unwrap().clone())?;
                             Ok(Some(Value::Module(module)))

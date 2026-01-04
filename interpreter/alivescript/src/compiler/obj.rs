@@ -67,6 +67,10 @@ impl Value {
         })))
     }
 
+    pub fn native_objet(obj: impl NativeObjet) -> Self {
+        Self::NativeObjet(Arc::new(obj))
+    }
+
     pub fn liste(values: Vec<Value>) -> Self {
         Self::Liste(Arc::new(RwLock::new(values)))
     }

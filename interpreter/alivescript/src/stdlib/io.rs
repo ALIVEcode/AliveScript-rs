@@ -4,6 +4,7 @@ use std::{
     fs,
     io::{self, BufRead, BufReader, Read, Write},
     ops::Deref,
+    path::PathBuf,
     sync::{Arc, RwLock},
 };
 
@@ -14,7 +15,7 @@ use crate::{
         value::{ArcNativeObjet, NativeMethod, NativeObjet, Type},
     },
     runtime::err::RuntimeError,
-    stdlib::LazyModule,
+    stdlib::{LazyModule, path::ASPath},
     unpack, unpack_native,
 };
 
@@ -114,8 +115,18 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                ouvrir(filename: Type::Texte, mode: Type::Texte): Type::Custom => {
-                    let filename = filename.as_texte().unwrap();
+                ouvrir(
+                    filename: Type::union_of(Type::Texte, Type::Objet(String::from("Chemin.Chemin"))),
+                    mode: Type::Texte
+                ): Type::Custom => {
+                    unpack_native!(filename: &ASPath = filename => {
+                        filename.0.clone()
+                    } else {
+                        PathBuf::from(filename.as_texte()?)
+                    });
+
+                    let filename = &filename.display().to_string();
+
                     let mode = mode.as_texte().unwrap();
                     match mode {
                         "écriture" | "ecriture" | "e" | "é" => {
@@ -147,11 +158,18 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                créerDossier(chemin: Type::Texte) => {
-                    let chemin = chemin.as_texte().unwrap();
-                    fs::create_dir_all(chemin).map_err(|e|
+                créerDossier(
+                    chemin: Type::union_of(Type::Texte, Type::Objet(String::from("Chemin.Chemin"))),
+                ) => {
+                    unpack_native!(chemin: &ASPath = chemin => {
+                        chemin.0.clone()
+                    } else {
+                        PathBuf::from(chemin.as_texte()?)
+                    });
+
+                    fs::create_dir_all(&chemin).map_err(|e|
                         RuntimeError::generic_err(format!(
-                            "Erreur lors de la création du dossier '{}'\n{}", chemin, e
+                            "Erreur lors de la création du dossier '{}'\n{}", chemin.display(), e
                         )))?;
 
                     Ok(Some(Value::Nul))

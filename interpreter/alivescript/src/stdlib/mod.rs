@@ -29,6 +29,7 @@ mod io;
 mod liste;
 mod module;
 mod os;
+mod path;
 mod projet;
 mod subprocess;
 mod sys;
@@ -95,7 +96,7 @@ as_module! {
 
                     Ok(Some(Value::liste(d.read().unwrap().members
                         .iter()
-                        .map(|(k, v)| 
+                        .map(|(k, v)|
                             Value::liste(vec![Value::Texte(k.clone()), v.clone()])).collect())))
                 }
             },
@@ -164,6 +165,7 @@ pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
     stdlib.push(Arc::new(module::Module {}));
     stdlib.push(Arc::new(subprocess::Processus {}));
     stdlib.push(Arc::new(projet::Projet {}));
+    stdlib.push(Arc::new(path::Chemin {}));
 
     HashMap::from_iter(
         stdlib

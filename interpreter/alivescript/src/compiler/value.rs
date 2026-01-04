@@ -569,6 +569,10 @@ impl Type {
             ))),
         }
     }
+
+    pub fn objet(nom: impl ToString) -> Self {
+        Self::Objet(nom.to_string())
+    }
 }
 
 impl Type {

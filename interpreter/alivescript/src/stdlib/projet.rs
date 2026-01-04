@@ -32,40 +32,6 @@ use crate::{
     runtime::err::RuntimeError,
 };
 
-#[derive(Debug)]
-struct ModuleBuilder {
-    path: String,
-    module_searcher: RwLock<Option<Function>>,
-    vm_config: RwLock<VMConfig>,
-}
-
-impl NativeObjet for ModuleBuilder {
-    fn type_name(&self) -> &'static str {
-        "Module.Constructeur"
-    }
-
-    fn get_member(
-        self: Arc<Self>,
-        vm: &mut crate::runtime::vm::VM,
-        name: &str,
-    ) -> Result<Value, crate::runtime::err::RuntimeError> {
-        let es = vm.get_std_module("Module");
-        match es.read().unwrap().get_member(name)? {
-            Value::Function(Function::NativeFunction(function)) => {
-                Ok(Value::Function(Function::NativeMethod(NativeMethod {
-                    func: function,
-                    inst_value: Box::new(Value::NativeObjet(self)),
-                })))
-            }
-            v => Ok(v),
-        }
-    }
-
-    fn as_any(self: Arc<Self>) -> Arc<dyn Any> {
-        self
-    }
-}
-
 as_module! {
     module Projet {}
 
