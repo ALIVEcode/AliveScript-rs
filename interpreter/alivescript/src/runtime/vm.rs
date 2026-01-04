@@ -36,7 +36,6 @@ pub struct VM {
     exported_globals: HashSet<String>,
     loaded_modules: HashMap<String, ArcModule>,
     preloaded_modules: HashMap<String, Arc<dyn LazyModule>>,
-    module_searcher: Option<Function>,
     config: VMConfig,
 }
 
@@ -52,7 +51,6 @@ impl VM {
             exported_globals: HashSet::new(),
             loaded_modules: HashMap::new(),
             preloaded_modules: get_stdlib(),
-            module_searcher: None,
             config: VMConfig::default(),
         };
 
@@ -79,7 +77,6 @@ impl VM {
             exported_globals: HashSet::new(),
             loaded_modules: HashMap::new(),
             preloaded_modules: stdlib,
-            module_searcher: None,
             config,
         };
 
@@ -238,7 +235,7 @@ impl VM {
 
             if let Some(path) = found {
                 path
-            } else if let Some(searcher) = &self.module_searcher {
+            } else if let Some(searcher) = &self.config.module_searcher {
                 let result = self.run_fn(
                     vec![Value::Texte(module_name.to_string())],
                     &searcher.clone(),
@@ -282,7 +279,7 @@ impl VM {
             .map_err(|err| RuntimeError::module_load_error(module_name, err))?;
 
         let mut other_vm = VM::new_with_config(module_file.to_string(), config);
-        other_vm.set_module_searcher(self.module_searcher.clone());
+        other_vm.set_module_searcher(self.config.module_searcher.clone());
         other_vm.run(module_closure.load_fn)?;
 
         let mut members = HashMap::new();
@@ -1684,7 +1681,7 @@ impl VM {
     }
 
     pub fn set_module_searcher(&mut self, module_searcher: Option<Function>) {
-        self.module_searcher = module_searcher;
+        self.config.module_searcher = module_searcher;
     }
 
     pub fn config(&self) -> &VMConfig {

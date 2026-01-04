@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, collections::HashSet, fmt::Debug, hash::Hash, str::FromStr};
 
-use crate::{compiler::CompilerOptions, runtime::err::RuntimeError};
+use crate::{compiler::{CompilerOptions, obj::Function}, runtime::err::RuntimeError};
 
 #[derive(Debug, Clone)]
 pub enum PermissionSet<T>
@@ -66,4 +66,5 @@ pub struct VMConfig {
     pub allowed_modules: Option<PermissionSet<String>>,
     pub permissions: Option<PermissionSet<VMAction>>,
     pub compiler_options: CompilerOptions,
+    pub module_searcher: Option<Function>,
 }

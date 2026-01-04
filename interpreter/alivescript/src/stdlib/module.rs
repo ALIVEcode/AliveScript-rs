@@ -35,7 +35,6 @@ use crate::{
 #[derive(Debug)]
 struct ModuleBuilder {
     path: String,
-    module_searcher: RwLock<Option<Function>>,
     vm_config: RwLock<VMConfig>,
 }
 
@@ -78,7 +77,6 @@ as_module! {
                     let mut vm = VM::new(String::new());
                     let mut builder = ModuleBuilder{
                         path: chemin.as_texte()?.to_string(),
-                        module_searcher: RwLock::new(None),
                         vm_config: RwLock::new(vm.config().clone()),
                     };
 
@@ -151,7 +149,7 @@ as_module! {
                         }
                         _ => {}
                     }
-                    *builder.module_searcher.write().unwrap() = Some(f.clone());
+                    builder.vm_config.write().unwrap().module_searcher = Some(f.clone());
 
                     Ok(Some(inst))
                 }
@@ -161,9 +159,7 @@ as_module! {
                     match chemin {
                         obj @ Value::NativeObjet(..) => {
                             unpack_native!(builder: &ModuleBuilder = obj);
-                            let mut vm = VM::new_with_config(String::new(), current_vm.config().clone());
-                            vm.set_module_searcher(builder.module_searcher.read().unwrap().clone());
-                            let module = vm.run_file_to_module_with_config(&builder.path, builder.vm_config.read().unwrap().clone())?;
+                            let module = current_vm.run_file_to_module_with_config(&builder.path, builder.vm_config.read().unwrap().clone())?;
                             Ok(Some(Value::Module(module)))
                         }
                         Value::Texte(chemin) => {
