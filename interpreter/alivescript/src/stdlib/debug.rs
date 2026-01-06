@@ -21,20 +21,17 @@ use crate::{
 };
 
 as_module! {
-    module Temps {}
+    module Debug as "Débug" {}
 
     fn load(&self) {
         [
             as_module_fonction! {
-                temps(): Type::Entier => {
-                    Ok(Value::Entier(
-                        SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap()
-                            .as_millis() as i64
-                    ))
+                nb(inst: Type::Texte): Type::Booleen => {
+                    let inst = inst.as_texte().unwrap();
+                    Ok(Value::Booleen(inst.chars().all(|c| c.is_ascii_digit())))
                 }
             },
         ]
     }
 }
+

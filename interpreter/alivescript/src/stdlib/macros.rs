@@ -29,11 +29,11 @@ macro_rules! opt_value {
 
 #[macro_export]
 macro_rules! optional_body {
-    ($value:tt, $body:tt $(, $else:tt)?) => {
-        $body
-    };
-    (, $body:tt $(, $else:tt)?) => {
+    ({}, $body:tt $(, $else:tt)?) => {
         $($else)?
+    };
+    ({$($value:tt)+}, $body:tt $(, $else:tt)?) => {
+        $body
     };
 }
 
@@ -87,7 +87,7 @@ macro_rules! as_fonction {
                     $(
                     let $param_name = {
                         let p = args.pop_front();
-                        $crate::optional_body!($($default)?, {p.unwrap_or_else(|| $(&$default)?)}, {p.unwrap()})
+                        $crate::optional_body!({$($default)?}, {p.unwrap_or_else(|| $(&$default)?)}, {p.unwrap()})
                     };
                     if !$crate::compiler::value::Type::type_match(&$param_type, &$param_name.get_type()) {
                         return Err($crate::runtime::err::RuntimeError::invalid_arg_type(
@@ -109,8 +109,8 @@ macro_rules! as_fonction {
 
 #[macro_export]
 macro_rules! as_module_fonction {
-    ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
-     $(: $return_type:expr)? => $body:block) => {{
+    ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : {$($param_type:tt)+} $(=> $default:expr)?),* $(,)?)
+     $(: $return_type:expr =>)? $body:block) => {{
          $($($prefix)*)?;
          (
             String::from(std::stringify!($name)),
@@ -125,14 +125,55 @@ macro_rules! as_module_fonction {
                         if let Some(p) = args.pop_front() {
                             p
                         } else {
-                            $crate::optional_body!($($default)?,
+                            $crate::optional_body!({$($default)?},
                                 { $($default)? },
                                 {
                                     return Err($crate::runtime::err::RuntimeError::call_error(stringify!($name), format!("valeur manquante pour le paramètre '{}'", stringify!($param_name))));
                                 }
                             )
                         }
-                        
+
+                    };
+                    if !$crate::compiler::value::Type::type_match(&$crate::as_type!($($param_type)+), &$param_name.get_type()) {
+                        return Err($crate::runtime::err::RuntimeError::invalid_arg_type(
+                            std::stringify!($name),
+                            std::stringify!($param_name),
+                            $crate::as_type!($($param_type)+),
+                            $param_name.get_type(),
+                         ));
+                    }
+                    )*
+                    $(let $vm = _vm;)?
+                    $body
+                }),
+                // $return_type,
+            })))
+         )
+     }};
+    ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
+     $(: $return_type:expr =>)? $body:block) => {{
+         $($($prefix)*)?;
+         (
+            String::from(std::stringify!($name)),
+            $crate::compiler::value::ASField::new_with_type_from_value(true,
+            $crate::compiler::obj::Value::Function($crate::compiler::obj::Function::NativeFunction($crate::compiler::value::NativeFunction {
+                name: std::sync::Arc::new(String::from(std::stringify!($name))),
+                desc: std::sync::Arc::new($crate::opt_value!($($desc.to_string())?)),
+                func: std::sync::Arc::new(move |_vm: &mut $crate::runtime::vm::VM, args: std::vec::Vec<$crate::compiler::obj::Value>| {
+                    let mut args = std::collections::VecDeque::from_iter(args.into_iter());
+                    $(
+                    let $param_name = {
+                        if let Some(p) = args.pop_front() {
+                            p
+                        } else {
+                            $crate::optional_body!({$($default)?},
+                                { $($default)? },
+                                {
+                                    return Err($crate::runtime::err::RuntimeError::call_error(stringify!($name), format!("valeur manquante pour le paramètre '{}'", stringify!($param_name))));
+                                }
+                            )
+                        }
+
                     };
                     if !$crate::compiler::value::Type::type_match(&$param_type, &$param_name.get_type()) {
                         return Err($crate::runtime::err::RuntimeError::invalid_arg_type(
@@ -153,6 +194,24 @@ macro_rules! as_module_fonction {
 }
 
 #[macro_export]
+macro_rules! as_module_var {
+    ($({$($prefix:stmt)*})? const $varname:ident: {$($vartype:tt)+} = $val:expr) => {{
+         $($($prefix)*)?;
+         (
+            String::from(std::stringify!($name)),
+            $crate::compiler::value::ASField::new(true, $crate::as_type!($($vartype)+), $val)
+         )
+     }};
+    ($({$($prefix:stmt)*})? var $varname:ident: {$($vartype:tt)+} = $val:expr) => {{
+         $($($prefix)*)?;
+         (
+            String::from(std::stringify!($name)),
+            $crate::compiler::value::ASField::new(false, $crate::as_type!($($vartype)+), $val)
+         )
+     }};
+}
+
+#[macro_export]
 macro_rules! as_module {
     (module $name:ident $(as $real_name:literal)? { $($struct_fields:tt)* }
 
@@ -163,7 +222,7 @@ macro_rules! as_module {
 
         impl $crate::stdlib::LazyModule for $name {
             fn name(&self) -> &'static str {
-                $crate::optional_body!($($real_name)?, $($real_name)?, {stringify!($name)})
+                $crate::optional_body!({$($real_name)?}, {$($real_name)?}, {stringify!($name)})
             }
 
             fn load(&$self) -> $crate::compiler::value::ArcModule {
@@ -171,5 +230,59 @@ macro_rules! as_module {
                 $crate::compiler::value::ASModule::from_iter(stringify!($name), [$($var),*])
             }
         }
+    };
+}
+
+#[macro_export]
+macro_rules! as_type {
+    ($name:literal $(| $($rest:tt)+)?) => {
+        $crate::optional_body!(
+            {$($($rest)+)?},
+            {$crate::compiler::value::Type::union_of(
+                $crate::compiler::value::Type::Objet($name.to_string()),
+                $crate::as_type!($($($rest)+)?)
+            )},
+            {$crate::compiler::value::Type::Objet($name.to_string())}
+        )
+    };
+    (Optionnel ($($arg:tt)+) $(| $($rest:tt)+)?) => {
+        $crate::optional_body!(
+            {$($($rest)+)?},
+            {$crate::compiler::value::Type::union_of(
+                $crate::compiler::value::Type::Optional(Box::new($crate::as_type!($($arg)+))),
+                $crate::as_type!($($($rest)+)?)
+            )},
+            {$crate::compiler::value::Type::Optional(Box::new($crate::as_type!($($arg)+)))}
+        )
+    };
+    (Dict ($($arg:tt)+) $(| $($rest:tt)+)?) => {
+        $crate::optional_body!(
+            {$($($rest)+)?},
+            {$crate::compiler::value::Type::union_of(
+                $crate::compiler::value::Type::Dict(Box::new($crate::compiler::value::Type::Texte), Box::new($crate::as_type!($($arg)+))),
+                $crate::as_type!($($($rest)+)?)
+            )},
+            {$crate::compiler::value::Type::Dict(Box::new($crate::compiler::value::Type::Texte), Box::new($crate::as_type!($($arg)+)))}
+        )
+    };
+    (Liste ($($arg:tt)+) $(| $($rest:tt)+)?) => {
+        $crate::optional_body!(
+            {$($($rest)+)?},
+            {$crate::compiler::value::Type::union_of(
+                $crate::compiler::value::Type::Liste(Box::new($crate::as_type!($($arg)+))),
+                $crate::as_type!($($($rest)+)?)
+            )},
+            {$crate::compiler::value::Type::Liste(Box::new($crate::as_type!($($arg)+)))}
+        )
+    };
+    ($name:ident $(| $($rest:tt)+)?) => {
+        $crate::optional_body!(
+            {$($($rest)+)?},
+            {$crate::compiler::value::Type::union_of(
+                $crate::compiler::value::Type::$name,
+                $crate::as_type!($($($rest)+)?)
+            )},
+            {$crate::compiler::value::Type::$name}
+        )
     };
 }

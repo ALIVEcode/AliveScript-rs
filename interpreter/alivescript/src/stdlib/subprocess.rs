@@ -92,10 +92,10 @@ as_module! {
         [
             as_module_fonction! {
                 créer(
-                    cmd: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin")),
-                    args: Type::liste_tout() => Value::liste(vec![]),
-                    dir: Type::optional(Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => Value::Nul
-                ) => {
+                    cmd: {Texte | "Chemin.Chemin"},
+                    args: {Liste(Tout)} => Value::liste(vec![]),
+                    dir: {Optionnel(Texte | "Chemin.Chemin")} => Value::Nul
+                ) {
                     unpack_native!(cmd: &ASPath = cmd => {
                         cmd.0.clone()
                     } else {
@@ -118,29 +118,29 @@ as_module! {
                             .map(|v| v.to_string()),
                     );
 
-                    Ok(Some(Value::NativeObjet(Arc::new(ProcessHandle {cmd: RwLock::new(command)}))))
+                    Ok(Value::NativeObjet(Arc::new(ProcessHandle {cmd: RwLock::new(command)})))
                 }
             },
             as_module_fonction! {
-                execAvecSortie(inst: Type::Objet(String::from("Processus.SousProcessus"))) => {
+                execAvecSortie(inst: {"Processus.SousProcessus"}) {
                     unpack_native!(cmd: &ProcessHandle = inst);
                     let output = cmd.cmd.write()
                         .unwrap()
                         .output()
                         .map_err(|e| RuntimeError::generic_err(format!("erreur lors de l'exécution de la commande:\n{}", e)))?;
 
-                    Ok(Some(Value::liste(vec![
+                    Ok(Value::liste(vec![
                         Value::Texte(String::from_utf8(output.stdout).map_err(|e| RuntimeError::generic_err(e))?),
                         Value::Texte(String::from_utf8(output.stderr).map_err(|e| RuntimeError::generic_err(e))?),
                         output.status.code().map(|code| Value::Entier(code as i64)).unwrap_or(Value::Nul),
-                    ])))
+                    ]))
                 }
             },
             as_module_fonction! {
                 exec(
-                    inst: Type::Objet(String::from("Processus.SousProcessus")),
-                    opt: Type::dict_val_tout() => Value::dict(vec![("texte", Value::Booleen(true))])
-                ) => {
+                    inst: {"Processus.SousProcessus"},
+                    opt: {Dict(Tout)} => Value::dict(vec![("texte", Value::Booleen(true))])
+                ) {
                     unpack_native!(cmd: &ProcessHandle = inst);
 
                     let child = cmd.cmd.write()
@@ -150,11 +150,11 @@ as_module! {
 
                     let opts = &opt.as_dict()?.read().unwrap().members.get("texte").unwrap_or(&Value::Booleen(true)).as_bool()?;
 
-                    Ok(Some(Value::NativeObjet(Arc::new(ChildProcessHandle {child: RwLock::new(child), text: *opts }))))
+                    Ok(Value::NativeObjet(Arc::new(ChildProcessHandle {child: RwLock::new(child), text: *opts })))
                 }
             },
             as_module_fonction! {
-                obtenirSortie(inst: Type::Objet(String::from("Processus.ProcessusEnfant"))) => {
+                obtenirSortie(inst: {"Processus.ProcessusEnfant"}) {
                     unpack_native!(subprocess: &ChildProcessHandle = inst);
                     let mut stdout = subprocess.child.write()
                         .unwrap()
@@ -165,11 +165,11 @@ as_module! {
                     if subprocess.text {
                         let mut output = String::new();
                         _ = stdout.read_to_string(&mut output).map_err(|e| RuntimeError::generic_err(format!("erreur lors de l'exécution de la commande:\n{}", e)))?;
-                        Ok(Some(Value::Texte(output)))
+                        Ok(Value::Texte(output))
                     } else {
                         let mut output = Vec::new();
                         _ = stdout.read_to_end(&mut output).map_err(|e| RuntimeError::generic_err(format!("erreur lors de l'exécution de la commande:\n{}", e)))?;
-                        Ok(Some(Value::liste(output.into_iter().map(|v| Value::Entier(v as i64)).collect())))
+                        Ok(Value::liste(output.into_iter().map(|v| Value::Entier(v as i64)).collect()))
                     }
 
                 }

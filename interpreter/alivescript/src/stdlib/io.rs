@@ -9,13 +9,13 @@ use std::{
 };
 
 use crate::{
-    as_module, as_module_fonction,
+    as_module, as_module_fonction, as_type,
     compiler::{
         obj::{Function, Value},
         value::{ArcNativeObjet, NativeMethod, NativeObjet, Type},
     },
     runtime::err::RuntimeError,
-    stdlib::{LazyModule, path::ASPath},
+    stdlib::{path::ASPath, LazyModule},
     unpack, unpack_native,
 };
 
@@ -97,32 +97,32 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                existe(filename: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))): Type::Booleen => {
+                existe(filename: {Texte | "Chemin.Chemin"}): Type::Booleen => {
                     unpack_native!(filename: &ASPath = filename => {
                         filename.0.clone()
                     } else {
                         PathBuf::from(filename.as_texte()?)
                     });
 
-                    Ok(Some(Value::Booleen(fs::exists(filename).unwrap_or(false))))
+                    Ok(Value::Booleen(fs::exists(filename).unwrap_or(false)))
                 }
             },
             as_module_fonction! {
-                sortieStd() => {
+                sortieStd() {
                     let fh = Writer { writer: Arc::new(RwLock::new(io::stdout())) };
-                    Ok(Some(Value::NativeObjet(Arc::new(fh))))
+                    Ok(Value::NativeObjet(Arc::new(fh)))
                 }
             },
             as_module_fonction! {
-                sortieErr() => {
+                sortieErr() {
                     let fh = Writer { writer: Arc::new(RwLock::new(io::stderr())) };
-                    Ok(Some(Value::NativeObjet(Arc::new(fh))))
+                    Ok(Value::NativeObjet(Arc::new(fh)))
                 }
             },
             as_module_fonction! {
                 ouvrir(
-                    filename: Type::union_of(Type::Texte, Type::Objet(String::from("Chemin.Chemin"))),
-                    mode: Type::Texte
+                    filename: {Texte | "Chemin.Chemin"},
+                    mode: {Texte}
                 ): Type::Custom => {
                     unpack_native!(filename: &ASPath = filename => {
                         filename.0.clone()
@@ -140,7 +140,7 @@ as_module! {
                                     "Erreur lors de l'ouverture du fichier '{}'\n{}", filename, err
                                 )))?;
 
-                            Ok(Some(Value::NativeObjet(Arc::new(Writer { writer: Arc::new(RwLock::new(file)) }))))
+                            Ok(Value::NativeObjet(Arc::new(Writer { writer: Arc::new(RwLock::new(file)) })))
                         }
                         "ajout" | "a" => {
                             let file = fs::File::options().append(true).open(filename)
@@ -148,7 +148,7 @@ as_module! {
                                     "Erreur lors de l'ouverture du fichier '{}'\n{}", filename, err
                                 )))?;
 
-                            Ok(Some(Value::NativeObjet(Arc::new(Writer { writer: Arc::new(RwLock::new(file)) }))))
+                            Ok(Value::NativeObjet(Arc::new(Writer { writer: Arc::new(RwLock::new(file)) })))
                         }
                         "lecture" | "l" => {
                             let file = fs::File::open(filename)
@@ -156,7 +156,7 @@ as_module! {
                                     "Erreur lors de l'ouverture du fichier '{}'\n{}", filename, err
                                 )))?;
 
-                            Ok(Some(Value::NativeObjet(Arc::new(Reader {reader: Arc::new(RwLock::new(file))}))))
+                            Ok(Value::NativeObjet(Arc::new(Reader {reader: Arc::new(RwLock::new(file))})))
                         }
                         _ => return Err(RuntimeError::generic_err(format!("Mode d'ouverture invalide '{}'", mode)))
                     }
@@ -164,8 +164,8 @@ as_module! {
             },
             as_module_fonction! {
                 créerDossier(
-                    chemin: Type::union_of(Type::Texte, Type::Objet(String::from("Chemin.Chemin"))),
-                ) => {
+                    chemin: {Texte | "Chemin.Chemin"},
+                ) {
                     unpack_native!(chemin: &ASPath = chemin => {
                         chemin.0.clone()
                     } else {
@@ -177,31 +177,31 @@ as_module! {
                             "Erreur lors de la création du dossier '{}'\n{}", chemin.display(), e
                         )))?;
 
-                    Ok(Some(Value::Nul))
+                    Ok(Value::Nul)
                 }
             },
             as_module_fonction! {
-                écrire(inst: Type::Objet(String::from("ES.Scripteur")), msg: Type::Texte): Type::Entier => {
+                écrire(inst: {"ES.Scripteur"}, msg: {Texte}): Type::Entier => {
                     unpack_native!(f: &Writer = inst);
 
                     let msg = msg.as_texte().unwrap();
                     let nb_bytes = f.writer.write().unwrap().write(msg.as_bytes()).unwrap();
 
-                    Ok(Some(Value::Entier(nb_bytes as i64)))
+                    Ok(Value::Entier(nb_bytes as i64))
                 }
             },
             as_module_fonction! {
-                écrireLigne(inst: Type::Objet(String::from("ES.Scripteur")), msg: Type::Texte): Type::Entier => {
+                écrireLigne(inst: {"ES.Scripteur"}, msg: {Texte}): Type::Entier => {
                     unpack_native!(f: &Writer = inst);
 
                     let msg = String::from(msg.as_texte().unwrap()) + "\n";
                     let nb_bytes = f.writer.write().unwrap().write(msg.as_bytes()).unwrap();
 
-                    Ok(Some(Value::Entier(nb_bytes as i64)))
+                    Ok(Value::Entier(nb_bytes as i64))
                 }
             },
             as_module_fonction! {
-                lireLigne(inst: Type::Objet(String::from("ES.Lecteur"))): Type::Texte => {
+                lireLigne(inst: {"ES.Lecteur"}): Type::Texte => {
                     unpack_native!(f: &Reader = inst);
 
                     let mut file = f.reader.write().unwrap();
@@ -224,11 +224,11 @@ as_module! {
                         }
                     }
 
-                    Ok(Some(Value::Texte(line)))
+                    Ok(Value::Texte(line))
                 }
             },
             as_module_fonction! {
-                lignes(inst: Type::Objet(String::from("ES.Lecteur"))): Type::Liste => {
+                lignes(inst: {"ES.Lecteur"}): Type::Liste => {
                     unpack_native!(f: &Reader = inst);
 
                     let mut file = f.reader.write().unwrap();
@@ -241,11 +241,11 @@ as_module! {
                         )))
                     };
 
-                    Ok(Some(Value::liste(s.lines().map(|line| Value::Texte(line.to_string())).collect())))
+                    Ok(Value::liste(s.lines().map(|line| Value::Texte(line.to_string())).collect()))
                 }
             },
             as_module_fonction! {
-                lireTout(inst: Type::Objet(String::from("ES.Lecteur"))): Type::Texte => {
+                lireTout(inst: {"ES.Lecteur"}): Type::Texte => {
                     unpack_native!(f: &Reader = inst);
 
                     let mut file = f.reader.write().unwrap();
@@ -258,11 +258,11 @@ as_module! {
                         )))
                     };
 
-                    Ok(Some(Value::Texte(s)))
+                    Ok(Value::Texte(s))
                 }
             },
             as_module_fonction! {
-                lire(inst: Type::Objet(String::from("ES.Lecteur")), nbcars: Type::Entier): Type::Texte => {
+                lire(inst: {"ES.Lecteur"}, nbcars: {Entier}): Type::Texte => {
                     unpack_native!(f: &Reader = inst);
 
                     let mut file = f.reader.write().unwrap();
@@ -275,9 +275,9 @@ as_module! {
                         )))
                     };
 
-                    Ok(Some(Value::Texte(String::from_utf8(s[..nb].to_vec()).map_err(|err| {
+                    Ok(Value::Texte(String::from_utf8(s[..nb].to_vec()).map_err(|err| {
                         RuntimeError::generic_err(format!("Erreur lors de la conversion en texte:\n{}", err))
-                    })?)))
+                    })?))
                 }
             },
         ]

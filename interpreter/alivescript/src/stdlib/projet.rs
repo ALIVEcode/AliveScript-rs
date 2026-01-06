@@ -38,13 +38,13 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                configurer[vm](config: Type::dict_val_tout()) => {
+                configurer[vm](config: Type::dict_val_tout()) {
                     vm.insert_exported_global(("__AS_PROJET", config));
-                    Ok(Some(Value::Nul))
+                    Ok(Value::Nul)
                 }
             },
             as_module_fonction! {
-                ajouterDépendance[vm](dep_config: Type::dict_val_tout()) => {
+                ajouterDépendance[vm](dep_config: Type::dict_val_tout()) {
                     let proj = vm.get_global("__AS_PROJET")
                         .ok_or_else(|| RuntimeError::generic_err(
                             format!("Le projet doit être configuré avant de pouvoir ajouter des dépendances")
@@ -57,7 +57,7 @@ as_module! {
                         .and_modify(|l| l.as_liste().unwrap().write().unwrap().push(dep_config.clone()))
                         .or_insert_with(|| Value::liste(vec![dep_config]));
 
-                    Ok(Some(Value::Nul))
+                    Ok(Value::Nul)
                 }
             },
         ]

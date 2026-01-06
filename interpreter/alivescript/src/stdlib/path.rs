@@ -107,78 +107,78 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                créer(chemin: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => {
+                créer(chemin: {Texte | "Chemin.Chemin"}) {
                     unpack_native!(chemin: &ASPath = chemin => {
                         chemin.0.clone()
                     } else {
                         PathBuf::from(chemin.as_texte()?)
                     });
 
-                    Ok(Some(Value::native_objet(ASPath(chemin))))
+                    Ok(Value::native_objet(ASPath(chemin)))
                 }
             },
             as_module_fonction! {
-                parent(inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => {
+                parent(inst: {Texte | "Chemin.Chemin"}) {
                     unpack_native!(path: &ASPath = inst => {
                         path.0.clone()
                     } else {
                         PathBuf::from(inst.as_texte()?)
                     });
 
-                    Ok(Some(path
+                    Ok(path
                             .parent()
                             .map(|p| Value::native_objet(ASPath(p.to_path_buf())))
-                            .unwrap_or(Value::Nul)))
+                            .unwrap_or(Value::Nul))
                 }
             },
             as_module_fonction! {
-                nom(inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => {
+                nom(inst: {Texte | "Chemin.Chemin"}) {
                     unpack_native!(path: &ASPath = inst => {
                         path.0.clone()
                     } else {
                         PathBuf::from(inst.as_texte()?)
                     });
 
-                    Ok(Some(path
+                    Ok(path
                             .file_name()
                             .map(|p| Value::native_objet(ASPath(PathBuf::from(p))))
-                            .unwrap_or(Value::Nul)))
+                            .unwrap_or(Value::Nul))
                 }
             },
             as_module_fonction! {
-                extension(inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => {
+                extension(inst: {Texte | "Chemin.Chemin"}) {
                     unpack_native!(path: &ASPath = inst => {
                         path.0.clone()
                     } else {
                         PathBuf::from(inst.as_texte()?)
                     });
 
-                    Ok(Some(path
+                    Ok(path
                             .extension()
                             .map(|p| Value::native_objet(ASPath(PathBuf::from(p))))
-                            .unwrap_or(Value::Nul)))
+                            .unwrap_or(Value::Nul))
                 }
             },
             as_module_fonction! {
                 "La tige du fichier est le nom sans la dernière extenstion (ex: abc.tar.gz -> abc.tar)";
-                tigeDuFichier(inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => {
+                tigeDuFichier(inst: {Texte | "Chemin.Chemin"}) {
                     unpack_native!(path: &ASPath = inst => {
                         path.0.clone()
                     } else {
                         PathBuf::from(inst.as_texte()?)
                     });
 
-                    Ok(Some(path
+                    Ok(path
                             .file_stem()
                             .map(|p| Value::native_objet(ASPath(PathBuf::from(p))))
-                            .unwrap_or(Value::Nul)))
+                            .unwrap_or(Value::Nul))
                 }
             },
             as_module_fonction! {
                 joindre(
-                    inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin")),
-                    chemin: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin")),
-                ) => {
+                    inst: {Texte | "Chemin.Chemin"},
+                    chemin: {Texte | "Chemin.Chemin"},
+                ) {
                     unpack_native!(path: &ASPath = inst => {
                         path.0.clone()
                     } else {
@@ -190,14 +190,14 @@ as_module! {
                         PathBuf::from(chemin.as_texte()?)
                     });
 
-                    Ok(Some(Value::native_objet(ASPath(path.join(chemin)))))
+                    Ok(Value::native_objet(ASPath(path.join(chemin))))
                 }
             },
             as_module_fonction! {
                 avecNomFichier(
-                    inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin")),
-                    filename: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin")),
-                ) => {
+                    inst: {Texte | "Chemin.Chemin"},
+                    filename: {Texte | "Chemin.Chemin"},
+                ) {
                     unpack_native!(path: &ASPath = inst => {
                         path.0.clone()
                     } else {
@@ -209,14 +209,14 @@ as_module! {
                         PathBuf::from(filename.as_texte()?)
                     });
 
-                    Ok(Some(Value::native_objet(ASPath(path.with_file_name(name)))))
+                    Ok(Value::native_objet(ASPath(path.with_file_name(name))))
                 }
             },
             as_module_fonction! {
                 avecExtension(
-                    inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin")),
-                    extension: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin")),
-                ) => {
+                    inst: {Texte | "Chemin.Chemin"},
+                    extension: {Texte | "Chemin.Chemin"},
+                ) {
                     unpack_native!(path: &ASPath = inst => {
                         path.0.clone()
                     } else {
@@ -228,58 +228,58 @@ as_module! {
                         PathBuf::from(extension.as_texte()?)
                     });
 
-                    Ok(Some(Value::native_objet(ASPath(path.with_extension(extension)))))
+                    Ok(Value::native_objet(ASPath(path.with_extension(extension))))
                 }
             },
             as_module_fonction! {
-                canoniser(inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => {
+                canoniser(inst: {Texte | "Chemin.Chemin"}) {
                     unpack_native!(path: &ASPath = inst => {
                         path.0.clone()
                     } else {
                         PathBuf::from(inst.as_texte()?)
                     });
 
-                    Ok(Some(path
+                    Ok(path
                             .canonicalize()
                             .map(|p| Value::native_objet(ASPath(PathBuf::from(p))))
-                            .unwrap_or(Value::Nul)))
+                            .unwrap_or(Value::Nul))
                 }
             },
             as_module_fonction! {
-                existe(inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => {
+                existe(inst: {Texte | "Chemin.Chemin"}) {
                     unpack_native!(path: &ASPath = inst => {
                         path.0.clone()
                     } else {
                         PathBuf::from(inst.as_texte()?)
                     });
 
-                    Ok(Some(Value::Booleen(path.exists())))
+                    Ok(Value::Booleen(path.exists()))
                 }
             },
             as_module_fonction! {
-                estFichier(inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => {
+                estFichier(inst: {Texte | "Chemin.Chemin"}) {
                     unpack_native!(path: &ASPath = inst => {
                         path.0.clone()
                     } else {
                         PathBuf::from(inst.as_texte()?)
                     });
 
-                    Ok(Some(Value::Booleen(path.is_file())))
+                    Ok(Value::Booleen(path.is_file()))
                 }
             },
             as_module_fonction! {
-                estDossier(inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => {
+                estDossier(inst: {Texte | "Chemin.Chemin"}) {
                     unpack_native!(path: &ASPath = inst => {
                         path.0.clone()
                     } else {
                         PathBuf::from(inst.as_texte()?)
                     });
 
-                    Ok(Some(Value::Booleen(path.is_dir())))
+                    Ok(Value::Booleen(path.is_dir()))
                 }
             },
             as_module_fonction! {
-                estRelatif(inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => {
+                estRelatif(inst: {Texte | "Chemin.Chemin"}) {
                     let path = match inst {
                         Value::Texte(t) => PathBuf::from(t),
                         c @ Value::NativeObjet(..) => {
@@ -289,40 +289,40 @@ as_module! {
                         _ => unreachable!()
                     };
 
-                    Ok(Some(Value::Booleen(path.is_relative())))
+                    Ok(Value::Booleen(path.is_relative()))
                 }
             },
             as_module_fonction! {
-                estAbsolu(inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => {
+                estAbsolu(inst: {Texte | "Chemin.Chemin"}) {
                     unpack_native!(path: &ASPath = inst => {
                         path.0.clone()
                     } else {
                         PathBuf::from(inst.as_texte()?)
                     });
 
-                    Ok(Some(Value::Booleen(path.is_absolute())))
+                    Ok(Value::Booleen(path.is_absolute()))
                 }
             },
             as_module_fonction! {
-                estLienSymbolique(inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => {
+                estLienSymbolique(inst: {Texte | "Chemin.Chemin"}) {
                     unpack_native!(path: &ASPath = inst => {
                         path.0.clone()
                     } else {
                         PathBuf::from(inst.as_texte()?)
                     });
 
-                    Ok(Some(Value::Booleen(path.is_symlink())))
+                    Ok(Value::Booleen(path.is_symlink()))
                 }
             },
             as_module_fonction! {
-                estLienSymbolique(inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => {
+                estLienSymbolique(inst: {Texte | "Chemin.Chemin"}) {
                     unpack_native!(path: &ASPath = inst => {
                         path.0.clone()
                     } else {
                         PathBuf::from(inst.as_texte()?)
                     });
 
-                    Ok(Some(Value::Booleen(path.is_symlink())))
+                    Ok(Value::Booleen(path.is_symlink()))
                 }
             },
         ]

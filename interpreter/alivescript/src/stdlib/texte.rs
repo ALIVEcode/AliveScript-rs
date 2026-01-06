@@ -27,49 +27,49 @@ as_module! {
             as_module_fonction! {
                 taille(inst: Type::Texte): Type::Entier => {
                     let inst = inst.as_texte().unwrap();
-                    Ok(Some(Value::Entier(inst.len() as i64)))
+                    Ok(Value::Entier(inst.len() as i64))
                 }
             },
             as_module_fonction! {
                 estNumérique(inst: Type::Texte): Type::Booleen => {
                     let inst = inst.as_texte().unwrap();
-                    Ok(Some(Value::Booleen(inst.chars().all(|c| c.is_ascii_digit()))))
+                    Ok(Value::Booleen(inst.chars().all(|c| c.is_ascii_digit())))
                 }
             },
             as_module_fonction! {
                 format(inst: Type::Texte, args: Type::liste_tout()): Type::Texte => {
                     let inst = inst.as_texte().unwrap();
                     let args = args.as_liste().unwrap();
-                    Ok(Some(Value::Texte(inst.format(args.read().unwrap().iter()))))
+                    Ok(Value::Texte(inst.format(args.read().unwrap().iter())))
                 }
             },
             as_module_fonction! {
-                commencePar(inst: Type::Texte, prefix: Type::Texte) => {
+                commencePar(inst: Type::Texte, prefix: Type::Texte) {
                     let inst = inst.as_texte().unwrap();
                     let prefix = prefix.as_texte().unwrap();
-                    Ok(Some(Value::Booleen(inst.starts_with(prefix))))
+                    Ok(Value::Booleen(inst.starts_with(prefix)))
                 }
             },
             as_module_fonction! {
-                finiPar(inst: Type::Texte, prefix: Type::Texte) => {
+                finiPar(inst: Type::Texte, prefix: Type::Texte) {
                     let inst = inst.as_texte().unwrap();
                     let prefix = prefix.as_texte().unwrap();
-                    Ok(Some(Value::Booleen(inst.ends_with(prefix))))
+                    Ok(Value::Booleen(inst.ends_with(prefix)))
                 }
             },
             as_module_fonction! {
                 diviser(inst: Type::Texte, pat: Type::Texte): Type::Liste => {
                     let inst = inst.as_texte().unwrap();
                     let pat = pat.as_texte().unwrap();
-                    Ok(Some(Value::liste(
+                    Ok(Value::liste(
                         inst.split(pat)
                             .map(|s| Value::Texte(s.to_string()))
                             .collect()
-                    )))
+                    ))
                 }
             },
             as_module_fonction! {
-                raser(inst: Type::Texte, pat: Type::optional(Type::Texte) => Value::Nul) => {
+                raser(inst: Type::Texte, pat: Type::optional(Type::Texte) => Value::Nul) {
                     let inst = inst.as_texte().unwrap();
                     let pat = pat.as_texte();
                     let val = match pat {
@@ -77,11 +77,11 @@ as_module! {
                         Err(_) => inst.trim().to_string(),
                     };
 
-                    Ok(Some(Value::Texte(val)))
+                    Ok(Value::Texte(val))
                 }
             },
             as_module_fonction! {
-                raserDébut(inst: Type::Texte, pat: Type::optional(Type::Texte)) => {
+                raserDébut(inst: Type::Texte, pat: Type::optional(Type::Texte)) {
                     let inst = inst.as_texte().unwrap();
                     let pat = pat.as_texte();
                     let val = match pat {
@@ -89,11 +89,11 @@ as_module! {
                         Err(_) => inst.trim_start().to_string(),
                     };
 
-                    Ok(Some(Value::Texte(val)))
+                    Ok(Value::Texte(val))
                 }
             },
             as_module_fonction! {
-                raserFin(inst: Type::Texte, pat: Type::optional(Type::Texte) => Value::Nul) => {
+                raserFin(inst: Type::Texte, pat: Type::optional(Type::Texte) => Value::Nul) {
                     let inst = inst.as_texte().unwrap();
                     let pat = pat.as_texte();
                     let val = match pat {
@@ -101,23 +101,23 @@ as_module! {
                         Err(_) => inst.trim_end().to_string(),
                     };
 
-                    Ok(Some(Value::Texte(val)))
+                    Ok(Value::Texte(val))
                 }
             },
             as_module_fonction! {
-                sansPréfix(inst: Type::Texte, pat: Type::optional(Type::Texte)) => {
+                sansPréfix(inst: Type::Texte, pat: Type::optional(Type::Texte)) {
                     let inst = inst.as_texte()?;
                     let pat = pat.as_texte()?;
 
-                    Ok(Some(Value::Texte(inst.strip_prefix(pat).unwrap_or(inst).to_string())))
+                    Ok(Value::Texte(inst.strip_prefix(pat).unwrap_or(inst).to_string()))
                 }
             },
             as_module_fonction! {
-                sansSuffix(inst: Type::Texte, pat: Type::Texte) => {
+                sansSuffix(inst: Type::Texte, pat: Type::Texte) {
                     let inst = inst.as_texte()?;
                     let pat = pat.as_texte()?;
 
-                    Ok(Some(Value::Texte(inst.strip_suffix(pat).unwrap_or(inst).to_string())))
+                    Ok(Value::Texte(inst.strip_suffix(pat).unwrap_or(inst).to_string()))
                 }
             },
         ]

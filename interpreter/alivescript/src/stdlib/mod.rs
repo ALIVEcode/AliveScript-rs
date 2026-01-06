@@ -34,131 +34,22 @@ mod projet;
 mod subprocess;
 mod sys;
 mod texte;
-
-as_module! {
-    module Test {}
-
-    fn load(&self) {
-        [
-            as_module_fonction! {
-                affirmer(cond: Type::tout(), msg: Type::Texte): Type::Nul => {
-                    if !cond.to_bool() {
-                        let t = msg.as_texte().unwrap();
-                        Err(RuntimeError::assertion_error(t))
-                    } else {
-                        Ok(None)
-                    }
-                }
-            },
-            as_module_fonction! {
-                affirmerÉgaux(val1: Type::tout(), val2: Type::tout(), msg: Type::Texte): Type::Nul => {
-                    if val1 != val2 {
-                        let t = msg.as_texte().unwrap();
-                        Err(RuntimeError::assertion_error(format!("{}\nGauche: {}\nDroite: {}", t, val1.repr(), val2.repr())))
-                    } else {
-                        Ok(None)
-                    }
-                }
-            },
-        ]
-    }
-}
-
-as_module! {
-    module Dict {}
-
-    fn load(&self) {
-        [
-            as_module_fonction! {
-                taille(inst: Type::dict_tout()): Type::Entier => {
-                    unpack!(Value::Dict(d) = inst);
-
-                    Ok(Some(Value::Entier(d.read().unwrap().members.len() as i64)))
-                }
-            },
-            as_module_fonction! {
-                clés(inst: Type::dict_tout()) => {
-                    unpack!(Value::Dict(d) = inst);
-
-                    Ok(Some(Value::liste(d.read().unwrap().members.keys().map(|k| Value::Texte(k.clone())).collect())))
-                }
-            },
-            as_module_fonction! {
-                valeurs(inst: Type::dict_tout()) => {
-                    unpack!(Value::Dict(d) = inst);
-
-                    Ok(Some(Value::liste(d.read().unwrap().members.values().map(|v| v.clone()).collect())))
-                }
-            },
-            as_module_fonction! {
-                entrées(inst: Type::dict_tout()) => {
-                    unpack!(Value::Dict(d) = inst);
-
-                    Ok(Some(Value::liste(d.read().unwrap().members
-                        .iter()
-                        .map(|(k, v)|
-                            Value::liste(vec![Value::Texte(k.clone()), v.clone()])).collect())))
-                }
-            },
-        ]
-    }
-}
-
-as_module! {
-    module Aleatoire as "Aléatoire" {}
-
-    fn load(&self) {
-        [
-            as_module_fonction! {
-                choix(iter: Type::iterable()): Type::Tout => {
-                    match iter {
-                        Value::Liste(lst) => {
-                            let i = random_range(0..lst.read().unwrap().len());
-                            Ok(Some(lst.read().unwrap()[i].clone()))
-                        }
-                        _ => Err(RuntimeError::value_error(
-                            format!("dans la fonction 'Alétoire.choix', argument #1 invalide '{}'", iter.get_type())
-                        ))
-                    }
-                }
-            },
-            as_module_fonction! {
-                entre(min: Type::Entier, max: Type::Entier): Type::Entier => {
-                    let min = min.as_entier().unwrap();
-                    let max = max.as_entier().unwrap();
-                    let i = random_range(min..max);
-                    Ok(Some(Value::Entier(i)))
-                }
-            },
-        ]
-    }
-}
-
-as_module! {
-    module Debug as "Débug" {}
-
-    fn load(&self) {
-        [
-            as_module_fonction! {
-                nb(inst: Type::Texte): Type::Booleen => {
-                    let inst = inst.as_texte().unwrap();
-                    Ok(Some(Value::Booleen(inst.chars().all(|c| c.is_ascii_digit()))))
-                }
-            },
-        ]
-    }
-}
+mod dict;
+mod math;
+mod test;
+mod random;
+mod debug;
 
 pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
     let mut stdlib: Vec<Arc<dyn LazyModule>> = Vec::new();
 
     stdlib.push(Arc::new(texte::Texte {}));
     stdlib.push(Arc::new(liste::Liste {}));
-    stdlib.push(Arc::new(Dict {}));
-    stdlib.push(Arc::new(Test {}));
+    stdlib.push(Arc::new(dict::Dict {}));
+    stdlib.push(Arc::new(test::Test {}));
     stdlib.push(Arc::new(sys::Systeme {}));
-    stdlib.push(Arc::new(Aleatoire {}));
-    stdlib.push(Arc::new(Debug {}));
+    stdlib.push(Arc::new(random::Aleatoire {}));
+    stdlib.push(Arc::new(debug::Debug {}));
     stdlib.push(Arc::new(io::ES {}));
     stdlib.push(Arc::new(os::SE {}));
     stdlib.push(Arc::new(env::Env {}));
@@ -166,6 +57,7 @@ pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
     stdlib.push(Arc::new(subprocess::Processus {}));
     stdlib.push(Arc::new(projet::Projet {}));
     stdlib.push(Arc::new(path::Chemin {}));
+    stdlib.push(Arc::new(math::Math {}));
 
     HashMap::from_iter(
         stdlib

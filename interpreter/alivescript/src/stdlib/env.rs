@@ -1,5 +1,10 @@
 use std::{
-    any::Any, env, fs, io::{self, BufRead, BufReader, Read, Write}, ops::Deref, path::PathBuf, sync::{Arc, RwLock}
+    any::Any,
+    env, fs,
+    io::{self, BufRead, BufReader, Read, Write},
+    ops::Deref,
+    path::PathBuf,
+    sync::{Arc, RwLock},
 };
 
 use crate::{
@@ -9,7 +14,7 @@ use crate::{
         value::{ArcNativeObjet, NativeMethod, NativeObjet, Type},
     },
     runtime::err::RuntimeError,
-    stdlib::{LazyModule, path::ASPath},
+    stdlib::{path::ASPath, LazyModule},
     unpack,
 };
 
@@ -19,53 +24,53 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                fichierActuel[vm]() => {
-                    Ok(Some(Value::native_objet(ASPath(PathBuf::from(vm.file())))))
+                fichierActuel[vm]() {
+                    Ok(Value::native_objet(ASPath(PathBuf::from(vm.file()))))
                 }
             },
             as_module_fonction! {
-                cheminExec() => {
-                    Ok(Some(Value::native_objet(
+                cheminExec() {
+                    Ok(Value::native_objet(
                         env::current_exe()
                             .map(|p| ASPath(p))
                             .map_err(|e| RuntimeError::generic_err("Impossible d'obtenir le chemin de l'exécutable."))?
-                    )))
-                }
-            },
-            as_module_fonction! {
-                dossierDeTravail() => {
-                    Ok(Some(Value::native_objet(
-                        env::current_dir()
-                            .map(|p| ASPath(p))
-                            .map_err(|e| RuntimeError::generic_err("Impossible d'obtenir le dossier de travail."))?
-                    )))
-                }
-            },
-            as_module_fonction! {
-                args(): Type::Liste => {
-                    Ok(Some(Value::liste(
-                        std::env::args()
-                            .map(|arg| Value::Texte(arg))
-                            .collect()
-                    )))
-                }
-            },
-            as_module_fonction! {
-                var(name: Type::Texte): Type::Texte => {
-                    Ok(Some(
-                        env::var(name.to_string())
-                            .map(Value::Texte)
-                            .unwrap_or(Value::Nul)
                     ))
                 }
             },
             as_module_fonction! {
+                dossierDeTravail() {
+                    Ok(Value::native_objet(
+                        env::current_dir()
+                            .map(|p| ASPath(p))
+                            .map_err(|e| RuntimeError::generic_err("Impossible d'obtenir le dossier de travail."))?
+                    ))
+                }
+            },
+            as_module_fonction! {
+                args(): Type::Liste => {
+                    Ok(Value::liste(
+                        std::env::args()
+                            .map(|arg| Value::Texte(arg))
+                            .collect()
+                    ))
+                }
+            },
+            as_module_fonction! {
+                var(name: Type::Texte): Type::Texte => {
+                    Ok(
+                        env::var(name.to_string())
+                            .map(Value::Texte)
+                            .unwrap_or(Value::Nul)
+                    )
+                }
+            },
+            as_module_fonction! {
                 vars(): Type::Liste => {
-                    Ok(Some(Value::liste(
+                    Ok(Value::liste(
                         env::vars()
                             .map(|(k, v)| Value::liste(vec![Value::Texte(k), Value::Texte(v)]))
                             .collect()
-                    )))
+                    ))
                 }
             },
             as_module_fonction! {
@@ -73,7 +78,7 @@ as_module! {
                     unsafe {
                         env::set_var(name.to_string(), val.to_string());
                     }
-                    Ok(None)
+                    Ok(Value::Nul)
                 }
             },
         ]

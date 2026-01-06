@@ -499,7 +499,7 @@ impl VM {
 
                 let result = (f.func)(self, args.into())?;
 
-                self.push(result.unwrap_or(Value::Nul));
+                self.push(result);
             }
             Value::Function(Function::NativeMethod(f)) => {
                 let mut args = VecDeque::with_capacity(nbargs);
@@ -516,7 +516,7 @@ impl VM {
 
                 let result = (f.func.func)(self, args.into())?;
 
-                self.push(result.unwrap_or(Value::Nul));
+                self.push(result);
             }
             Value::Function(Function::ClosureInst(closure)) => {
                 if nbargs != closure.function.nb_params {
@@ -619,7 +619,7 @@ impl VM {
 
                 let result = (f.func)(self, args.into())?;
 
-                return Ok(result.unwrap_or(Value::Nul));
+                return Ok(result);
             }
             Function::NativeMethod(f) => {
                 let mut args = VecDeque::from_iter(args);
@@ -629,7 +629,7 @@ impl VM {
 
                 let result = (f.func.func)(self, args.into())?;
 
-                return Ok(result.unwrap_or(Value::Nul));
+                return Ok(result);
             }
             Function::ClosureInst(closure) => {
                 let curr_depth = self.frames.len();

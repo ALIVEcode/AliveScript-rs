@@ -363,7 +363,7 @@ pub struct NativeMethod {
 }
 
 pub struct NativeFunction {
-    pub func: Arc<dyn Fn(&mut VM, Vec<Value>) -> Result<Option<Value>, RuntimeError>>,
+    pub func: Arc<dyn Fn(&mut VM, Vec<Value>) -> Result<Value, RuntimeError>>,
     pub name: Arc<String>,
     pub desc: Arc<Option<String>>,
 }

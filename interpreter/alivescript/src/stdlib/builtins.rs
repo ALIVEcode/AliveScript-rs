@@ -11,27 +11,27 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
         as_fonction! {
             afficher(msg: Type::tout()): Type::Nul => {
                 println!("{}", msg);
-                Ok(Some(Value::Nul))
+                Ok(Value::Nul)
             }
         },
         as_fonction! {
             afficherErr(msg: Type::tout()): Type::Nul => {
                 eprintln!("{}", msg);
-                Ok(Some(Value::Nul))
+                Ok(Value::Nul)
             }
         },
         as_fonction! {
             typeDe(obj: Type::tout()): Type::Type => {
-                Ok(Some(Value::TypeObj(obj.get_type())))
+                Ok(Value::TypeObj(obj.get_type()))
             }
         },
         as_fonction! {
             tailleDe(obj: Type::iterable()): Type::Entier => {
-                Ok(Some(Value::Entier(match obj {
+                Ok(Value::Entier(match obj {
                     Value::Texte(t) => t.len(),
                     Value::Liste(l) => l.read().unwrap().len(),
                     _ => unreachable!()
-                } as i64)))
+                } as i64))
             }
         },
         as_fonction! {
@@ -39,21 +39,21 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
                 let debut = debut.as_entier().unwrap();
                 let fin = fin.as_entier().unwrap();
 
-                Ok(Some(Value::liste((debut..fin).map(|i| Value::Entier(i)).collect())))
+                Ok(Value::liste((debut..fin).map(|i| Value::Entier(i)).collect()))
             }
         },
         as_fonction! {
             abs(val: Type::nombre()): Type::nombre() => {
-                Ok(Some(match val {
+                Ok(match val {
                     Value::Entier(i) => Value::Entier(i.abs()),
                     Value::Decimal(f) => Value::Decimal(f.abs()),
                     _ =>  unreachable!()
-                }))
+                })
             }
         },
         as_fonction! {
             entier(val: Type::union_of(Type::Texte, Type::nombre())): Type::Entier => {
-                Ok(Some(match val {
+                Ok(match val {
                     Value::Entier(i) => Value::Entier(*i),
                     Value::Decimal(f) => Value::Entier(*f as i64),
                     Value::Texte(t) => {
@@ -64,12 +64,12 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
                         Value::Entier(i)
                     }
                     _ => unreachable!()
-                }))
+                })
             }
         },
         as_fonction! {
             décimal(val: Type::union_of(Type::Texte, Type::nombre())): Type::Decimal => {
-                Ok(Some(match val {
+                Ok(match val {
                     Value::Entier(i) => Value::Decimal(*i as f64),
                     Value::Decimal(f) => Value::Decimal(*f),
                     Value::Texte(t) => {
@@ -80,12 +80,12 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
                         Value::Decimal(f)
                     }
                     _ => unreachable!()
-                }))
+                })
             }
         },
         as_fonction! {
             decimal(val: Type::union_of(Type::Texte, Type::nombre())): Type::Decimal => {
-                Ok(Some(match val {
+                Ok(match val {
                     Value::Entier(i) => Value::Decimal(*i as f64),
                     Value::Decimal(f) => Value::Decimal(*f),
                     Value::Texte(t) => {
@@ -96,12 +96,12 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
                         Value::Decimal(f)
                     }
                     _ => unreachable!()
-                }))
+                })
             }
         },
         as_fonction! {
             texte(val: Type::tout()): Type::Texte => {
-                Ok(Some(Value::Texte(val.to_string())))
+                Ok(Value::Texte(val.to_string()))
             }
         },
         as_fonction! {

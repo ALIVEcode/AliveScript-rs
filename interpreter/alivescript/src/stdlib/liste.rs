@@ -28,7 +28,7 @@ as_module! {
                 taille(inst: Type::liste_tout()): Type::Entier => {
                     unpack!(Value::Liste(lst) = inst);
 
-                    Ok(Some(Value::Entier(lst.read().unwrap().len() as i64)))
+                    Ok(Value::Entier(lst.read().unwrap().len() as i64))
                 }
             },
             as_module_fonction! {
@@ -37,37 +37,37 @@ as_module! {
 
                     lst.write().unwrap().push(val.clone());
 
-                    Ok(Some(Value::Nul))
+                    Ok(Value::Nul)
                 }
             },
             as_module_fonction! {
-                joindre(inst: Type::liste(Type::Texte), sep: Type::Texte => Value::Texte(String::from(" "))) => {
+                joindre(inst: Type::liste(Type::Texte), sep: Type::Texte => Value::Texte(String::from(" "))) {
                     unpack!(Value::Liste(lst) = inst);
 
-                    Ok(Some(Value::Texte(lst.read().unwrap()
+                    Ok(Value::Texte(lst.read().unwrap()
                         .iter()
                         .map(|v| v.to_string())
                         .collect::<Vec<_>>()
-                        .join(sep.as_texte()?))))
+                        .join(sep.as_texte()?)))
                 }
             },
             as_module_fonction! {
-                map[vm](inst: Type::liste_tout(), map: Type::Fonction) => {
+                map[vm](inst: Type::liste_tout(), map: Type::Fonction) {
                     unpack!(Value::Liste(lst) = inst);
                     unpack!(Value::Function(map) = map);
 
-                    Ok(Some(Value::liste(lst.read().unwrap()
+                    Ok(Value::liste(lst.read().unwrap()
                         .iter()
                         .map(|v| vm.run_fn(vec![v.clone()], &map))
-                        .collect::<Result<_,_>>()?)))
+                        .collect::<Result<_,_>>()?))
                 }
             },
             as_module_fonction! {
-                filtrer[vm](inst: Type::liste_tout(), filtre: Type::Fonction) => {
+                filtrer[vm](inst: Type::liste_tout(), filtre: Type::Fonction) {
                     unpack!(Value::Liste(lst) = inst);
                     unpack!(Value::Function(filtre) = filtre);
 
-                    Ok(Some(Value::liste(lst.read().unwrap()
+                    Ok(Value::liste(lst.read().unwrap()
                         .iter()
                         .filter_map(|v| {
                             let result = vm.run_fn(vec![v.clone()], &filtre);
@@ -77,7 +77,7 @@ as_module! {
                                 Err(e) => Some(Err(e))
                             }
                         })
-                        .collect::<Result<_,_>>()?)))
+                        .collect::<Result<_,_>>()?))
                 }
             },
         ]

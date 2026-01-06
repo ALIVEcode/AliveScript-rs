@@ -74,9 +74,9 @@ as_module! {
         [
             as_module_fonction! {
                 configurer(
-                    chemin: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin")),
-                    obj: Type::dict_val_tout()
-                ) => {
+                    chemin: {Texte | "Chemin.Chemin"},
+                    obj: {Dict(Tout)}
+                ) {
                     unpack!(Value::Dict(d) = obj);
                     unpack_native!(chemin: &ASPath = chemin => {
                         chemin.0.clone()
@@ -141,11 +141,11 @@ as_module! {
                         builder.vm_config.write().unwrap().permissions = Some(PermissionSet::Exclude(excluded_perms))
                     }
 
-                    Ok(Some(Value::NativeObjet(Arc::new(builder))))
+                    Ok(Value::NativeObjet(Arc::new(builder)))
                 }
             },
             as_module_fonction! {
-                rechercheModule(inst: Type::objet("Module.Constructeur"), f: Type::Fonction) => {
+                rechercheModule(inst: {"Module.Constructeur"}, f: {Fonction}) {
                     unpack_native!(builder: &ModuleBuilder = inst);
 
                     let f = f.as_fonc()?;
@@ -161,23 +161,23 @@ as_module! {
                     }
                     builder.vm_config.write().unwrap().module_searcher = Some(f.clone());
 
-                    Ok(Some(inst))
+                    Ok(inst)
                 }
             },
             as_module_fonction! {
                 charger[current_vm](
-                    chemin: Type::union(vec![Type::Texte, Type::objet("Module.Constructeur"), Type::objet("Chemin.Chemin")])
+                    chemin: {Texte | "Module.Constructeur" | "Chemin.Chemin"}
                 ): Type::Module => {
                     match chemin {
                         obj @ Value::NativeObjet(..) if Type::type_match(&obj.get_type(), &Type::objet("Module.Constructeur")) => {
                             unpack_native!(builder: &ModuleBuilder = obj);
                             let module = current_vm.run_file_to_module_with_config(&builder.path, builder.vm_config.read().unwrap().clone())?;
-                            Ok(Some(Value::Module(module)))
+                            Ok(Value::Module(module))
                         }
                         Value::Texte(chemin) => {
                             let mut vm = VM::new(String::new());
                             let module = vm.run_file_to_module(&chemin)?;
-                            Ok(Some(Value::Module(module)))
+                            Ok(Value::Module(module))
                         }
                         _ => unreachable!()
                     }
