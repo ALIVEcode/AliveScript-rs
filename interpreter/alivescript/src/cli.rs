@@ -12,7 +12,20 @@ fn start_repl() {
     // Possible implementation:
     // 1. Initialize the VM state (e.g., globals, standard library).
     // 2. Loop: read line from stdin, compile, execute, print result.
-    todo!("Implement the AliveScript Read-Eval-Print Loop (REPL).");
+
+    loop {
+        // read stdin
+        let stdin = std::io::stdin();
+        let mut line = String::new();
+        _ = stdin.read_line(&mut line).unwrap();
+    }
+
+    // evaluate_string(
+    //     &script,
+    //     debug_infos,
+    //     run,
+    //     path.to_str().unwrap().to_string(),
+    // );
 }
 
 // Helper function to handle the unimplemented file execution.

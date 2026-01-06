@@ -1,5 +1,6 @@
 #!alivec
 
+utiliser Chemin
 utiliser ES
 utiliser Env
 utiliser Système alias Sys
@@ -27,21 +28,22 @@ si tailleDe(args) == 2 alors
 fin si
 
 const commande = args[2]
-const CHEMIN_CONFIG = "config.as"
+const CHEMIN_CONFIG = Chemin.créer("config.as")
 const VERSION_ALIVESCRIPT = "0.1.0"
 
-fonction chargerConfig(chemin: texte) 
-    const config = Module.configurer(chemin, {
+fonction chargerConfig(chemin: texte)
+    const mod = Module.configurer(chemin, {
       modulesPermis: ["Projet"],
       actionsPermises: ["écrireSortieStd"],
     }).charger()
 
-    retourner config.__AS_PROJET
+    const config = mod.__AS_PROJET
+    config.source = Chemin.créer(config.source)
 fin fonction
 
 fonction init()
-  si non ES.existe(CHEMIN_CONFIG) alors 
-    var fichier = ES.ouvrir(CHEMIN_CONFIG, "écriture")
+  si non CHEMIN_CONFIG.existe() alors 
+    var fichier = CHEMIN_CONFIG.ouvrir("écriture")
 
     var contenu = `
       utiliser Projet
@@ -54,7 +56,7 @@ fonction init()
       }})
       `
 
-    var nom = Env.dossierDeTravail().diviser("/")[-1]
+    var nom = Env.dossierDeTravail().nom()
     var version = "0.1.0"
     var source = "src/init.as"
     fichier.écrire(contenu.format([nom, version, VERSION_ALIVESCRIPT, source]))
@@ -64,21 +66,40 @@ fonction init()
 
   config = chargerConfig(CHEMIN_CONFIG)
   source = config.source
-  si non ES.existe(source) alors
-    var chemin = source.diviser("/")
-    var parent = chemin[0..tailleDe(chemin) - 1]
-    ES.créerDossier(parent.joindre("/"))
+  si non source.existe() alors
+    const parent = chemin.parent()
+    parent.créerDossier()
 
-    var fichierSource = ES.ouvrir(source, "écriture")
+    var fichierSource = source.ouvrir("écriture")
     fichierSource.écrire(`
     afficher "Bonjour d'AliveScript !"
     `)
   fin si
 fin fonction
 
+fonction rechercheModule(chemin: texte)
+  utiliser Chemin
+  utiliser ES
+  utiliser Env
+  utiliser Système alias Sys
+  utiliser Module
+  utiliser Processus
+
+  const fichier = Chemin.créer("modules") / chemin / "config.as"
+  si fichier.existe() alors
+    const config = essayer Module.configurer(fichier, {
+      modulesPermis: ["Projet"],
+      actionsPermises: ["écrireSortieStd"],
+    }).charger().__AS_PROJET
+
+    const source = "modules/{}/{}".format([chemin, config.source])
+    retourner essayer Module.charger(source)
+  fin si
+fin fonction
+
 fonction exec()
   # trouver config.as
-  si non ES.existe(CHEMIN_CONFIG) alors erreur("Impossible de trouver '{}'.".format([CHEMIN_CONFIG]))
+  si non CHEMIN_CONFIG.existe() alors erreur("Impossible de trouver '{}'.".format([CHEMIN_CONFIG]))
   config = essayer chargerConfig(CHEMIN_CONFIG) sinon 
     erreur "Impossible de charger le fichier de configuration"
   fin essayer
@@ -86,21 +107,7 @@ fonction exec()
   source = config.source
 
   const mod = Module.configurer(source, {})
-
-  mod.rechercheModule(fn(chemin: texte)
-    utiliser Module
-    utiliser ES
-    const fichier = "modules/{}/config.as".format([chemin])
-    si ES.existe(fichier) alors
-      const config = essayer Module.configurer(fichier, {
-        modulesPermis: ["Projet"],
-        actionsPermises: ["écrireSortieStd"],
-      }).charger().__AS_PROJET
-
-      const source = "modules/{}/{}".format([chemin, config.source])
-      retourner essayer Module.charger(source)
-    fin si
-  fin fn)
+  mod.rechercheModule(rechercheModule)
 
   mod.charger()
 fin fonction
@@ -111,10 +118,10 @@ fonction gérerDepUrl(dep: dict)
 
   si nom == "" alors erreur "Le nom ne doit pas être vide"
 
-  const dossierModule = "{}/modules/{}".format([Env.dossierDeTravail(), nom])
+  const dossierModule = Env.dossierDeTravail() / "modules" / nom
 
   var existe = faux
-  si ES.existe("modules/{}".format([nom])) alors existe = vrai
+  si dossierModule.existe() alors existe = vrai
 
   si ".git" dans url alors
     afficher "| Installation de '{}' ('{}')".format([nom, url])
@@ -190,6 +197,9 @@ fonction ajouter()
       si dep.nom == nom alors 
         erreur "Une autre débendance a déjà le nom '{}' (url='{}')".format([nom, dep.url])
       fin si
+      si dep.url == url alors 
+        erreur "Cette débendance est déjà dans le projet '{}' (nom='{}')".format([nom, dep.url])
+      fin si
     fin pour
   fin si
 
@@ -211,6 +221,7 @@ fonction départ()
     vaut "exec" -> exec()
     vaut "installer", "i" -> installer()
     vaut "ajouter", "a" -> ajouter()
+    sinon avec autre -> erreur "Commande inconnue: {}".format([autre])
   fin quand
 fin fonction
 

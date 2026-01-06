@@ -4,7 +4,7 @@ use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Range, RangeInclusive, Rem,
 use std::sync::{Arc, RwLock};
 
 use rand::distr::uniform::SampleRange;
-use unindent::{Unindent, unindent};
+use unindent::{unindent, Unindent};
 
 use crate::compiler::value::{
     ASDict, ArcClosureInst, ArcClosureMethod, ArcClosureProto, ArcDict, ArcModule, ArcNativeObjet,
@@ -46,14 +46,20 @@ pub enum Function {
 
 impl Value {
     pub fn from_literal_texte(s: &str) -> Self {
+        let is_tick_str = s.starts_with('`');
+
         let s = &s[1..s.len() - 1];
 
         Self::Texte(
-            s.unindent()
-                .replace(r"\n", "\n")
-                .replace(r"\t", "\t")
-                .replace(r"\r", "\r")
-                .to_owned(),
+            if is_tick_str {
+                s.unindent()
+            } else {
+                s.to_string()
+            }
+            .replace(r"\n", "\n")
+            .replace(r"\t", "\t")
+            .replace(r"\r", "\r")
+            .to_owned(),
         )
     }
 

@@ -4,6 +4,7 @@ use std::{
     fs,
     io::{self, BufRead, BufReader, Read, Write},
     ops::Deref,
+    path::PathBuf,
     process::{Child, Command},
     sync::{Arc, RwLock},
 };
@@ -15,7 +16,7 @@ use crate::{
         value::{ArcNativeObjet, NativeMethod, NativeObjet, Type},
     },
     runtime::err::RuntimeError,
-    stdlib::LazyModule,
+    stdlib::{path::ASPath, LazyModule},
     unpack, unpack_native,
 };
 
@@ -91,13 +92,22 @@ as_module! {
         [
             as_module_fonction! {
                 créer(
-                    cmd: Type::Texte,
-                    args: Type::liste(Type::Texte) => Value::liste(vec![]),
-                    dir: Type::optional(Type::Texte) => Value::Nul
+                    cmd: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin")),
+                    args: Type::liste_tout() => Value::liste(vec![]),
+                    dir: Type::optional(Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => Value::Nul
                 ) => {
-                    let dir = dir.as_texte();
+                    unpack_native!(cmd: &ASPath = cmd => {
+                        cmd.0.clone()
+                    } else {
+                        PathBuf::from(cmd.as_texte()?)
+                    });
+                    unpack_native!(dir: &ASPath = dir => {
+                        Ok(dir.0.clone())
+                    } else {
+                        dir.as_texte().map(|d| PathBuf::from(d))
+                    });
 
-                    let mut command = Command::new(cmd.as_texte()?);
+                    let mut command = Command::new(cmd);
                     if let Ok(dir) = dir {
                         command.current_dir(fs::canonicalize(dir).unwrap());
                     }

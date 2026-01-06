@@ -78,14 +78,11 @@ as_module! {
                     obj: Type::dict_val_tout()
                 ) => {
                     unpack!(Value::Dict(d) = obj);
-                    let chemin = match chemin {
-                        Value::Texte(t) => PathBuf::from(t),
-                        c @ Value::NativeObjet(..) => {
-                            unpack_native!(c: &ASPath = c);
-                            c.0.clone()
-                        }
-                        _ => unreachable!()
-                    };
+                    unpack_native!(chemin: &ASPath = chemin => {
+                        chemin.0.clone()
+                    } else {
+                        PathBuf::from(chemin.as_texte()?)
+                    });
 
                     let mut vm = VM::new(String::new());
                     let mut builder = ModuleBuilder{

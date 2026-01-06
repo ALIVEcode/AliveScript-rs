@@ -47,15 +47,25 @@ impl NativeObjet for ASPath {
         vm: &mut crate::runtime::vm::VM,
         name: &str,
     ) -> Result<Value, crate::runtime::err::RuntimeError> {
-        let es = vm.get_std_module("Chemin");
-        match es.read().unwrap().get_member(name)? {
-            Value::Function(Function::NativeFunction(function)) => {
-                Ok(Value::Function(Function::NativeMethod(NativeMethod {
+        let chemin = vm.get_std_module("Chemin");
+        let es = vm.get_std_module("ES");
+        match chemin.read().unwrap().get_member(name) {
+            Ok(Value::Function(Function::NativeFunction(function))) => {
+                return Ok(Value::Function(Function::NativeMethod(NativeMethod {
                     func: function,
                     inst_value: Box::new(Value::NativeObjet(self)),
-                })))
+                })));
             }
-            v => Ok(v),
+            Ok(v) => Ok(v),
+            Err(_) => match es.read().unwrap().get_member(name)? {
+                Value::Function(Function::NativeFunction(function)) => {
+                    Ok(Value::Function(Function::NativeMethod(NativeMethod {
+                        func: function,
+                        inst_value: Box::new(Value::NativeObjet(self)),
+                    })))
+                }
+                v => Ok(v),
+            },
         }
     }
 
@@ -97,8 +107,14 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                créer(chemin: Type::Texte) => {
-                    Ok(Some(Value::native_objet(ASPath(PathBuf::from(chemin.as_texte()?)))))
+                créer(chemin: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => {
+                    unpack_native!(chemin: &ASPath = chemin => {
+                        chemin.0.clone()
+                    } else {
+                        PathBuf::from(chemin.as_texte()?)
+                    });
+
+                    Ok(Some(Value::native_objet(ASPath(chemin))))
                 }
             },
             as_module_fonction! {
@@ -285,6 +301,17 @@ as_module! {
                     });
 
                     Ok(Some(Value::Booleen(path.is_absolute())))
+                }
+            },
+            as_module_fonction! {
+                estLienSymbolique(inst: Type::union_of(Type::Texte, Type::objet("Chemin.Chemin"))) => {
+                    unpack_native!(path: &ASPath = inst => {
+                        path.0.clone()
+                    } else {
+                        PathBuf::from(inst.as_texte()?)
+                    });
+
+                    Ok(Some(Value::Booleen(path.is_symlink())))
                 }
             },
             as_module_fonction! {

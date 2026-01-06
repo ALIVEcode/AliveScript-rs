@@ -1,8 +1,8 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     env, fs, hint,
-    io::{self, Write, stdin},
-    path::{self, Path},
+    io::{self, stdin, Write},
+    path::{self, Path, PathBuf},
     sync::{Arc, LazyLock, RwLock},
     usize,
 };
@@ -11,19 +11,19 @@ use num_enum::TryFromPrimitive;
 
 use crate::{
     compiler::{
-        Compiler, CompilerOptions,
-        bytecode::{BinCompcode, BinOpcode, JUMP_OFFSET, Opcode, instructions_to_string},
+        bytecode::{instructions_to_string, BinCompcode, BinOpcode, Opcode, JUMP_OFFSET},
         obj::{ArcUpvalue, CallFrame, Function, Upvalue, UpvalueLocation, UpvalueSpec, Value},
         value::{
             ASDict, ASField, ASModule, ASObjet, ArcClosureInst, ArcClosureProto, ArcModule,
             ArcStructure, ClosureInst, ClosureProto, ModuleProto, NativeMethod, Type,
         },
+        Compiler, CompilerOptions,
     },
     runtime::{
         config::{PermissionSet, VMAction, VMConfig},
         err::RuntimeError,
     },
-    stdlib::{LazyModule, builtins::BUILTINS, get_stdlib},
+    stdlib::{builtins::BUILTINS, get_stdlib, LazyModule},
 };
 
 const VERSION: &'static str = "0.1.0";
@@ -285,7 +285,6 @@ impl VM {
             .map_err(|err| RuntimeError::module_load_error(module_name, err))?;
 
         let mut other_vm = VM::new_with_config(module_file.to_string(), config);
-        other_vm.set_module_searcher(self.config.module_searcher.clone());
         other_vm.run(module_closure.load_fn)?;
 
         let mut members = HashMap::new();
@@ -313,6 +312,49 @@ impl VM {
             .insert(module_name.to_string(), Arc::clone(&module));
 
         Ok(module)
+    }
+
+    fn load_module_inner(
+        &mut self,
+        file_path: &str,
+        config: VMConfig,
+    ) -> Result<ArcModule, RuntimeError> {
+        let module_path = PathBuf::from(file_path);
+
+        let module_name = &module_path.file_stem().unwrap().display().to_string();
+
+        let module_file = file_path;
+        let module_file_content = fs::read_to_string(&file_path)
+            .map_err(|io_err| RuntimeError::module_load_error(module_name, io_err))?;
+
+        let compiler = Compiler::new(&module_file_content, module_file.to_string());
+        let module_closure = compiler
+            .parse_and_compile_to_module()
+            .map_err(|err| RuntimeError::module_load_error(module_name, err))?;
+
+        let mut other_vm = VM::new_with_config(module_file.to_string(), config);
+        other_vm.run(module_closure.load_fn)?;
+
+        let mut members = HashMap::new();
+        for (member_name, member) in module_closure.exported_members {
+            let value = other_vm.stack[member.value_idx].clone();
+            members.insert(
+                member_name,
+                ASField::new(member.is_const, member.field_type, value),
+            );
+        }
+        for global_name in other_vm.exported_globals.iter() {
+            let value = other_vm.global_table[global_name].clone();
+            members.insert(
+                global_name.to_string(),
+                ASField::new(true, Type::tout().into(), value),
+            );
+        }
+
+        Ok(Arc::new(RwLock::new(ASModule {
+            name: module_name.to_string(),
+            members,
+        })))
     }
 
     fn load_module(&mut self, module_name: &str) -> Result<Value, RuntimeError> {
@@ -665,7 +707,7 @@ impl VM {
     }
 
     pub fn run_file_to_module(&mut self, file_path: &str) -> Result<ArcModule, RuntimeError> {
-        self.lookup_module(file_path, self.config.clone())
+        self.load_module_inner(file_path, self.config.clone())
     }
 
     pub fn run_file_to_module_with_config(
@@ -673,7 +715,7 @@ impl VM {
         file_path: &str,
         config: VMConfig,
     ) -> Result<ArcModule, RuntimeError> {
-        self.lookup_module(file_path, config)
+        self.load_module_inner(file_path, config)
     }
 
     fn run_main(&mut self, closure: ArcClosureInst) -> Result<Value, RuntimeError> {

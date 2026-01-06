@@ -47,12 +47,17 @@ macro_rules! unpack {
 #[macro_export]
 macro_rules! unpack_native {
     ($var:ident: &$t:ty = $expr:expr => $transform:block else $or_else:block) => {
-        $crate::unpack!(Value::NativeObjet(ref inner) = $expr);
-        let inner = ::std::sync::Arc::clone(inner).as_any();
-        let $var = if let Some($var) = inner.downcast_ref::<$t>() {
-            $transform
-        } else {
-            $or_else
+        let $var = match $expr {
+            ref o @ $crate::compiler::obj::Value::NativeObjet(..) => {
+                $crate::unpack!(Value::NativeObjet(inner) = o);
+                let inner = ::std::sync::Arc::clone(inner).as_any();
+                if let Some($var) = inner.downcast_ref::<$t>() {
+                    $transform
+                } else {
+                    $or_else
+                }
+            }
+            _ => $or_else
         };
     };
     ($var:ident: &$t:ty = $expr:expr) => {

@@ -1,10 +1,10 @@
 utiliser Projet
 
 Projet.configurer({
-  nom: "alive",
-  version: "0.1.0",
+  nom: "{}",
+  version: "{}",
   versionAliveScript: "",
-  source: "alive.as",
+  source: "src/init.as",
 })
 
 

@@ -1,9 +1,5 @@
 use std::{
-    any::Any,
-    env, fs,
-    io::{self, BufRead, BufReader, Read, Write},
-    ops::Deref,
-    sync::{Arc, RwLock},
+    any::Any, env, fs, io::{self, BufRead, BufReader, Read, Write}, ops::Deref, path::PathBuf, sync::{Arc, RwLock}
 };
 
 use crate::{
@@ -13,7 +9,7 @@ use crate::{
         value::{ArcNativeObjet, NativeMethod, NativeObjet, Type},
     },
     runtime::err::RuntimeError,
-    stdlib::LazyModule,
+    stdlib::{LazyModule, path::ASPath},
     unpack,
 };
 
@@ -23,25 +19,25 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                fichierActuel[vm](): Type::Texte => {
-                    Ok(Some(Value::Texte(vm.file().to_string())))
+                fichierActuel[vm]() => {
+                    Ok(Some(Value::native_objet(ASPath(PathBuf::from(vm.file())))))
                 }
             },
             as_module_fonction! {
-                cheminExec(): Type::Texte => {
-                    Ok(Some(Value::Texte(
+                cheminExec() => {
+                    Ok(Some(Value::native_objet(
                         env::current_exe()
-                            .map(|p| p.display().to_string())
-                            .unwrap_or(String::new())
+                            .map(|p| ASPath(p))
+                            .map_err(|e| RuntimeError::generic_err("Impossible d'obtenir le chemin de l'exécutable."))?
                     )))
                 }
             },
             as_module_fonction! {
-                dossierDeTravail(): Type::Texte => {
-                    Ok(Some(Value::Texte(
+                dossierDeTravail() => {
+                    Ok(Some(Value::native_objet(
                         env::current_dir()
-                            .map(|p| p.display().to_string())
-                            .unwrap_or(String::new())
+                            .map(|p| ASPath(p))
+                            .map_err(|e| RuntimeError::generic_err("Impossible d'obtenir le dossier de travail."))?
                     )))
                 }
             },
