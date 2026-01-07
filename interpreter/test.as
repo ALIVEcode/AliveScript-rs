@@ -297,3 +297,5 @@ répéter
 
   afficher i + " " + el
 fin répéter
+
+

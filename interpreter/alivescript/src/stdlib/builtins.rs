@@ -21,6 +21,18 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
             }
         },
         as_fonction! {
+            écrire(*varargs): Type::Nul => {
+                print!("{}", varargs.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" "));
+                Ok(Value::Nul)
+            }
+        },
+        as_fonction! {
+            écrireErr(*varargs): Type::Nul => {
+                eprint!("{}", varargs.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" "));
+                Ok(Value::Nul)
+            }
+        },
+        as_fonction! {
             typeDe(obj: {Tout}): Type::Type => {
                 Ok(Value::TypeObj(obj.get_type()))
             }
