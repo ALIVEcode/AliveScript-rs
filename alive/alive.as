@@ -16,10 +16,6 @@ COMMANDES:
 "
 fin fonction
 
-fonction aff(msg: texte) 
-  ES.sortieStd().écrire(msg)
-fin fonction
-
 const args = Env.args()
 
 si tailleDe(args) == 2 alors
@@ -133,16 +129,16 @@ fonction gérerDepUrl(dep: dict)
     fin quand
 
     out, err = p.execAvecSortie()
-    si err alors aff "> " + err
+    si err alors écrire "> " + err
     si out alors 
-      aff "  > " + out
+      écrire "  > " + out
     fin si
 
     const exe = Env.cheminExec()
     const alive = args[1]
     const p = Processus.créer(exe, [alive, "installer"], dossierModule)
     out, err = p.execAvecSortie()
-    si err alors aff err
+    si err alors écrire err
     si out alors 
       afficher out.diviser("\n").map(fn(ln): "  " + ln).joindre("\n")
     fin si
