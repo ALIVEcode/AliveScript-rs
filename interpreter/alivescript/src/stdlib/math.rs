@@ -35,37 +35,121 @@ as_module! {
 
             as_module_fonction! {
                 plafond(x: {nombre()}) {
-                    Ok(Value::Nul)
+                    Ok(x.do_math_op(|x| x.ceil())?)
                 }
             },
             as_module_fonction! {
                 plancher(x: {nombre()}) {
-                    Ok(Value::Nul)
+                    Ok(x.do_math_op(|x| x.floor())?)
                 }
             },
             as_module_fonction! {
                 tronquer(x: {nombre()}) {
-                    Ok(Value::Nul)
+                    Ok(x.do_math_op(|x| x.trunc())?)
                 }
             },
             as_module_fonction! {
-                arrondir(x: {nombre()}) {
-                    Ok(Value::Nul)
+                arrondir(x: {nombre()}, precision: {Entier} => Value::Entier(0)) {
+                    let precision = (10 as f64).powi(precision.as_entier()? as i32);
+                    Ok(x.do_math_op(|x| (x * precision).round() / precision)?)
                 }
             },
             as_module_fonction! {
                 abs(x: {nombre()}) {
-                    Ok(Value::Nul)
+                    Ok(x.do_math_op(|x| x.abs())?)
                 }
             },
             as_module_fonction! {
                 racine(x: {nombre()}, n: {nombre()} => Value::Entier(2)) {
-                    Ok(Value::Nul)
+                    let n = n.as_decimal()?;
+                    Ok(Value::Decimal(x.as_decimal()?.powf(1.0 / n)))
                 }
             },
             as_module_fonction! {
-                exp(x: {nombre()}, n: {Entier} => Value::Entier(2)) {
-                    Ok(Value::Nul)
+                exp(x: {nombre()}) {
+                    Ok(Value::Decimal(x.as_decimal()?.exp()))
+                }
+            },
+            as_module_fonction! {
+                ln(x: {nombre()}) {
+                    Ok(Value::Decimal(x.as_decimal()?.ln()))
+                }
+            },
+            as_module_fonction! {
+                log(x: {nombre()}, base: {nombre()} => Value::Entier(10)) {
+                    let base = base.as_decimal()?;
+                    if base == 10.0 {
+                        Ok(Value::Decimal(x.as_decimal()?.log10()))
+                    } else if base == 2.0 {
+                        Ok(Value::Decimal(x.as_decimal()?.log2()))
+                    } else {
+                        Ok(Value::Decimal(x.as_decimal()?.log(base)))
+                    }
+                }
+            },
+            as_module_fonction! {
+                cos(x: {nombre()}) {
+                    Ok(Value::Decimal(x.as_decimal()?.cos()))
+                }
+            },
+            as_module_fonction! {
+                sin(x: {nombre()}) {
+                    Ok(Value::Decimal(x.as_decimal()?.sin()))
+                }
+            },
+            as_module_fonction! {
+                tan(x: {nombre()}) {
+                    Ok(Value::Decimal(x.as_decimal()?.tan()))
+                }
+            },
+            as_module_fonction! {
+                cosh(x: {nombre()}) {
+                    Ok(Value::Decimal(x.as_decimal()?.cosh()))
+                }
+            },
+            as_module_fonction! {
+                sinh(x: {nombre()}) {
+                    Ok(Value::Decimal(x.as_decimal()?.sinh()))
+                }
+            },
+            as_module_fonction! {
+                tanh(x: {nombre()}) {
+                    Ok(Value::Decimal(x.as_decimal()?.tanh()))
+                }
+            },
+            as_module_fonction! {
+                acos(x: {nombre()}) {
+                    Ok(Value::Decimal(x.as_decimal()?.acos()))
+                }
+            },
+            as_module_fonction! {
+                asin(x: {nombre()}) {
+                    Ok(Value::Decimal(x.as_decimal()?.asin()))
+                }
+            },
+            as_module_fonction! {
+                atan(x: {nombre()}) {
+                    Ok(Value::Decimal(x.as_decimal()?.atan()))
+                }
+            },
+            as_module_fonction! {
+                atan2(x: {nombre()}, y: {nombre()}) {
+                    Ok(Value::Decimal(x.as_decimal()?.atan2(y.as_decimal()?)))
+                }
+            },
+            as_module_fonction! {
+                enDegrés(x: {nombre()}) {
+                    Ok(Value::Decimal(x.as_decimal()?.to_degrees()))
+                }
+            },
+            as_module_fonction! {
+                enRadians(x: {nombre()}) {
+                    Ok(Value::Decimal(x.as_decimal()?.to_radians()))
+                }
+            },
+            as_module_fonction! {
+                hypot(x: {nombre()}, y: {nombre()}) {
+                    Ok(Value::Decimal(x.as_decimal()?.hypot(y.as_decimal()?)))
                 }
             },
         ]

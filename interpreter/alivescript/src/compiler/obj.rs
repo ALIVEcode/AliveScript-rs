@@ -265,6 +265,21 @@ impl Value {
         }
     }
 
+    // does the math on f64 then converts it back to the correct type 
+    // (Entier if it was an Entier and Decimal if it was a Decimal)
+    pub fn do_math_op<F>(&self, op: F) -> Result<Self, RuntimeError> 
+        where F: FnOnce(f64) -> f64
+    {
+        match &self {
+            Value::Entier(i) => Ok(Value::Entier(op(*i as f64) as i64)),
+            Value::Decimal(d) => Ok(Value::Decimal(op(*d))),
+            _ => Err(RuntimeError::type_error(format!(
+                "impossible de convertir '{}' en décimal",
+                self.get_type()
+            ))),
+        }
+    }
+
     pub fn as_bool(&self) -> Result<bool, RuntimeError> {
         match &self {
             Value::Booleen(b) => Ok(*b),
