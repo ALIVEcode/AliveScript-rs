@@ -143,10 +143,10 @@ fin essayer
 afficher y
 
 
-fonction foo(x, y, z=12, plusieurs autres: entier)
+fonction foo(x, y, z=afficher("z"), plusieurs autres: entier)
   afficher autres
   afficher "x={} y={} z={}".format([x, y, z])
-  retourner x + y + z
+  retourner x + y
 fin fonction
 
-afficher foo(1, 2, 33, 77, 222, 1, "allo")
+afficher foo(1, 2, 33)

@@ -1381,13 +1381,26 @@ Si c'est intentionnel, utiliser la forme `sinon -> !`",
 
             let var_idx = self
                 .borrow_mut()
-                .declare_local(name.as_str(), static_type, false);
+                .declare_local(name.as_str(), static_type.clone(), false);
 
             if is_rest_param {
                 self.borrow_mut().code.emit_set_vararg(var_idx);
                 is_vararg = true;
             } else if let Some(default_value) = inner.find_first_tagged("p_default") {
-                self.parse_expr(default_value.into_inner())?;
+                let cmp = Compiler::new_closure(
+                    default_value.as_str(),
+                    None,
+                    Rc::clone(self),
+                    0,
+                    static_type,
+                );
+
+                let default_closure =
+                    Value::closure(cmp.compile_lambda_expr(default_value.into_inner())?);
+
+                let closure_idx = self.borrow_mut().get_or_add_const(default_closure);
+                self.borrow_mut().code.emit_closure(closure_idx);
+
                 self.borrow_mut().code.emit_set_local_default(var_idx);
             } else {
                 nb_req_params += 1;
@@ -1451,7 +1464,8 @@ Si c'est intentionnel, utiliser la forme `sinon -> !`",
                 c.borrow_mut().mark_initialized(inst_idx);
             }
 
-            c.parse_fn_params(params)?;
+            let params_info = c.parse_fn_params(params)?;
+            c.borrow_mut().function.borrow_mut().params_info = params_info;
 
             match body {
                 Some(body) => match body.as_rule() {
