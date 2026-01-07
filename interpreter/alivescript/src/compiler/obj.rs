@@ -233,11 +233,8 @@ impl Value {
         match (self, rhs) {
             (Value::Texte(s), Value::Texte(sub_s)) => Ok(s.contains(sub_s)),
             (Value::Liste(l), rhs) => Ok(l.read().unwrap().contains(rhs)),
-            // (ASDict(d), rhs) => Ok(d.borrow().contains(rhs)),
+            (Value::Dict(d), Value::Texte(rhs)) => Ok(d.read().unwrap().members.contains_key(rhs)),
 
-            // (ASTuple(_), _) => todo!("Tuple pas encore (et peut-être jamais) dans le langage"),
-            // (ASClasse(classe), _) => todo!("Check présense du field?"),
-            // (ASModule { name, alias, env }, _) => todo!(),
             _ => Err(RuntimeError::invalid_op(
                 "dans",
                 self.get_type(),

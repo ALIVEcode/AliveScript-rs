@@ -56,6 +56,22 @@ as_module! {
                             Value::liste(vec![Value::Texte(k.clone()), v.clone()])).collect()))
                 }
             },
+            as_module_fonction! {
+                obtenir(inst: {Dict(Tout)}, cle: {Texte}, valeur: {Tout} => Value::Nul) {
+                    unpack!(Value::Dict(d) = inst);
+                    let cle = cle.as_texte()?;
+
+                    Ok(d.read().unwrap().get(cle).cloned().unwrap_or(valeur))
+                }
+            },
+            as_module_fonction! {
+                contient(inst: {Dict(Tout)}, cle: {Texte}) {
+                    unpack!(Value::Dict(d) = inst);
+                    let cle = cle.as_texte()?;
+
+                    Ok(Value::Booleen(d.read().unwrap().members.contains_key(cle)))
+                }
+            },
         ]
     }
 }

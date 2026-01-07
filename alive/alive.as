@@ -157,8 +157,8 @@ fonction installer()
 
   afficher "Installation des dépendances de '{}'".format([config.nom])
 
-  si "dépendances" dans config.clés() alors
-    const deps = config.dépendances
+  const deps = config.obtenir("dépendances")
+  si deps != nul alors
     pour chaque dep dans deps 
       quand dep 
         est dict -> gérerDepUrl(dep)
@@ -187,8 +187,8 @@ fonction ajouter()
 
   afficher nom
 
-  si "dépendances" dans config.clés() alors
-    const deps = config.dépendances
+  const deps = config.obtenir("dépendances")
+  si deps != nul alors
     pour chaque dep dans deps 
       si dep.nom == nom alors 
         erreur "Une autre débendance a déjà le nom '{}' (url='{}')".format([nom, dep.url])
