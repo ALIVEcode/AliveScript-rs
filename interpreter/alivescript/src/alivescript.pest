@@ -47,7 +47,7 @@ subStmt = _{
 }
 
 CommandStmt = {
-    Ident ~ !"(" ~ Expr
+    Ident ~ !("(" | binOpInfix) ~ Expr
 }
 
 LireStmt    =  {
@@ -239,11 +239,14 @@ DeclIdentList = {
 RetournerStmt =  { retourner ~ (Expr ~ ",")* ~ Expr? }
 retourner     = @{ "retourner" ~ !IdentChar }
 
-FnParams = {
-    "(" ~ (FnParam ~ ",")* ~ FnParam? ~ ")"
+FnParams    = {
+    "(" ~ (FnParam ~ ",")* ~ (FnRestParam | FnParam)? ~ ")"
 }
-
-FnParam = {
+FnRestParam = {
+    plusieurs ~ (#p_name = Ident) ~ (":" ~ #p_type = TypeExpr)?
+}
+plusieurs   = @{"plusieurs" ~ !IdentChar}
+FnParam     = {
     (#p_name = Ident) ~ (":" ~ #p_type = TypeExpr)? ~ (Assign ~ #p_default = Expr)?
 }
 

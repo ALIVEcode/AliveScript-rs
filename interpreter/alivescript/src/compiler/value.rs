@@ -6,10 +6,10 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
-use crate::compiler::Local;
-use crate::compiler::bytecode::{BinOpcode, instructions_to_string};
+use crate::compiler::bytecode::{instructions_to_string, BinOpcode};
 use crate::compiler::err::CompilationErrorKind;
 use crate::compiler::obj::{ArcUpvalue, Function, UpvalueSpec, Value};
+use crate::compiler::Local;
 use crate::runtime::err::RuntimeError;
 use crate::runtime::vm::VM;
 
@@ -261,29 +261,60 @@ impl ASObjet {
 }
 
 #[derive(Clone, PartialEq)]
+pub struct ASFunctionParamsInfo {
+    pub nb_params: usize,
+    pub nb_req_params: usize,
+    pub is_vararg: bool,
+}
+impl ASFunctionParamsInfo {
+    pub fn new(nb_params: usize) -> Self {
+        Self {
+            nb_params,
+            nb_req_params: nb_params,
+            is_vararg: false,
+        }
+    }
+
+    pub fn is_valid_nb_of_args(&self, nbargs: usize) -> bool {
+        nbargs >= self.nb_req_params && (nbargs <= self.nb_params || self.is_vararg)
+    }
+}
+
+impl Display for ASFunctionParamsInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_vararg {
+            write!(f, "au moins {}", self.nb_req_params)
+        } else if self.nb_params != self.nb_req_params {
+            write!(f, "entre {} et {}", self.nb_req_params, self.nb_params)
+        } else {
+            write!(f, "{}", self.nb_req_params)
+        }
+    }
+}
+
+#[derive(Clone, PartialEq)]
 pub struct ASFunction {
     pub name: Option<String>,
     pub code: Vec<u16>,        // bytecode
     pub constants: Vec<Value>, // constant pool
     pub upvalue_count: usize,
     pub upvalue_specs: Vec<UpvalueSpec>, // from compiler: local? index?
-
-    pub nb_params: usize,
+    pub params_info: ASFunctionParamsInfo,
 }
 
 impl ASFunction {
-    pub fn new(name: Option<String>, nb_params: usize) -> Self {
+    pub fn new(name: Option<String>, params_info: ASFunctionParamsInfo) -> Self {
         Self {
             name,
             code: vec![],
             constants: vec![],
             upvalue_count: 0,
             upvalue_specs: vec![],
-            nb_params: nb_params,
+            params_info,
         }
     }
 
-    pub fn new_anonymous(nb_params: usize) -> Self {
+    pub fn new_anonymous(params_info: ASFunctionParamsInfo) -> Self {
         Self {
             name: None,
             code: vec![],
@@ -291,7 +322,7 @@ impl ASFunction {
             upvalue_count: 0,
             upvalue_specs: vec![],
 
-            nb_params,
+            params_info,
         }
     }
 }

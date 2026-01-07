@@ -4,7 +4,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use thiserror::Error;
 
 use crate::{
-    compiler::{Compiler, bitmasks::BitArray, utils::format_table},
+    compiler::{bitmasks::BitArray, utils::format_table, Compiler},
     utils::{MapIf, WrapWhere},
 };
 
@@ -56,12 +56,36 @@ pub enum Opcode {
 
     GetUpvalue,
     SetUpvalue,
+
+    /// args: `slot_idx`
     GetLocal,
+
+    /// args: `slot_idx`
     /// stack: `[value]`
     SetLocal,
+
+    /// args: `slot_idx`
     GetGlobal,
+
     /// stack: `[value]`
     SetGlobal,
+
+    /// args: `slot_idx`
+    /// stack: `[value]`
+    /// 1. pops the `value`
+    /// 2. if `stack[slot_idx]` has a value:
+    ///     continue execution (do nothing)
+    /// 3. else:
+    ///     does `stack[slot_idx]` = value
+    SetLocalDefault,
+
+    /// args: `slot_idx`
+    /// stack: `[val_n, ..., val_2, val_1]`
+    /// 1. pops all value until the stack size (+ frame.base) is `slot_idx`
+    /// 2. creates a new liste
+    /// 3. sets `slot_idx` to the liste
+    SetVararg,
+
     Call,
 
     /// args: dist (i16)
@@ -199,9 +223,11 @@ impl Opcode {
             Opcode::SetUpvalue => "SET_UPVAL",
             Opcode::GetLocal => "GET_LOCAL",
             Opcode::SetLocal => "SET_LOCAL",
+            Opcode::SetLocalDefault => "SET_LOCAL_DEFAULT",
             Opcode::GetGlobal => "GET_GLOBAL",
             Opcode::SetGlobal => "SET_GLOBAL",
             Opcode::Call => "CALL",
+            Opcode::SetVararg => "SET_VARARG",
             Opcode::Return => "RETURN",
             Opcode::BinOp => "BINOP",
             Opcode::BinComp => "BINCOMP",
@@ -236,6 +262,8 @@ impl Opcode {
             | Opcode::SetLocal
             | Opcode::GetGlobal
             | Opcode::SetGlobal
+            | Opcode::SetLocalDefault
+            | Opcode::SetVararg
             | Opcode::NewList
             | Opcode::NewDict
             | Opcode::NewStruct => 1,
@@ -690,9 +718,19 @@ impl Instructions {
         self.emit_byte(const_name_slot);
     }
 
+    pub fn emit_set_local_default(&mut self, slot: OpcodeByteSize) {
+        self.emit_opcode(Opcode::SetLocalDefault);
+        self.emit_byte(slot);
+    }
+
     pub fn emit_call(&mut self, nargs: OpcodeByteSize) {
         self.emit_opcode(Opcode::Call);
         self.emit_byte(nargs);
+    }
+
+    pub fn emit_set_vararg(&mut self, slot: OpcodeByteSize) {
+        self.emit_opcode(Opcode::SetVararg);
+        self.emit_byte(slot);
     }
 
     pub fn emit_return(&mut self) {

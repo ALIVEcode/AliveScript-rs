@@ -16,7 +16,6 @@ fonction plus(x)
   fin fonction
 fin fonction
 
-
 var plus_1 = plus(1)
 
 fonction apply(f, arg)
@@ -142,3 +141,12 @@ var y = essayer "a" / 2 sinon
 fin essayer
 
 afficher y
+
+
+fonction foo(x, y, z=12, plusieurs autres: entier)
+  afficher autres
+  afficher "x={} y={} z={}".format([x, y, z])
+  retourner x + y + z
+fin fonction
+
+afficher foo(1, 2, 33, 77, 222, 1, "allo")

@@ -519,17 +519,18 @@ impl VM {
                 self.push(result);
             }
             Value::Function(Function::ClosureInst(closure)) => {
-                if nbargs != closure.function.nb_params {
-                    return Err(RuntimeError::call_error(
+                if nbargs < closure.function.params_info.nb_req_params
+                    || (nbargs > closure.function.params_info.nb_params
+                        && !closure.function.params_info.is_vararg)
+                {
+                    return Err(RuntimeError::invalid_nb_call_args(
                         closure
                             .function
                             .name
                             .as_ref()
                             .unwrap_or(&String::from("anonyme")),
-                        format!(
-                            "mauvais nombre d'arguments (attendu {}, obtenu {})",
-                            closure.function.nb_params, nbargs
-                        ),
+                        &closure.function.params_info,
+                        nbargs,
                     ));
                 }
                 // set the base as the first arg of the function
@@ -542,17 +543,18 @@ impl VM {
                 self.check_overflow()?;
             }
             Value::Function(Function::ClosureProto(closure)) => {
-                if nbargs != closure.function.nb_params {
-                    return Err(RuntimeError::call_error(
+                if nbargs < closure.function.params_info.nb_req_params
+                    || (nbargs > closure.function.params_info.nb_params
+                        && !closure.function.params_info.is_vararg)
+                {
+                    return Err(RuntimeError::invalid_nb_call_args(
                         closure
                             .function
                             .name
                             .as_ref()
                             .unwrap_or(&String::from("anonyme")),
-                        format!(
-                            "mauvais nombre d'arguments (attendu {}, obtenu {})",
-                            closure.function.nb_params, nbargs
-                        ),
+                        &closure.function.params_info,
+                        nbargs,
                     ));
                 }
                 let closure = self.resolve_proto_closure_upvalues(closure)?;
@@ -566,22 +568,27 @@ impl VM {
                 self.check_overflow()?;
             }
             Value::Function(Function::ClosureMethod(method)) => {
-                if nbargs + 1 != method.read().unwrap().closure.function.nb_params {
-                    return Err(RuntimeError::call_error(
-                        method
-                            .read()
-                            .unwrap()
-                            .closure
-                            .function
-                            .name
-                            .as_ref()
-                            .unwrap_or(&String::from("anonyme")),
-                        format!(
-                            "mauvais nombre d'arguments (attendu {}, obtenu {})",
-                            method.read().unwrap().closure.function.nb_params,
-                            nbargs
-                        ),
-                    ));
+                {
+                    let closure = &method.read().unwrap().closure;
+                    if nbargs + 1 < closure.function.params_info.nb_req_params
+                        || (nbargs + 1 > closure.function.params_info.nb_params
+                            && !closure.function.params_info.is_vararg)
+                    {
+                        return Err(RuntimeError::call_error(
+                            method
+                                .read()
+                                .unwrap()
+                                .closure
+                                .function
+                                .name
+                                .as_ref()
+                                .unwrap_or(&String::from("anonyme")),
+                            format!(
+                                "mauvais nombre d'arguments (attendu {}, obtenu {})",
+                                closure.function.params_info, nbargs
+                            ),
+                        ));
+                    }
                 }
                 // set the base as the first arg of the function
                 let base = self.stack.len() - nbargs;
@@ -1313,6 +1320,36 @@ impl VM {
                         self.stack.resize(idx + 1, Value::Nul);
                     }
                     self.stack[idx] = val;
+                }
+                Opcode::SetLocalDefault => {
+                    let slot = fnc.code[frame.ip] as usize;
+                    frame.ip += 1;
+                    let idx = frame.base + slot;
+
+                    let val = self
+                        .pop()
+                        .ok_or(RuntimeError::generic_err("Missing value in SET_LOCAL"))?;
+
+                    if self.stack.get(idx).is_none() {
+                        if idx >= self.stack.len() {
+                            // expand stack to fit local (for simplicity)
+                            self.stack.resize(idx + 1, Value::Nul);
+                        }
+                        self.stack[idx] = val;
+                    }
+                }
+                Opcode::SetVararg => {
+                    let slot = fnc.code[frame.ip] as usize;
+                    frame.ip += 1;
+                    let stop_idx = frame.base + slot;
+
+                    if stop_idx >= self.stack.len() {
+                        self.stack.resize(stop_idx + 1, Value::Nul);
+                        self.stack[stop_idx] = Value::liste(vec![]);
+                    } else {
+                        let lst = self.stack.drain(stop_idx..).collect();
+                        self.stack.push(Value::liste(lst));
+                    }
                 }
 
                 Opcode::GetGlobal => {

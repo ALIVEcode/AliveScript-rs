@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::compiler::value::Type;
+use crate::compiler::value::{ASFunctionParamsInfo, Type};
 
 #[derive(Debug, Error)]
 pub enum RuntimeError {
@@ -65,6 +65,20 @@ impl RuntimeError {
             func_name: func_name.to_string(),
             msg: msg.to_string(),
         }
+    }
+
+    pub fn invalid_nb_call_args(
+        func_name: &str,
+        params_info: &ASFunctionParamsInfo,
+        got: usize,
+    ) -> Self {
+        Self::call_error(
+            func_name,
+            format!(
+                "mauvais nombre d'arguments (attendu {}, obtenu {})",
+                params_info, got
+            ),
+        )
     }
 
     pub fn assertion_error(msg: impl ToString) -> Self {

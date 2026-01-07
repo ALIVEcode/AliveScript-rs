@@ -34,7 +34,37 @@ as_module! {
             as_module_var!(const NAN: {Decimal} = Value::Decimal(f64::NAN)),
 
             as_module_fonction! {
-                plafond() {
+                plafond(x: {nombre()}) {
+                    Ok(Value::Nul)
+                }
+            },
+            as_module_fonction! {
+                plancher(x: {nombre()}) {
+                    Ok(Value::Nul)
+                }
+            },
+            as_module_fonction! {
+                tronquer(x: {nombre()}) {
+                    Ok(Value::Nul)
+                }
+            },
+            as_module_fonction! {
+                arrondir(x: {nombre()}) {
+                    Ok(Value::Nul)
+                }
+            },
+            as_module_fonction! {
+                abs(x: {nombre()}) {
+                    Ok(Value::Nul)
+                }
+            },
+            as_module_fonction! {
+                racine(x: {nombre()}, n: {nombre()} => Value::Entier(2)) {
+                    Ok(Value::Nul)
+                }
+            },
+            as_module_fonction! {
+                exp(x: {nombre()}, n: {Entier} => Value::Entier(2)) {
                     Ok(Value::Nul)
                 }
             },

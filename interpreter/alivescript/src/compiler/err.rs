@@ -1,14 +1,14 @@
 use colored::Colorize;
 use logos::Source;
-use std::fmt::{Display, format};
+use std::fmt::{format, Display};
 
 use pest::{
-    Span,
     error::{Error as PestError, InputLocation, LineColLocation},
+    Span,
 };
 use thiserror::Error;
 
-use crate::{Rule, compiler::value::Type};
+use crate::{compiler::value::Type, Rule};
 
 #[derive(Debug, Error)]
 pub struct CompilationError {

@@ -8,27 +8,27 @@ use std::{
 };
 
 use pest::{
-    Parser as PestParser, Span,
     error::{Error as PestError, ErrorVariant as PestErrorVariant},
     iterators::{Pair, Pairs},
+    Parser as PestParser, Span,
 };
 
 use crate::{
-    AlivescriptParser, Rule,
     compiler::{
         bytecode::{
-            BinCompcode, BinLogiccode, BinOpcode, Instructions, JUMP_OFFSET, Opcode, UnaryOpcode,
-            instructions_to_string, instructions_to_string_debug,
+            instructions_to_string, instructions_to_string_debug, BinCompcode, BinLogiccode,
+            BinOpcode, Instructions, Opcode, UnaryOpcode, JUMP_OFFSET,
         },
         err::{CompilationError, CompilationErrorKind},
         obj::{Function, UpvalueSpec, Value},
         parser::{PRATT_EXPR_PARSER, PRATT_TYPE_PARSER},
         value::{
-            ASFieldInfo, ASFunction, ASModule, ASStructure, ArcClosureProto, ArcStructure,
-            ClosureProto, FieldProto, ModuleProto, StructType, Type, TypeSpec,
+            ASFieldInfo, ASFunction, ASFunctionParamsInfo, ASModule, ASStructure, ArcClosureProto,
+            ArcStructure, ClosureProto, FieldProto, ModuleProto, StructType, Type, TypeSpec,
         },
     },
     utils::Invert,
+    AlivescriptParser, Rule,
 };
 
 mod bitmasks;
@@ -60,7 +60,7 @@ pub struct LocalType {
 
 #[derive(Debug, Default, Clone)]
 pub struct CompilerOptions {
-    forbidden_ops: Vec<Opcode>
+    forbidden_ops: Vec<Opcode>,
 }
 
 #[derive(Debug)]
@@ -101,7 +101,9 @@ impl<'a> Compiler<'a> {
         Self {
             input,
             source_name,
-            function: Rc::new(RefCell::new(ASFunction::new_anonymous(0))),
+            function: Rc::new(RefCell::new(ASFunction::new_anonymous(
+                ASFunctionParamsInfo::new(0),
+            ))),
             code: Instructions::new(),
             parent: None,
             locals: vec![],
@@ -122,7 +124,9 @@ impl<'a> Compiler<'a> {
         Self {
             input,
             source_name,
-            function: Rc::new(RefCell::new(ASFunction::new_anonymous(0))),
+            function: Rc::new(RefCell::new(ASFunction::new_anonymous(
+                ASFunctionParamsInfo::new(0),
+            ))),
             code: Instructions::new(),
             parent: None,
             locals: vec![],
@@ -149,7 +153,10 @@ impl<'a> Compiler<'a> {
         Self {
             input,
             source_name: { parent.borrow().source_name.clone() },
-            function: Rc::new(RefCell::new(ASFunction::new(name, nb_params))),
+            function: Rc::new(RefCell::new(ASFunction::new(
+                name,
+                ASFunctionParamsInfo::new(nb_params),
+            ))),
             code: Instructions::new(),
             parent: Some(parent),
             locals: vec![],
@@ -685,7 +692,10 @@ trait Parser<'a> {
         pairs: impl Iterator<Item = Pair<'a, Rule>>,
     ) -> Result<usize, CompilationError>;
 
-    fn parse_fn_params(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError>;
+    fn parse_fn_params(
+        &mut self,
+        pairs: Pairs<'a, Rule>,
+    ) -> Result<ASFunctionParamsInfo, CompilationError>;
     fn parse_fn(
         &mut self,
         inner: Pairs<'a, Rule>,
@@ -1309,7 +1319,9 @@ Si c'est intentionnel, utiliser la forme `sinon -> !`",
                 params.len(),
                 return_type.unwrap_or(Type::Tout.into()),
             )));
-            c.parse_fn_params(params)?;
+
+            let params_info = c.parse_fn_params(params)?;
+            c.borrow_mut().function.borrow_mut().params_info = params_info;
 
             match body {
                 Some(body) => match body.as_rule() {
@@ -1335,10 +1347,18 @@ Si c'est intentionnel, utiliser la forme `sinon -> !`",
         Ok(())
     }
 
-    fn parse_fn_params(&mut self, pairs: Pairs<'a, Rule>) -> Result<(), CompilationError> {
+    fn parse_fn_params(
+        &mut self,
+        pairs: Pairs<'a, Rule>,
+    ) -> Result<ASFunctionParamsInfo, CompilationError> {
+        let mut nb_params = 0;
+        let mut nb_req_params = 0;
+        let mut is_vararg = false;
+
         let mut param_indexes = Vec::with_capacity(pairs.len());
 
         for pair in pairs {
+            let is_rest_param = pair.as_rule() == Rule::FnRestParam;
             let span = pair.as_span();
             let inner = pair.into_inner();
             let name = inner.find_first_tagged("p_name");
@@ -1363,12 +1383,18 @@ Si c'est intentionnel, utiliser la forme `sinon -> !`",
                 .borrow_mut()
                 .declare_local(name.as_str(), static_type, false);
 
-            // TODO: the default value behavior
-            // if let Some(default_value) = inner.find_first_tagged("p_default") {
-            //     self.parse_expr(default_value.into_inner())?;
-            //     self.borrow_mut().code.emit_set_local(var_idx);
-            // }
+            if is_rest_param {
+                self.borrow_mut().code.emit_set_vararg(var_idx);
+                is_vararg = true;
+            } else if let Some(default_value) = inner.find_first_tagged("p_default") {
+                self.parse_expr(default_value.into_inner())?;
+                self.borrow_mut().code.emit_set_local_default(var_idx);
+            } else {
+                nb_req_params += 1;
+            }
+
             param_indexes.push(var_idx);
+            nb_params += 1;
         }
 
         // ensures a parameter cannot reference another parameter
@@ -1376,7 +1402,11 @@ Si c'est intentionnel, utiliser la forme `sinon -> !`",
             self.borrow_mut().mark_initialized(idx);
         }
 
-        Ok(())
+        Ok(ASFunctionParamsInfo {
+            nb_params,
+            nb_req_params,
+            is_vararg,
+        })
     }
 
     fn parse_methode_def(&mut self, pair: Pair<'a, Rule>) -> Result<(), CompilationError> {

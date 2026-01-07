@@ -275,6 +275,16 @@ macro_rules! as_type {
             {$crate::compiler::value::Type::Liste(Box::new($crate::as_type!($($arg)+)))}
         )
     };
+    ($name:ident($($args:tt)*) $(| $($rest:tt)+)?) => {
+        $crate::optional_body!(
+            {$($($rest)+)?},
+            {$crate::compiler::value::Type::union_of(
+                $crate::compiler::value::Type::$name($($args)*),
+                $crate::as_type!($($($rest)+)?)
+            )},
+            {$crate::compiler::value::Type::$name($($args)*)}
+        )
+    };
     ($name:ident $(| $($rest:tt)+)?) => {
         $crate::optional_body!(
             {$($($rest)+)?},

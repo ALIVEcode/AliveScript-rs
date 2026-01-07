@@ -1,6 +1,6 @@
 use crate::{
-    Rule,
     compiler::bytecode::{BinCompcode, BinLogiccode, BinOpcode, UnaryOpcode},
+    Rule,
 };
 use pest::{
     iterators::Pair,
