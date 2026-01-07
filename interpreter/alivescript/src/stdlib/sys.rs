@@ -26,7 +26,7 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                quitter(code: Type::Entier): Type::Entier => {
+                quitter(code: {Entier}): Type::Entier => {
                     exit(code.as_entier()? as i32)
                 }
             },

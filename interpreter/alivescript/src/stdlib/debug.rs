@@ -26,7 +26,7 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                nb(inst: Type::Texte): Type::Booleen => {
+                nb(inst: {Texte}): Type::Booleen => {
                     let inst = inst.as_texte().unwrap();
                     Ok(Value::Booleen(inst.chars().all(|c| c.is_ascii_digit())))
                 }

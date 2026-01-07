@@ -26,7 +26,7 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                choix(iter: Type::iterable()): Type::Tout => {
+                choix(iter: {iterable()}): Type::Tout => {
                     match iter {
                         Value::Liste(lst) => {
                             let i = random_range(0..lst.read().unwrap().len());
@@ -39,7 +39,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                entre(min: Type::Entier, max: Type::Entier): Type::Entier => {
+                entre(min: {Entier}, max: {Entier}): Type::Entier => {
                     let min = min.as_entier().unwrap();
                     let max = max.as_entier().unwrap();
                     let i = random_range(min..max);

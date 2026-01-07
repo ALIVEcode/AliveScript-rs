@@ -25,14 +25,14 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                taille(inst: Type::liste_tout()): Type::Entier => {
+                taille(inst: {Liste(Tout)}): Type::Entier => {
                     unpack!(Value::Liste(lst) = inst);
 
                     Ok(Value::Entier(lst.read().unwrap().len() as i64))
                 }
             },
             as_module_fonction! {
-                ajouter(inst: Type::liste_tout(), val: Type::Tout): Type::Nul => {
+                ajouter(inst: {Liste(Tout)}, val: {Tout}): Type::Nul => {
                     unpack!(Value::Liste(lst) = inst);
 
                     lst.write().unwrap().push(val.clone());
@@ -41,7 +41,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                joindre(inst: Type::liste(Type::Texte), sep: Type::Texte => Value::Texte(String::from(" "))) {
+                joindre(inst: {Liste(Texte)}, sep: {Texte} => Value::Texte(String::from(" "))) {
                     unpack!(Value::Liste(lst) = inst);
 
                     Ok(Value::Texte(lst.read().unwrap()
@@ -52,7 +52,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                map[vm](inst: Type::liste_tout(), map: Type::Fonction) {
+                map[vm](inst: {Liste(Tout)}, map: {Fonction}) {
                     unpack!(Value::Liste(lst) = inst);
                     unpack!(Value::Function(map) = map);
 
@@ -63,7 +63,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                filtrer[vm](inst: Type::liste_tout(), filtre: Type::Fonction) {
+                filtrer[vm](inst: {Liste(Tout)}, filtre: {Fonction}) {
                     unpack!(Value::Liste(lst) = inst);
                     unpack!(Value::Function(filtre) = filtre);
 

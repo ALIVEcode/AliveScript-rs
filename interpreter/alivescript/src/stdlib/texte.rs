@@ -25,40 +25,40 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                taille(inst: Type::Texte): Type::Entier => {
+                taille(inst: {Texte}) {
                     let inst = inst.as_texte().unwrap();
                     Ok(Value::Entier(inst.len() as i64))
                 }
             },
             as_module_fonction! {
-                estNumérique(inst: Type::Texte): Type::Booleen => {
+                estNumérique(inst: {Texte}) {
                     let inst = inst.as_texte().unwrap();
                     Ok(Value::Booleen(inst.chars().all(|c| c.is_ascii_digit())))
                 }
             },
             as_module_fonction! {
-                format(inst: Type::Texte, args: Type::liste_tout()): Type::Texte => {
+                format(inst: {Texte}, args: {Liste(Tout)}) {
                     let inst = inst.as_texte().unwrap();
                     let args = args.as_liste().unwrap();
                     Ok(Value::Texte(inst.format(args.read().unwrap().iter())))
                 }
             },
             as_module_fonction! {
-                commencePar(inst: Type::Texte, prefix: Type::Texte) {
+                commencePar(inst: {Texte}, prefix: {Texte}) {
                     let inst = inst.as_texte().unwrap();
                     let prefix = prefix.as_texte().unwrap();
                     Ok(Value::Booleen(inst.starts_with(prefix)))
                 }
             },
             as_module_fonction! {
-                finiPar(inst: Type::Texte, prefix: Type::Texte) {
+                finiPar(inst: {Texte}, prefix: {Texte}) {
                     let inst = inst.as_texte().unwrap();
                     let prefix = prefix.as_texte().unwrap();
                     Ok(Value::Booleen(inst.ends_with(prefix)))
                 }
             },
             as_module_fonction! {
-                diviser(inst: Type::Texte, pat: Type::Texte): Type::Liste => {
+                diviser(inst: {Texte}, pat: {Texte}) {
                     let inst = inst.as_texte().unwrap();
                     let pat = pat.as_texte().unwrap();
                     Ok(Value::liste(
@@ -69,7 +69,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                raser(inst: Type::Texte, pat: Type::optional(Type::Texte) => Value::Nul) {
+                raser(inst: {Texte}, pat: {Optionnel(Texte)} => Value::Nul) {
                     let inst = inst.as_texte().unwrap();
                     let pat = pat.as_texte();
                     let val = match pat {
@@ -81,7 +81,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                raserDébut(inst: Type::Texte, pat: Type::optional(Type::Texte)) {
+                raserDébut(inst: {Texte}, pat: {Optionnel(Texte)}) {
                     let inst = inst.as_texte().unwrap();
                     let pat = pat.as_texte();
                     let val = match pat {
@@ -93,7 +93,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                raserFin(inst: Type::Texte, pat: Type::optional(Type::Texte) => Value::Nul) {
+                raserFin(inst: {Texte}, pat: {Optionnel(Texte)} => Value::Nul) {
                     let inst = inst.as_texte().unwrap();
                     let pat = pat.as_texte();
                     let val = match pat {
@@ -105,7 +105,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                sansPréfix(inst: Type::Texte, pat: Type::optional(Type::Texte)) {
+                sansPréfix(inst: {Texte}, pat: {Optionnel(Texte)}) {
                     let inst = inst.as_texte()?;
                     let pat = pat.as_texte()?;
 
@@ -113,7 +113,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                sansSuffix(inst: Type::Texte, pat: Type::Texte) {
+                sansSuffix(inst: {Texte}, pat: {Texte}) {
                     let inst = inst.as_texte()?;
                     let pat = pat.as_texte()?;
 

@@ -74,8 +74,26 @@ macro_rules! unpack_native {
 
 #[macro_export]
 macro_rules! as_fonction {
-    ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
-     : $return_type:expr => $body:block) => {{
+    ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($(*$varargs:ident)?)
+     $(: $return_type:expr =>)? $body:block) => {{
+         $($($prefix)*)?;
+         (
+            String::from(std::stringify!($name)),
+            $crate::compiler::obj::Value::Function($crate::compiler::obj::Function::NativeFunction($crate::compiler::value::NativeFunction {
+                name: std::sync::Arc::new(String::from(std::stringify!($name))),
+                desc: std::sync::Arc::new($crate::opt_value!($($desc.to_string())?)),
+                func: std::sync::Arc::new(move |_vm: &mut $crate::runtime::vm::VM, args: std::vec::Vec<Value>| {
+                    let mut args = std::collections::VecDeque::from_iter(args.iter());
+                    $(let $varargs = args;)?
+                    $(let $vm = _vm;)?
+                    $body
+                }),
+                // $return_type,
+            }))
+         )
+     }};
+    ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : {$($param_type:tt)+} $(=> $default:expr)?),+ $(, $(*$varargs:ident)?)?)
+     $(: $return_type:expr =>)? $body:block) => {{
          $($($prefix)*)?;
          (
             String::from(std::stringify!($name)),
@@ -89,15 +107,16 @@ macro_rules! as_fonction {
                         let p = args.pop_front();
                         $crate::optional_body!({$($default)?}, {p.unwrap_or_else(|| $(&$default)?)}, {p.unwrap()})
                     };
-                    if !$crate::compiler::value::Type::type_match(&$param_type, &$param_name.get_type()) {
+                    if !$crate::compiler::value::Type::type_match(&$crate::as_type!($($param_type)+), &$param_name.get_type()) {
                         return Err($crate::runtime::err::RuntimeError::invalid_arg_type(
                             std::stringify!($name),
                             std::stringify!($param_name),
-                            $param_type,
+                            $crate::as_type!($($param_type)+),
                             $param_name.get_type(),
                          ));
                     }
                     )*
+                    $($(let $varargs = args;)?)?
                     $(let $vm = _vm;)?
                     $body
                 }),
@@ -109,7 +128,26 @@ macro_rules! as_fonction {
 
 #[macro_export]
 macro_rules! as_module_fonction {
-    ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : {$($param_type:tt)+} $(=> $default:expr)?),* $(,)?)
+    ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($(*$varargs:ident)?)
+     $(: $return_type:expr =>)? $body:block) => {{
+         $($($prefix)*)?;
+         (
+            String::from(std::stringify!($name)),
+            $crate::compiler::value::ASField::new_with_type_from_value(true,
+            $crate::compiler::obj::Value::Function($crate::compiler::obj::Function::NativeFunction($crate::compiler::value::NativeFunction {
+                name: std::sync::Arc::new(String::from(std::stringify!($name))),
+                desc: std::sync::Arc::new($crate::opt_value!($($desc.to_string())?)),
+                func: std::sync::Arc::new(move |_vm: &mut $crate::runtime::vm::VM, args: std::vec::Vec<$crate::compiler::obj::Value>| {
+                    let mut args = std::collections::VecDeque::from_iter(args.into_iter());
+                    $($(let $varargs = args;)?)?
+                    $(let $vm = _vm;)?
+                    $body
+                }),
+                // $return_type,
+            })))
+         )
+     }};
+    ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : {$($param_type:tt)+} $(=> $default:expr)?),* $(, $(*$varargs:ident)?)?)
      $(: $return_type:expr =>)? $body:block) => {{
          $($($prefix)*)?;
          (
@@ -134,6 +172,7 @@ macro_rules! as_module_fonction {
                         }
 
                     };
+
                     if !$crate::compiler::value::Type::type_match(&$crate::as_type!($($param_type)+), &$param_name.get_type()) {
                         return Err($crate::runtime::err::RuntimeError::invalid_arg_type(
                             std::stringify!($name),
@@ -143,47 +182,8 @@ macro_rules! as_module_fonction {
                          ));
                     }
                     )*
-                    $(let $vm = _vm;)?
-                    $body
-                }),
-                // $return_type,
-            })))
-         )
-     }};
-    ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : $param_type:expr $(=> $default:expr)?),* $(,)?)
-     $(: $return_type:expr =>)? $body:block) => {{
-         $($($prefix)*)?;
-         (
-            String::from(std::stringify!($name)),
-            $crate::compiler::value::ASField::new_with_type_from_value(true,
-            $crate::compiler::obj::Value::Function($crate::compiler::obj::Function::NativeFunction($crate::compiler::value::NativeFunction {
-                name: std::sync::Arc::new(String::from(std::stringify!($name))),
-                desc: std::sync::Arc::new($crate::opt_value!($($desc.to_string())?)),
-                func: std::sync::Arc::new(move |_vm: &mut $crate::runtime::vm::VM, args: std::vec::Vec<$crate::compiler::obj::Value>| {
-                    let mut args = std::collections::VecDeque::from_iter(args.into_iter());
-                    $(
-                    let $param_name = {
-                        if let Some(p) = args.pop_front() {
-                            p
-                        } else {
-                            $crate::optional_body!({$($default)?},
-                                { $($default)? },
-                                {
-                                    return Err($crate::runtime::err::RuntimeError::call_error(stringify!($name), format!("valeur manquante pour le paramètre '{}'", stringify!($param_name))));
-                                }
-                            )
-                        }
 
-                    };
-                    if !$crate::compiler::value::Type::type_match(&$param_type, &$param_name.get_type()) {
-                        return Err($crate::runtime::err::RuntimeError::invalid_arg_type(
-                            std::stringify!($name),
-                            std::stringify!($param_name),
-                            $param_type,
-                            $param_name.get_type(),
-                         ));
-                    }
-                    )*
+                    $($(let $varargs = args;)?)?
                     $(let $vm = _vm;)?
                     $body
                 }),

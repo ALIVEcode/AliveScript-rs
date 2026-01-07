@@ -26,7 +26,7 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                affirmer(cond: Type::tout(), msg: Type::Texte): Type::Nul => {
+                affirmer(cond: {Tout}, msg: {Texte}): Type::Nul => {
                     if !cond.to_bool() {
                         let t = msg.as_texte().unwrap();
                         Err(RuntimeError::assertion_error(t))
@@ -36,7 +36,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                affirmerÉgaux(val1: Type::tout(), val2: Type::tout(), msg: Type::Texte): Type::Nul => {
+                affirmerÉgaux(val1: {Tout}, val2: {Tout}, msg: {Texte}): Type::Nul => {
                     if val1 != val2 {
                         let t = msg.as_texte().unwrap();
                         Err(RuntimeError::assertion_error(format!("{}\nGauche: {}\nDroite: {}", t, val1.repr(), val2.repr())))

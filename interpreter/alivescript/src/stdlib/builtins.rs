@@ -9,24 +9,24 @@ use crate::runtime::err::RuntimeError;
 pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(|| {
     HashMap::from_iter([
         as_fonction! {
-            afficher(msg: Type::tout()): Type::Nul => {
-                println!("{}", msg);
+            afficher(*varargs): Type::Nul => {
+                println!("{}", varargs.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" "));
                 Ok(Value::Nul)
             }
         },
         as_fonction! {
-            afficherErr(msg: Type::tout()): Type::Nul => {
+            afficherErr(msg: {Tout}): Type::Nul => {
                 eprintln!("{}", msg);
                 Ok(Value::Nul)
             }
         },
         as_fonction! {
-            typeDe(obj: Type::tout()): Type::Type => {
+            typeDe(obj: {Tout}): Type::Type => {
                 Ok(Value::TypeObj(obj.get_type()))
             }
         },
         as_fonction! {
-            tailleDe(obj: Type::iterable()): Type::Entier => {
+            tailleDe(obj: {iterable()}): Type::Entier => {
                 Ok(Value::Entier(match obj {
                     Value::Texte(t) => t.len(),
                     Value::Liste(l) => l.read().unwrap().len(),
@@ -35,7 +35,7 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
             }
         },
         as_fonction! {
-            suite(debut: Type::Entier, fin: Type::Entier): Type::Liste(Type::Entier) => {
+            suite(debut: {Entier}, fin: {Entier}): Type::Liste(Type::Entier) => {
                 let debut = debut.as_entier().unwrap();
                 let fin = fin.as_entier().unwrap();
 
@@ -43,7 +43,7 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
             }
         },
         as_fonction! {
-            abs(val: Type::nombre()): Type::nombre() => {
+            abs(val: {nombre()}): Type::nombre() => {
                 Ok(match val {
                     Value::Entier(i) => Value::Entier(i.abs()),
                     Value::Decimal(f) => Value::Decimal(f.abs()),
@@ -52,7 +52,7 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
             }
         },
         as_fonction! {
-            entier(val: Type::union_of(Type::Texte, Type::nombre())): Type::Entier => {
+            entier(val: {nombre() | Texte}): Type::Entier => {
                 Ok(match val {
                     Value::Entier(i) => Value::Entier(*i),
                     Value::Decimal(f) => Value::Entier(*f as i64),
@@ -68,7 +68,7 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
             }
         },
         as_fonction! {
-            décimal(val: Type::union_of(Type::Texte, Type::nombre())): Type::Decimal => {
+            décimal(val: {nombre() | Texte}): Type::Decimal => {
                 Ok(match val {
                     Value::Entier(i) => Value::Decimal(*i as f64),
                     Value::Decimal(f) => Value::Decimal(*f),
@@ -84,7 +84,7 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
             }
         },
         as_fonction! {
-            decimal(val: Type::union_of(Type::Texte, Type::nombre())): Type::Decimal => {
+            decimal(val: {nombre() | Texte}): Type::Decimal => {
                 Ok(match val {
                     Value::Entier(i) => Value::Decimal(*i as f64),
                     Value::Decimal(f) => Value::Decimal(*f),
@@ -100,12 +100,12 @@ pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(
             }
         },
         as_fonction! {
-            texte(val: Type::tout()): Type::Texte => {
+            texte(val: {Tout}): Type::Texte => {
                 Ok(Value::Texte(val.to_string()))
             }
         },
         as_fonction! {
-            erreur(msg: Type::tout()): Type::Type => {
+            erreur(msg: {Tout}): Type::Type => {
                 Err(RuntimeError::generic_err(msg))
             }
         },

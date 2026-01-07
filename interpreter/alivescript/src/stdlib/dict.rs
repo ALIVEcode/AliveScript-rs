@@ -26,28 +26,28 @@ as_module! {
     fn load(&self) {
         [
             as_module_fonction! {
-                taille(inst: Type::dict_tout()): Type::Entier => {
+                taille(inst: {Dict(Tout)}): Type::Entier => {
                     unpack!(Value::Dict(d) = inst);
 
                     Ok(Value::Entier(d.read().unwrap().members.len() as i64))
                 }
             },
             as_module_fonction! {
-                clés(inst: Type::dict_tout()) {
+                clés(inst: {Dict(Tout)}) {
                     unpack!(Value::Dict(d) = inst);
 
                     Ok(Value::liste(d.read().unwrap().members.keys().map(|k| Value::Texte(k.clone())).collect()))
                 }
             },
             as_module_fonction! {
-                valeurs(inst: Type::dict_tout()) {
+                valeurs(inst: {Dict(Tout)}) {
                     unpack!(Value::Dict(d) = inst);
 
                     Ok(Value::liste(d.read().unwrap().members.values().map(|v| v.clone()).collect()))
                 }
             },
             as_module_fonction! {
-                entrées(inst: Type::dict_tout()) {
+                entrées(inst: {Dict(Tout)}) {
                     unpack!(Value::Dict(d) = inst);
 
                     Ok(Value::liste(d.read().unwrap().members

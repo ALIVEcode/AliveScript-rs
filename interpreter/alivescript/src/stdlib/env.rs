@@ -56,7 +56,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                var(name: Type::Texte): Type::Texte => {
+                var(name: {Texte}): Type::Texte => {
                     Ok(
                         env::var(name.to_string())
                             .map(Value::Texte)
@@ -74,7 +74,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                changerVar(name: Type::Texte, val: Type::Texte): Type::Texte => {
+                changerVar(name: {Texte}, val: {Texte}): Type::Texte => {
                     unsafe {
                         env::set_var(name.to_string(), val.to_string());
                     }
