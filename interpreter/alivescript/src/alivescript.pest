@@ -93,13 +93,13 @@ ImplDef = {
 // "impl" | "implementation" | "implémentation"
 finImpl      = @{ "fin" ~ WHITESPACE+ ~ POP }
 Methode      =  {
-    Docs? ~ eos* ~ PUSH("methode" | "méthode") ~ (#name = Ident) ~ (#params = MethodParams) ~ ("->" ~ #return_type = TypeExpr)? ~ MethodeBody
+    Docs? ~ eos* ~ PUSH("methode" | "méthode") ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ MethodeBody
 }
-MethodParams =  {
-    "(" ~ (#inst_param = InstParam) ~ ("," ~ FnParam)* ~ ","? ~ ")"
-  | "(" ~ (FnParam ~ ",")* ~ FnParam? ~ ")"
-}
-InstParam    = @{ "inst" }
+//MethodParams =  {
+//    "(" ~ (#inst_param = InstParam) ~ ("," ~ FnParam)* ~ ","? ~ ")"
+//  | "(" ~ (FnParam ~ ",")* ~ FnParam? ~ ")"
+//}
+//InstParam    = @{ "inst" }
 MethodeBody  =  {
     (":" ~ Expr | eos ~ StmtBody? ~ finMethode)
 }

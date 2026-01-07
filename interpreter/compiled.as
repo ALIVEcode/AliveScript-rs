@@ -143,10 +143,11 @@ fin essayer
 afficher y
 
 
-fonction foo(x, y, z=afficher("z"), plusieurs autres: entier)
+fonction foo(x, y, z=afficher("CECI EST Z"), plusieurs autres: entier)
   afficher autres
   afficher "x={} y={} z={}".format([x, y, z])
   retourner x + y
 fin fonction
 
+afficher foo(1, 2)
 afficher foo(1, 2, 33)

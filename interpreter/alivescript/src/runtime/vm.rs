@@ -403,7 +403,6 @@ impl VM {
                     ip: 0,
                     base,
                 });
-                self.check_overflow()?;
                 let value = self.run_frame(self.frames.len() - 1)?;
 
                 final_fields.insert(
@@ -650,7 +649,6 @@ impl VM {
                     ip: 0,
                     base,
                 });
-                self.check_overflow()?;
 
                 return self.run_frame(curr_depth);
             }
@@ -668,7 +666,6 @@ impl VM {
                     ip: 0,
                     base,
                 });
-                self.check_overflow()?;
 
                 return self.run_frame(curr_depth);
             }
@@ -688,7 +685,6 @@ impl VM {
                     ip: 0,
                     base,
                 });
-                self.check_overflow()?;
 
                 // setting the "inst" argument as the first argument
                 self.stack.insert(base, inst_value);
@@ -735,6 +731,7 @@ impl VM {
     }
 
     fn run_frame(&mut self, until_depth: usize) -> Result<Value, RuntimeError> {
+        self.check_overflow()?;
         loop {
             let frame = self.get_frame()?;
             let fnc = &frame.closure.function;
@@ -1331,11 +1328,23 @@ impl VM {
                         .ok_or(RuntimeError::generic_err("Missing value in SET_LOCAL"))?;
 
                     if self.stack.get(idx).is_none() {
+                        let Value::Function(Function::ClosureInst(ref factory)) = val else {
+                            panic!("Dans l'instruction SET_LOCAL_DEFAULT, la valeur doit être une fonction (normalement automatiquement wrap par le compilateur)");
+                        };
+
+                        let base = self.stack.len();
+                        self.frames.push(CallFrame {
+                            closure: Arc::clone(factory),
+                            ip: 0,
+                            base,
+                        });
+                        let value = self.run_frame(self.frames.len() - 1)?;
+
                         if idx >= self.stack.len() {
                             // expand stack to fit local (for simplicity)
                             self.stack.resize(idx + 1, Value::Nul);
                         }
-                        self.stack[idx] = val;
+                        self.stack[idx] = value;
                     }
                 }
                 Opcode::SetVararg => {

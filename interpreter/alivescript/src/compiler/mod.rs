@@ -1452,17 +1452,17 @@ Si c'est intentionnel, utiliser la forme `sinon -> !`",
                 return_type.unwrap_or(Type::Tout.into()),
             )));
 
-            if params
-                .peek()
-                .is_some_and(|first| matches!(first.as_node_tag(), Some("inst_param")))
-            {
-                // consume the inst param
-                params.next();
-                let inst_idx = c
-                    .borrow_mut()
-                    .declare_local("inst", Type::Tout.into(), true);
-                c.borrow_mut().mark_initialized(inst_idx);
-            }
+            // if params
+            //     .peek()
+            //     .is_some_and(|first| matches!(first.as_node_tag(), Some("inst_param")))
+            // {
+            //     // consume the inst param
+            //     params.next();
+            //     let inst_idx = c
+            //         .borrow_mut()
+            //         .declare_local("inst", Type::Tout.into(), true);
+            //     c.borrow_mut().mark_initialized(inst_idx);
+            // }
 
             let params_info = c.parse_fn_params(params)?;
             c.borrow_mut().function.borrow_mut().params_info = params_info;
