@@ -6,10 +6,10 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
-use crate::compiler::bytecode::{instructions_to_string, BinOpcode};
+use crate::compiler::Local;
+use crate::compiler::bytecode::{BinOpcode, instructions_to_string};
 use crate::compiler::err::CompilationErrorKind;
 use crate::compiler::obj::{ArcUpvalue, Function, UpvalueSpec, Value};
-use crate::compiler::Local;
 use crate::runtime::err::RuntimeError;
 use crate::runtime::vm::VM;
 
@@ -550,6 +550,8 @@ pub enum Type {
     Dict(Box<Type>, Box<Type>),
 
     Fonction,
+    ToutModule,
+    ToutObjet,
 
     Module(String),
     Objet(String),
@@ -709,6 +711,11 @@ impl Type {
             }
 
             (Type::Objet(o1), Type::Objet(o2)) => o1 == o2,
+
+            (Type::Objet(..), Type::ToutObjet) | (Type::ToutObjet, Type::Objet(..)) => true,
+
+            (Type::Module(..), Type::ToutModule) | (Type::ToutModule, Type::Module(..)) => true,
+
             (Type::Decimal, Type::Entier) => true,
             _ => false,
         }
@@ -774,6 +781,8 @@ impl Display for Type {
             B::Type => "type".into(),
             B::Module(name) => format!("module '{}'", name.clone()),
             B::Objet(s) => s.clone(),
+            B::ToutModule => "module".into(),
+            B::ToutObjet => "objet".into(),
             B::Struct(struct_type) => struct_type.name.clone(),
         };
         write!(f, "{}", to_string)

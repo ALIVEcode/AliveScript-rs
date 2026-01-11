@@ -67,7 +67,13 @@ impl Value {
         Self::Function(Function::ClosureProto(closure.into()))
     }
 
-    pub fn dict(values: Vec<(&str, Value)>) -> Self {
+    pub fn dict(values: HashMap<String, Value>) -> Self {
+        Self::Dict(ArcDict::new(RwLock::new(ASDict {
+            members: values.clone(),
+        })))
+    }
+
+    pub fn dict_from_iter<'a>(values: impl IntoIterator<Item = (&'a str, Value)>) -> Self {
         Self::Dict(ArcDict::new(RwLock::new(ASDict {
             members: HashMap::from_iter(values.into_iter().map(|(k, v)| (k.to_string(), v))),
         })))
@@ -335,6 +341,16 @@ impl Value {
             Value::Function(f) => Ok(f),
             _ => Err(RuntimeError::type_error(format!(
                 "impossible de convertir '{}' en fonction",
+                self.get_type()
+            ))),
+        }
+    }
+
+    pub fn as_module(&self) -> Result<ArcModule, RuntimeError> {
+        match &self {
+            Value::Module(m) => Ok(Arc::clone(m)),
+            _ => Err(RuntimeError::type_error(format!(
+                "impossible de convertir '{}' en booléen",
                 self.get_type()
             ))),
         }

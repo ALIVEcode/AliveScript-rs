@@ -183,6 +183,21 @@ as_module! {
                     }
                 }
             },
+            as_module_fonction! {
+                membres(module: {ToutModule}) {
+                    let module = module.as_module()?;
+
+                    let members = Value::dict_from_iter(
+                        module
+                            .read()
+                            .unwrap()
+                            .members
+                            .iter()
+                            .map(|(name, val)| (name.as_ref(), val.value.clone()))
+                    );
+                    Ok(members)
+                }
+            },
         ]
     }
 }

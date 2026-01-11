@@ -1412,7 +1412,7 @@ impl VM {
                     // we don't truncate if self.frames is empty to allow for
                     // this vm to become a module
                     if self.frames.is_empty() {
-                        return Ok(Value::Nul);
+                        return Ok(self.pop().unwrap_or(Value::Nul));
                     }
 
                     let ret = if self.stack.len() > frame.base {

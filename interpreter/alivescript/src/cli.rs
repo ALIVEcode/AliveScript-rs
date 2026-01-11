@@ -1,9 +1,14 @@
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 use pest::Parser as _;
-use std::path::PathBuf;
+use std::{io::Write, path::PathBuf};
 
-use crate::{AlivescriptParser, Rule, bench::main_benchmark, compiler::Compiler, runtime::vm::VM};
+use crate::{
+    AlivescriptParser, Rule,
+    bench::main_benchmark,
+    compiler::{Compiler, obj::Value},
+    runtime::vm::VM,
+};
 
 // --- Utility Functions for Unimplemented Features ---
 
@@ -14,18 +19,42 @@ fn start_repl() {
     // 2. Loop: read line from stdin, compile, execute, print result.
 
     loop {
+        print!(">>> ");
+        std::io::stdout().flush();
+
         // read stdin
         let stdin = std::io::stdin();
         let mut line = String::new();
         _ = stdin.read_line(&mut line).unwrap();
-    }
 
-    // evaluate_string(
-    //     &script,
-    //     debug_infos,
-    //     run,
-    //     path.to_str().unwrap().to_string(),
-    // );
+        line = line.trim().to_string();
+
+        if matches!(line.as_ref(), "debut" | "début") {
+            loop {
+                print!("... ");
+                std::io::stdout().flush();
+                let mut new_line = String::new();
+                _ = stdin.read_line(&mut new_line).unwrap();
+
+                line.push('\n');
+                line += &new_line;
+                if new_line.trim() == "fin" {
+                    break;
+                }
+            }
+        }
+
+        if !line.is_empty() {
+            if let Some(result) = evaluate_string(
+                &format!("retourner (fn():{})()", line),
+                None,
+                true,
+                "-".to_string(),
+            ) {
+                println!("{}", result);
+            }
+        }
+    }
 }
 
 // Helper function to handle the unimplemented file execution.
@@ -40,7 +69,12 @@ fn run_file(path: &PathBuf, debug_infos: Option<&DebugInfo>, run: bool) {
 }
 
 // Helper function to handle the unimplemented string evaluation.
-fn evaluate_string(code: &str, debug_infos: Option<&DebugInfo>, run: bool, source: String) {
+fn evaluate_string(
+    code: &str,
+    debug_infos: Option<&DebugInfo>,
+    run: bool,
+    source: String,
+) -> Option<Value> {
     let result_stmts = AlivescriptParser::parse(Rule::script, &code);
 
     match result_stmts {
@@ -60,14 +94,14 @@ fn evaluate_string(code: &str, debug_infos: Option<&DebugInfo>, run: bool, sourc
                 Ok(c) => c,
                 Err(err) => {
                     eprint!("{}", err);
-                    return;
+                    return None;
                 }
             };
 
             if run {
                 let mut vm = VM::new(source);
                 match vm.run(closure) {
-                    Ok(_) => {}
+                    Ok(v) => return Some(v),
                     Err(err) => eprintln!("{}", err.to_string().bright_red().bold()),
                 }
             }
@@ -80,6 +114,8 @@ fn evaluate_string(code: &str, debug_infos: Option<&DebugInfo>, run: bool, sourc
             err.parse_attempts()
         ),
     };
+
+    return None;
 }
 
 // Helper function to handle the complex debug output.

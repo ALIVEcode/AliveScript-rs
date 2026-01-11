@@ -55,8 +55,8 @@ LireStmt    =  {
   | lire ~ declVarLire ~ ("," ~ #msg = Expr)?
 }
 declVarLire =  {
-    (Var? ~ (DeclIdent | DeclIdentList))
-  | (Const ~ (DeclIdent | DeclIdentList))
+    (Var? ~ #var = (DeclIdent | DeclIdentList))
+  | (Const ~ #var = (DeclIdent | DeclIdentList))
 }
 LireSinon   =  { "sinon" ~ eos+ ~ (#body = StmtBody)? ~ finLire }
 lire        = @{ "lire" ~ !IdentChar }

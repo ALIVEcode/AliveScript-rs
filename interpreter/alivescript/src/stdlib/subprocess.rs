@@ -139,7 +139,7 @@ as_module! {
             as_module_fonction! {
                 exec(
                     inst: {"Processus.SousProcessus"},
-                    opt: {Dict(Tout)} => Value::dict(vec![("texte", Value::Booleen(true))])
+                    opt: {Dict(Tout)} => Value::dict_from_iter(vec![("texte", Value::Booleen(true))])
                 ) {
                     unpack_native!(cmd: &ProcessHandle = inst);
 
