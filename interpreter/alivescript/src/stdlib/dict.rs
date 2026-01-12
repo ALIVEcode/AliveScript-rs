@@ -57,7 +57,7 @@ as_module! {
                 }
             },
             as_module_fonction! {
-                obtenir(inst: {Dict(Tout)}, cle: {Texte}, valeur: {Tout} => Value::Nul) {
+                obtenir(inst: {Dict(Tout)}, cle: {Texte}, valeur: {Optionnel(Tout)} => Value::Nul) {
                     unpack!(Value::Dict(d) = inst);
                     let cle = cle.as_texte()?;
 

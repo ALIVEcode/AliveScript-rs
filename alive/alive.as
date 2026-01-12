@@ -63,7 +63,7 @@ fonction init()
   config = chargerConfig(CHEMIN_CONFIG)
   source = config.source
   si non source.existe() alors
-    const parent = chemin.parent()
+    const parent = source.parent()
     parent.créerDossier()
 
     var fichierSource = source.ouvrir("écriture")
