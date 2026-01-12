@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     env, fs, hint,
-    io::{self, stdin, Write},
+    io::{self, Write, stdin},
     path::{self, Path, PathBuf},
     sync::{Arc, LazyLock, RwLock},
     usize,
@@ -11,19 +11,19 @@ use num_enum::TryFromPrimitive;
 
 use crate::{
     compiler::{
-        bytecode::{instructions_to_string, BinCompcode, BinOpcode, Opcode, JUMP_OFFSET},
+        Compiler, CompilerOptions,
+        bytecode::{BinCompcode, BinOpcode, JUMP_OFFSET, Opcode, instructions_to_string},
         obj::{ArcUpvalue, CallFrame, Function, Upvalue, UpvalueLocation, UpvalueSpec, Value},
         value::{
             ASDict, ASField, ASModule, ASObjet, ArcClosureInst, ArcClosureProto, ArcModule,
             ArcStructure, ClosureInst, ClosureProto, ModuleProto, NativeMethod, Type,
         },
-        Compiler, CompilerOptions,
     },
     runtime::{
         config::{PermissionSet, VMAction, VMConfig},
         err::RuntimeError,
     },
-    stdlib::{builtins::BUILTINS, get_stdlib, LazyModule},
+    stdlib::{LazyModule, builtins::BUILTINS, get_stdlib},
 };
 
 const VERSION: &'static str = "0.1.0";
@@ -1329,7 +1329,9 @@ impl VM {
 
                     if self.stack.get(idx).is_none() {
                         let Value::Function(Function::ClosureInst(ref factory)) = val else {
-                            panic!("Dans l'instruction SET_LOCAL_DEFAULT, la valeur doit être une fonction (normalement automatiquement wrap par le compilateur)");
+                            panic!(
+                                "Dans l'instruction SET_LOCAL_DEFAULT, la valeur doit être une fonction (normalement automatiquement wrap par le compilateur)"
+                            );
                         };
 
                         let base = self.stack.len();
@@ -1412,7 +1414,7 @@ impl VM {
                     // we don't truncate if self.frames is empty to allow for
                     // this vm to become a module
                     if self.frames.is_empty() {
-                        return Ok(self.pop().unwrap_or(Value::Nul));
+                        return Ok(self.stack.last().cloned().unwrap_or(Value::Nul));
                     }
 
                     let ret = if self.stack.len() > frame.base {

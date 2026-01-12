@@ -28,8 +28,7 @@ const CHEMIN_CONFIG = Chemin.créer("config.as")
 const VERSION_ALIVESCRIPT = "0.1.0"
 
 fonction chargerConfig(chemin: texte)
-    const mod = Module.configurer(chemin, {
-      modulesPermis: ["Projet"],
+    const mod = Module.configurer(chemin, { modulesPermis: ["Projet"],
       actionsPermises: ["écrireSortieStd"],
     }).charger()
 
@@ -128,7 +127,7 @@ fonction gérerDepUrl(dep: dict)
       sinon -> !
     fin quand
 
-    out, err = p.execAvecSortie()
+    [out, err] = p.execAvecSortie()
     si err alors écrire "> " + err
     si out alors 
       écrire "  > " + out
@@ -137,7 +136,7 @@ fonction gérerDepUrl(dep: dict)
     const exe = Env.cheminExec()
     const alive = args[1]
     const p = Processus.créer(exe, [alive, "installer"], dossierModule)
-    out, err = p.execAvecSortie()
+    [out, err] = p.execAvecSortie()
     si err alors écrire err
     si out alors 
       afficher out.diviser("\n").map(fn(ln): "  " + ln).joindre("\n")
@@ -162,7 +161,7 @@ fonction installer()
     pour chaque dep dans deps 
       quand dep 
         est dict -> gérerDepUrl(dep)
-        sinon -> erreur "Chaque dépendances doit être un dict avec les clés \"nom\" et \"url\""
+        sinon -> erreur("Chaque dépendances doit être un dict avec les clés \"nom\" et \"url\"")
       fin quand
     fin pour
   fin si
@@ -217,7 +216,7 @@ fonction départ()
     vaut "exec" -> exec()
     vaut "installer", "i" -> installer()
     vaut "ajouter", "a" -> ajouter()
-    sinon avec autre -> erreur "Commande inconnue: {}".format([autre])
+    sinon avec autre -> erreur("Commande inconnue: {}".format([autre]))
   fin quand
 fin fonction
 
