@@ -71,7 +71,8 @@ UtiliserMembers = { "{" ~ ((#member = Ident) ~ ",")* ~ (#member = Ident)? ~ "}" 
 TypeStmt = { "type" ~ typeTerm ~ Assign ~ TypeExpr }
 
 FnDef    =  {
-    Docs? ~ eos* ~ PUSH(fonction) ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ ((":" | "=") ~ (#body = Expr) ~ DROP | eos ~ (#body = StmtBody)? ~ finPop)
+    Docs? ~ eos* ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ "=" ~ (#body = Expr)
+  | Docs? ~ eos* ~ PUSH(fonction) ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ ((":" | "=") ~ (#body = Expr) ~ DROP | eos ~ (#body = StmtBody)? ~ finPop)
 }
 fonction = @{ ("fonction" | "fn") ~ !IdentChar }
 
@@ -91,19 +92,19 @@ ImplDef = {
     Docs? ~ eos* ~ PUSH("implementation" | "implémentation" | "impl") ~ (#name = Ident) ~ eos+ ~ (Methode ~ eos+)* ~ finImpl
 }
 // "impl" | "implementation" | "implémentation"
-finImpl      = @{ "fin" ~ WHITESPACE+ ~ POP }
-Methode      =  {
+finImpl = @{ "fin" ~ WHITESPACE+ ~ POP }
+Methode =  {
     Docs? ~ eos* ~ PUSH("methode" | "méthode") ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ MethodeBody
 }
-//MethodParams =  {
-//    "(" ~ (#inst_param = InstParam) ~ ("," ~ FnParam)* ~ ","? ~ ")"
-//  | "(" ~ (FnParam ~ ",")* ~ FnParam? ~ ")"
-//}
-//InstParam    = @{ "inst" }
-MethodeBody  =  {
+// MethodParams =  {
+// "(" ~ (#inst_param = InstParam) ~ ("," ~ FnParam)* ~ ","? ~ ")"
+// | "(" ~ (FnParam ~ ",")* ~ FnParam? ~ ")"
+// }
+// InstParam    = @{ "inst" }
+MethodeBody =  {
     (":" ~ Expr | eos ~ StmtBody? ~ finMethode)
 }
-finMethode   = @{ "fin" ~ WHITESPACE+ ~ POP }
+finMethode  = @{ "fin" ~ WHITESPACE+ ~ POP }
 // "methode" | "méthode"
 
 SiStmt = {
@@ -239,14 +240,14 @@ DeclIdentList = {
 RetournerStmt =  { retourner ~ (Expr ~ ",")* ~ Expr? }
 retourner     = @{ "retourner" ~ !IdentChar }
 
-FnParams    = {
+FnParams    =  {
     "(" ~ (FnParam ~ ",")* ~ (FnRestParam | FnParam)? ~ ")"
 }
-FnRestParam = {
+FnRestParam =  {
     plusieurs ~ (#p_name = Ident) ~ (":" ~ #p_type = TypeExpr)?
 }
-plusieurs   = @{"plusieurs" ~ !IdentChar}
-FnParam     = {
+plusieurs   = @{ "plusieurs" ~ !IdentChar }
+FnParam     =  {
     (#p_name = Ident) ~ (":" ~ #p_type = TypeExpr)? ~ (Assign ~ #p_default = Expr)?
 }
 
