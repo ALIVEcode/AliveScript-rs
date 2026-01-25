@@ -34,7 +34,7 @@ pub struct VM {
     pub stack: Vec<Value>,
     frames: Vec<CallFrame>,
     open_upvalues: Vec<ArcUpvalue>, // track upvalues that point to stack slots
-    global_table: HashMap<String, Value>,
+    global_table: HashMap<String, ASField>,
     exported_globals: HashSet<String>,
     loaded_modules: HashMap<String, ArcModule>,
     preloaded_modules: HashMap<String, Arc<dyn LazyModule>>,
@@ -92,6 +92,10 @@ impl VM {
         self.preloaded_modules.insert(name.to_string(), module);
     }
 
+    pub fn get_ip(&self) -> Result<usize, RuntimeError> {
+        Ok(self.get_frame()?.ip)
+    }
+
     // pub fn insert_module(&mut self, (name, module): (impl ToString, Arc<dyn LazyModule>)) {
     //     self.preloaded_modules.insert(name.to_string(), module);
     // }
@@ -100,17 +104,38 @@ impl VM {
         format!("{:#?}", self.stack)
     }
 
-    pub fn insert_global(&mut self, (name, val): (impl ToString, Value)) -> Option<Value> {
-        self.global_table.insert(name.to_string(), val)
+    pub fn insert_global(&mut self, (name, field): (impl ToString, ASField)) -> Option<ASField> {
+        self.global_table
+            .insert(name.to_string(), field)
     }
 
-    pub fn get_global(&mut self, name: &str) -> Option<&Value> {
+    pub fn insert_global_value(&mut self, (name, val): (impl ToString, Value)) -> Option<ASField> {
+        self.global_table
+            .insert(name.to_string(), ASField::new(false, val.get_type(), val))
+    }
+
+    pub fn get_globals(&self) -> &HashMap<String, ASField> {
+        &self.global_table
+    }
+
+    pub fn get_global(&mut self, name: &str) -> Option<&ASField> {
         self.global_table.get(name)
     }
 
-    pub fn insert_exported_global(&mut self, (name, val): (impl ToString, Value)) -> Option<Value> {
+    pub fn insert_exported_global(
+        &mut self,
+        (name, field): (impl ToString, ASField),
+    ) -> Option<ASField> {
         self.exported_globals.insert(name.to_string());
-        self.global_table.insert(name.to_string(), val)
+        self.insert_global((name, field))
+    }
+
+    pub fn insert_exported_global_value(
+        &mut self,
+        (name, val): (impl ToString, Value),
+    ) -> Option<ASField> {
+        self.exported_globals.insert(name.to_string());
+        self.insert_global_value((name, val))
     }
 
     fn push(&mut self, v: Value) {
@@ -126,7 +151,13 @@ impl VM {
         &self.stack[idx]
     }
 
-    fn get_frame(&mut self) -> Result<&mut CallFrame, RuntimeError> {
+    fn get_frame(&self) -> Result<&CallFrame, RuntimeError> {
+        self.frames
+            .last()
+            .ok_or(RuntimeError::generic_err("no frame"))
+    }
+
+    fn get_frame_mut(&mut self) -> Result<&mut CallFrame, RuntimeError> {
         self.frames
             .last_mut()
             .ok_or(RuntimeError::generic_err("no frame"))
@@ -299,7 +330,7 @@ impl VM {
             let value = other_vm.global_table[global_name].clone();
             members.insert(
                 global_name.to_string(),
-                ASField::new(true, Type::tout().into(), value),
+                value,
             );
         }
 
@@ -347,7 +378,7 @@ impl VM {
             let value = other_vm.global_table[global_name].clone();
             members.insert(
                 global_name.to_string(),
-                ASField::new(true, Type::tout().into(), value),
+                value,
             );
         }
 
@@ -360,6 +391,22 @@ impl VM {
     fn load_module(&mut self, module_name: &str) -> Result<Value, RuntimeError> {
         let module = self.lookup_module(module_name, self.config.clone())?;
         Ok(Value::Module(module))
+    }
+
+    pub fn eval(&mut self, code: &str) -> Result<Value, RuntimeError> {
+        let compiler = Compiler::new(&code, String::new());
+        let module_closure = compiler
+            .parse_and_compile_to_module()
+            .map_err(|err| RuntimeError::module_load_error("eval", err))?;
+
+        let result = self.run(module_closure.load_fn)?;
+
+        for (member_name, member) in module_closure.exported_members {
+            let value = self.stack[member.value_idx].clone();
+            self.insert_global_value((member_name, value));
+        }
+
+        Ok(result)
     }
 
     fn finish_init_struct(
@@ -429,7 +476,7 @@ impl VM {
         &mut self,
         proto_closure: ArcClosureProto,
     ) -> Result<ArcClosureInst, RuntimeError> {
-        let frame = self.get_frame()?;
+        let frame = self.get_frame_mut()?;
         let function = proto_closure.function.clone();
         // build real closure and wire upvalues according to function.upvalue_specs
         let mut closure_upvalues: Vec<ArcUpvalue> = Vec::with_capacity(function.upvalue_count);
@@ -466,7 +513,7 @@ impl VM {
                 UpvalueSpec::Upvalue(parent_index) => {
                     // inherit parent's upvalue: parent's closure is frame.closure
                     let parent_uv = self
-                        .get_frame()
+                        .get_frame_mut()
                         .unwrap()
                         .closure
                         .upvalues
@@ -733,7 +780,7 @@ impl VM {
     fn run_frame(&mut self, until_depth: usize) -> Result<Value, RuntimeError> {
         self.check_overflow()?;
         loop {
-            let frame = self.get_frame()?;
+            let frame = self.get_frame_mut()?;
             let fnc = &frame.closure.function;
             if frame.ip >= fnc.code.len() {
                 return Err(RuntimeError::generic_err("IP out of range"));
@@ -1376,7 +1423,7 @@ impl VM {
                         RuntimeError::generic_err(format!("Variable inconnue {:?}", name))
                     })?;
 
-                    self.push(v);
+                    self.push(v.value);
                 }
                 Opcode::SetGlobal => {
                     let slot = fnc.code[frame.ip] as usize;
@@ -1391,7 +1438,10 @@ impl VM {
                         .pop()
                         .ok_or(RuntimeError::generic_err("Missing value in SET_LOCAL"))?;
 
-                    self.global_table.insert(name, val);
+                    if self.get_global(&name).is_some_and(|g| g.is_const) {
+                        return Err(RuntimeError::assign_to_const(name));
+                    }
+                    self.insert_global_value((name, val));
                 }
 
                 Opcode::Call => {
@@ -1547,7 +1597,7 @@ impl VM {
                     let val = self.pop().expect("A value");
 
                     if !val.to_bool() {
-                        self.get_frame().unwrap().ip = (ip as i16 + dist) as usize;
+                        self.get_frame_mut().unwrap().ip = (ip as i16 + dist) as usize;
                     }
                 }
                 Opcode::JumpTest => {
@@ -1562,7 +1612,7 @@ impl VM {
                     let val = self.peek(0);
 
                     if val.to_bool() == cond {
-                        self.get_frame().unwrap().ip = (ip as i16 + dist) as usize;
+                        self.get_frame_mut().unwrap().ip = (ip as i16 + dist) as usize;
                     } else {
                         self.pop();
                     }
@@ -1664,7 +1714,7 @@ impl VM {
                     if result.is_err() {
                         self.stack.truncate(len);
                         // if the function doesn't work -> go to "sinon"
-                        let frame = self.get_frame().unwrap();
+                        let frame = self.get_frame_mut().unwrap();
                         frame.ip = (frame.ip as i16 + lire_sinon_dist) as usize;
                     }
                 }
@@ -1695,7 +1745,7 @@ impl VM {
                             self.stack.truncate(len);
                             self.frames.truncate(len_frames);
                             // if the function doesn't work -> go to "sinon"
-                            let frame = self.get_frame().unwrap();
+                            let frame = self.get_frame_mut().unwrap();
                             frame.ip = (frame.ip as i16 + catch_dist) as usize;
                         }
                         Ok(val) => {
@@ -1772,7 +1822,7 @@ impl VM {
                     if let Some(next_state) = next_state {
                         self.push(next_state);
                         // skip the jump
-                        self.get_frame().unwrap().ip += 2;
+                        self.get_frame_mut().unwrap().ip += 2;
                     } else if is_first {
                         for _ in 0..nb_vars {
                             self.push(Value::Nul);

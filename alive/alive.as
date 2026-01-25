@@ -95,7 +95,8 @@ fin fonction
 fonction exec()
   # trouver config.as
   si non CHEMIN_CONFIG.existe() alors erreur("Impossible de trouver '{}'.".format([CHEMIN_CONFIG]))
-  config = essayer chargerConfig(CHEMIN_CONFIG) sinon 
+
+  const config = essayer chargerConfig(CHEMIN_CONFIG) sinon 
     erreur "Impossible de charger le fichier de configuration"
   fin essayer
 

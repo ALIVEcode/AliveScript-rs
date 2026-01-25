@@ -71,7 +71,7 @@ UtiliserMembers = { "{" ~ ((#member = Ident) ~ ",")* ~ (#member = Ident)? ~ "}" 
 TypeStmt = { "type" ~ typeTerm ~ Assign ~ TypeExpr }
 
 FnDef    =  {
-    Docs? ~ eos* ~ PUSH(fonction) ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ (":" ~ (#body = Expr) ~ DROP | eos ~ (#body = StmtBody)? ~ finPop)
+    Docs? ~ eos* ~ PUSH(fonction) ~ (#name = Ident) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ ((":" | "=") ~ (#body = Expr) ~ DROP | eos ~ (#body = StmtBody)? ~ finPop)
 }
 fonction = @{ ("fonction" | "fn") ~ !IdentChar }
 
@@ -355,7 +355,7 @@ StructInitField = { Ident ~ ":" ~ Expr }
 DebutBloc = { ("debut" | "début") ~ eos+ ~ (!"fin" ~ stmtBloc ~ eos+)* ~ "fin" }
 
 FnExpr = {
-    PUSH(fonction) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ #body = (":" ~ Expr ~ DROP | eos ~ StmtBody ~ "fin" ~ POP)
+    PUSH(fonction) ~ (#params = FnParams) ~ ("->" ~ #return_type = TypeExpr)? ~ #body = ((":" | "=") ~ Expr ~ DROP | eos ~ StmtBody ~ "fin" ~ POP)
 }
 
 EssayerExpr =  { essayer ~ (#expr = Expr) ~ ("sinon" ~ ((#essayer_body = Expr) | eos ~ (#essayer_body = StmtBody) ~ finEssayer))? }

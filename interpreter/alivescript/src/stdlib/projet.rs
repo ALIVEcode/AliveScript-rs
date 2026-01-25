@@ -39,7 +39,7 @@ as_module! {
         [
             as_module_fonction! {
                 configurer[vm](config: {Dict(Tout)}) {
-                    vm.insert_exported_global(("__AS_PROJET", config));
+                    vm.insert_exported_global_value(("__AS_PROJET", config));
                     Ok(Value::Nul)
                 }
             },
@@ -50,7 +50,7 @@ as_module! {
                             format!("Le projet doit être configuré avant de pouvoir ajouter des dépendances")
                         ))?;
 
-                    let proj = proj.as_dict()?;
+                    let proj = proj.value.as_dict()?;
 
                     proj.write().unwrap().members
                         .entry(String::from("dépendances"))

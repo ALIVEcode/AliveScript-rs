@@ -3,10 +3,10 @@ use crate::runtime::vm::VM;
 use std::{collections::HashMap, sync::LazyLock};
 
 use crate::compiler::obj::Value;
-use crate::compiler::value::Type;
+use crate::compiler::value::{ASField, Type};
 use crate::runtime::err::RuntimeError;
 
-pub const BUILTINS: LazyLock<HashMap<String, Value>> = std::sync::LazyLock::new(|| {
+pub const BUILTINS: LazyLock<HashMap<String, ASField>> = std::sync::LazyLock::new(|| {
     HashMap::from_iter([
         as_fonction! {
             afficher(*varargs): Type::Nul => {

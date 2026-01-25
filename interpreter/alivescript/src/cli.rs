@@ -1,12 +1,17 @@
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize;
 use pest::Parser as _;
-use std::{io::Write, path::PathBuf};
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::PathBuf,
+};
+use uuid::timestamp;
 
 use crate::{
     AlivescriptParser, Rule,
     bench::main_benchmark,
-    compiler::{Compiler, obj::Value},
+    compiler::{Compiler, obj::Value, value::ArcModule},
     runtime::vm::VM,
 };
 
@@ -18,8 +23,9 @@ fn start_repl() {
     // 1. Initialize the VM state (e.g., globals, standard library).
     // 2. Loop: read line from stdin, compile, execute, print result.
 
+    let mut vm = VM::new(String::new());
     loop {
-        print!(">>> ");
+        print!("alive> ");
         std::io::stdout().flush();
 
         // read stdin
@@ -44,17 +50,89 @@ fn start_repl() {
             }
         }
 
+        while line.trim().ends_with('\\') {
+            line = line.trim_end().to_string();
+            line.pop();
+            print!("... ");
+            std::io::stdout().flush();
+            let mut new_line = String::new();
+            _ = stdin.read_line(&mut new_line).unwrap();
+
+            line.push('\n');
+            line += &new_line;
+        }
+
         if !line.is_empty() {
-            if let Some(result) = evaluate_string(
-                &format!("retourner (fn():{})()", line),
-                None,
-                true,
-                "-".to_string(),
-            ) {
+            // lines += &format!("\n{line}");
+            if let Some(result) =
+                evaluate_string_from_vm(&line, None, true, "-".to_string(), &mut vm)
+            {
+                // for (member_name, member_value) in &result.read().unwrap().members {
+                //     vm.insert_global((member_name, member_value.value.clone()));
+                // }
                 println!("{}", result);
             }
         }
     }
+}
+
+fn evaluate_string_from_vm(
+    code: &str,
+    debug_infos: Option<&DebugInfo>,
+    run: bool,
+    source: String,
+    base_vm: &mut VM,
+) -> Option<Value> {
+    let result_stmts = AlivescriptParser::parse(Rule::script, &code);
+
+    match result_stmts {
+        Ok(stmts) => {
+            if debug_infos.is_some_and(|di| di.show_tokens()) {
+                println!("{:#?}", stmts);
+            }
+
+            let compiler = Compiler::new(&code, source.clone());
+            let closure = if debug_infos.is_some_and(|di| di.show_bytecode()) {
+                compiler.compile_debug(stmts)
+            } else {
+                compiler.compile(stmts)
+            };
+
+            let closure = match closure {
+                Ok(c) => c,
+                Err(err) => {
+                    eprint!("{}", err);
+                    return None;
+                }
+            };
+
+            if run {
+                let mut vm = VM::new(source);
+                for (member_name, member_value) in base_vm.get_globals() {
+                    vm.insert_exported_global((member_name, member_value.clone()));
+                }
+                // let tmp = std::env::temp_dir();
+                // let file = tmp.join(format!("repl-{}.as", uuid::Uuid::new_v4()));
+                // let mut f = File::create_new(&file).unwrap();
+                // writeln!(f, "{}", code);
+                match base_vm.eval(code) {
+                    Ok(v) => {
+                        return Some(v);
+                    }
+                    Err(err) => eprintln!("{}", err.to_string().bright_red().bold()),
+                }
+            }
+            // println!("{:#?}", vm.stack);
+            // println!("{:?}", result);
+        }
+        Err(err) => panic!(
+            "ErreurSyntaxe: {}\n{:#?}",
+            err.to_string(),
+            err.parse_attempts()
+        ),
+    };
+
+    return None;
 }
 
 // Helper function to handle the unimplemented file execution.

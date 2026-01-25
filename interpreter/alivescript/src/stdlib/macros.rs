@@ -79,7 +79,7 @@ macro_rules! as_fonction {
          $($($prefix)*)?;
          (
             String::from(std::stringify!($name)),
-            $crate::compiler::obj::Value::Function($crate::compiler::obj::Function::NativeFunction($crate::compiler::value::NativeFunction {
+            $crate::compiler::value::ASField::new(true, $crate::compiler::value::Type::Fonction, $crate::compiler::obj::Value::Function($crate::compiler::obj::Function::NativeFunction($crate::compiler::value::NativeFunction {
                 name: std::sync::Arc::new(String::from(std::stringify!($name))),
                 desc: std::sync::Arc::new($crate::opt_value!($($desc.to_string())?)),
                 func: std::sync::Arc::new(move |_vm: &mut $crate::runtime::vm::VM, args: std::vec::Vec<Value>| {
@@ -89,7 +89,7 @@ macro_rules! as_fonction {
                     $body
                 }),
                 // $return_type,
-            }))
+            })))
          )
      }};
     ($({$($prefix:stmt)*})? $($desc:literal;)? $name:ident $([$vm:ident])? ($($param_name:ident : {$($param_type:tt)+} $(=> $default:expr)?),+ $(, $(*$varargs:ident)?)?)
@@ -97,7 +97,7 @@ macro_rules! as_fonction {
          $($($prefix)*)?;
          (
             String::from(std::stringify!($name)),
-            $crate::compiler::obj::Value::Function($crate::compiler::obj::Function::NativeFunction($crate::compiler::value::NativeFunction {
+            $crate::compiler::value::ASField::new(true, $crate::compiler::value::Type::Fonction, $crate::compiler::obj::Value::Function($crate::compiler::obj::Function::NativeFunction($crate::compiler::value::NativeFunction {
                 name: std::sync::Arc::new(String::from(std::stringify!($name))),
                 desc: std::sync::Arc::new($crate::opt_value!($($desc.to_string())?)),
                 func: std::sync::Arc::new(move |_vm: &mut $crate::runtime::vm::VM, args: std::vec::Vec<Value>| {
@@ -121,7 +121,7 @@ macro_rules! as_fonction {
                     $body
                 }),
                 // $return_type,
-            }))
+            })))
          )
      }};
 }

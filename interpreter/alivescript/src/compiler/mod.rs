@@ -244,6 +244,26 @@ impl<'a> Compiler<'a> {
         self.compile_debug(stmts)
     }
 
+    pub fn compile_repl(self, pairs: Pairs<'a, Rule>) -> Result<ClosureProto, CompilationError> {
+        let source = self.source_name.clone();
+
+        let mut rc_self = Rc::new(RefCell::new(self));
+
+        rc_self
+            .build_ast_stmts(pairs)
+            .map_err(|err| err.set_source_if_none(source))?;
+
+        rc_self.borrow_mut().code.pop_if_op_is(Opcode::Pop);
+
+        rc_self.borrow_mut().code.emit_return();
+
+        rc_self.borrow_mut().finish();
+
+        let x = ClosureProto::new(Arc::new(rc_self.borrow().function.borrow().clone()));
+
+        Ok(x)
+    }
+
     pub fn compile(self, pairs: Pairs<'a, Rule>) -> Result<ClosureProto, CompilationError> {
         let source = self.source_name.clone();
 
