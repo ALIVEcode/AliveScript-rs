@@ -191,10 +191,10 @@ fonction ajouter()
   si deps != nul alors
     pour chaque dep dans deps 
       si dep.nom == nom alors 
-        erreur "Une autre débendance a déjà le nom '{}' (url='{}')".format([nom, dep.url])
+        erreur "Une autre dépendance a déjà le nom '{}' (url='{}')".format([nom, dep.url])
       fin si
       si dep.url == url alors 
-        erreur "Cette débendance est déjà dans le projet '{}' (nom='{}')".format([nom, dep.url])
+        erreur "Cette dépendance est déjà dans le projet '{}' (nom='{}')".format([nom, dep.url])
       fin si
     fin pour
   fin si

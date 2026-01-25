@@ -1115,10 +1115,10 @@ impl<'a> Parser<'a> for Rc<RefCell<Compiler<'a>>> {
                 self.borrow_mut().code.emit_set_local(idx);
                 self.borrow_mut().code.emit_get_local(idx);
 
-                next = cond.next().unwrap().into_inner().next().unwrap();
+                next = cond.next().unwrap();
             }
 
-            let guard = next;
+            let guard = next.into_inner().next().unwrap();
             self.parse_top_expr(guard)?;
             to_next_branch_jump.push(self.borrow_mut().push_jump_if_false());
 
