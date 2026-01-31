@@ -39,6 +39,7 @@ mod math;
 mod test;
 mod random;
 mod debug;
+mod toml;
 
 pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
     let mut stdlib: Vec<Arc<dyn LazyModule>> = Vec::new();
@@ -58,6 +59,7 @@ pub fn get_stdlib() -> HashMap<String, Arc<dyn LazyModule>> {
     stdlib.push(Arc::new(projet::Projet {}));
     stdlib.push(Arc::new(path::Chemin {}));
     stdlib.push(Arc::new(math::Math {}));
+    stdlib.push(Arc::new(toml::Toml {}));
 
     HashMap::from_iter(
         stdlib

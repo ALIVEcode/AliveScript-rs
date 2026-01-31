@@ -24,6 +24,7 @@ pub enum Value {
     Decimal(f64),
     Booleen(bool),
     Nul,
+    Vide,
     Texte(String),
     Function(Function),
     Liste(ArcListe),
@@ -95,6 +96,7 @@ impl Value {
             V::Decimal(..) => Type::Decimal,
             V::Texte(..) => Type::Texte,
             V::Nul => Type::Nul,
+            V::Vide => Type::Nul,
             V::Booleen(..) => Type::Booleen,
             V::Liste(lst) => Type::Liste(Box::new(
                 lst.read()
@@ -389,6 +391,7 @@ impl Value {
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let to_str = match self {
+            Value::Vide => String::new(),
             Value::Entier(i) => i.to_string(),
             Value::Decimal(d) => format!("{:?}", d),
             Value::Texte(s) => s.clone(),

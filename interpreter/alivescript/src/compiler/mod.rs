@@ -8,16 +8,17 @@ use std::{
 };
 
 use pest::{
+    Parser as PestParser, Span,
     error::{Error as PestError, ErrorVariant as PestErrorVariant},
     iterators::{Pair, Pairs},
-    Parser as PestParser, Span,
 };
 
 use crate::{
+    AlivescriptParser, Rule,
     compiler::{
         bytecode::{
-            instructions_to_string, instructions_to_string_debug, BinCompcode, BinLogiccode,
-            BinOpcode, Instructions, Opcode, UnaryOpcode, JUMP_OFFSET,
+            BinCompcode, BinLogiccode, BinOpcode, Instructions, JUMP_OFFSET, Opcode, UnaryOpcode,
+            instructions_to_string, instructions_to_string_debug,
         },
         err::{CompilationError, CompilationErrorKind},
         obj::{Function, UpvalueSpec, Value},
@@ -28,7 +29,6 @@ use crate::{
         },
     },
     utils::Invert,
-    AlivescriptParser, Rule,
 };
 
 mod bitmasks;
@@ -191,9 +191,12 @@ impl<'a> Compiler<'a> {
             .build_ast_stmts(pairs)
             .map_err(|err| err.set_source_if_none(source.clone()))?;
 
-        rc_self.borrow_mut().code.pop_if_op_is(Opcode::Pop);
-
-        rc_self.borrow_mut().code.emit_return();
+        if rc_self.borrow_mut().code.last_op_is(Opcode::Pop) {
+            rc_self.borrow_mut().code.pop_if_op_is(Opcode::Pop);
+            rc_self.borrow_mut().code.emit_return();
+        } else {
+            rc_self.borrow_mut().code.emit_return0();
+        }
 
         rc_self.borrow_mut().finish();
 
@@ -1399,9 +1402,9 @@ Si c'est intentionnel, utiliser la forme `sinon -> !`",
                 static_type = self.parse_type(static_type_pair.into_inner())?;
             }
 
-            let var_idx = self
-                .borrow_mut()
-                .declare_local(name.as_str(), static_type.clone(), false);
+            let var_idx =
+                self.borrow_mut()
+                    .declare_local(name.as_str(), static_type.clone(), false);
 
             if is_rest_param {
                 self.borrow_mut().code.emit_set_vararg(var_idx);

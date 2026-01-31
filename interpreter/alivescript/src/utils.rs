@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 pub trait Invert<T, E> {
     type Output;
     fn invert(self) -> Self::Output;
@@ -58,7 +60,10 @@ pub trait Apply<T> {
 impl<T> Apply<T> for T {
     fn apply<F>(self, func: F) -> T
     where
-        F: FnOnce(T) -> T {
+        F: FnOnce(T) -> T,
+    {
         func(self)
     }
 }
+
+pub type ROString = Arc<str>;

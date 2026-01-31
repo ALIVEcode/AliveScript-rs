@@ -12,7 +12,10 @@ use crate::{
     AlivescriptParser, Rule,
     bench::main_benchmark,
     compiler::{Compiler, obj::Value, value::ArcModule},
-    runtime::vm::VM,
+    runtime::{
+        config::{VMAction, VMConfig, VMConfigBuilder},
+        vm::VM,
+    },
 };
 
 // --- Utility Functions for Unimplemented Features ---
@@ -23,7 +26,13 @@ fn start_repl() {
     // 1. Initialize the VM state (e.g., globals, standard library).
     // 2. Loop: read line from stdin, compile, execute, print result.
 
-    let mut vm = VM::new(String::new());
+    let mut vm = VM::new_with_config(
+        String::new(),
+        VMConfigBuilder::default()
+            .exclude_permissions(vec![])
+            .build()
+            .unwrap(),
+    );
     loop {
         print!("alive> ");
         std::io::stdout().flush();
@@ -70,7 +79,7 @@ fn start_repl() {
                 // for (member_name, member_value) in &result.read().unwrap().members {
                 //     vm.insert_global((member_name, member_value.value.clone()));
                 // }
-                println!("{}", result);
+                println!("{}", result.repr());
             }
         }
     }

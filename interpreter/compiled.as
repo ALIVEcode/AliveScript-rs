@@ -59,7 +59,7 @@ afficher x
 
 afficher tailleDe(ls)
 
-foo = fonction(): "x = " + x
+foo = fonction() = "x = " + x
 
 afficher foo()
 

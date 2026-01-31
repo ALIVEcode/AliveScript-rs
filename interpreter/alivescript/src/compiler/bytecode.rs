@@ -4,7 +4,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use thiserror::Error;
 
 use crate::{
-    compiler::{bitmasks::BitArray, utils::format_table, Compiler},
+    compiler::{Compiler, bitmasks::BitArray, utils::format_table},
     utils::{MapIf, WrapWhere},
 };
 
@@ -105,6 +105,7 @@ pub enum Opcode {
     /// 3. else -> pops the top of the stack
     JumpTest,
 
+    Return0,
     Return,
 
     BinOp,
@@ -229,6 +230,7 @@ impl Opcode {
             Opcode::Call => "CALL",
             Opcode::SetVararg => "SET_VARARG",
             Opcode::Return => "RETURN",
+            Opcode::Return0 => "RETURN0",
             Opcode::BinOp => "BINOP",
             Opcode::BinComp => "BINCOMP",
             Opcode::Range => "RANGE",
@@ -288,7 +290,7 @@ impl Opcode {
             Opcode::Close => 1,
             Opcode::Call => 1,
 
-            Opcode::Return => 0,
+            Opcode::Return | Opcode::Return0 => 0,
 
             Opcode::BinOp | Opcode::BinComp => 1,
             Opcode::Range | Opcode::RangeEq => 1,
@@ -735,6 +737,10 @@ impl Instructions {
 
     pub fn emit_return(&mut self) {
         self.emit_opcode(Opcode::Return);
+    }
+
+    pub fn emit_return0(&mut self) {
+        self.emit_opcode(Opcode::Return0);
     }
 
     pub fn emit_dup(&mut self) {

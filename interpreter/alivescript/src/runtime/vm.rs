@@ -105,8 +105,7 @@ impl VM {
     }
 
     pub fn insert_global(&mut self, (name, field): (impl ToString, ASField)) -> Option<ASField> {
-        self.global_table
-            .insert(name.to_string(), field)
+        self.global_table.insert(name.to_string(), field)
     }
 
     pub fn insert_global_value(&mut self, (name, val): (impl ToString, Value)) -> Option<ASField> {
@@ -250,7 +249,7 @@ impl VM {
         } else {
             let std_modules = env::var("ALIVESCRIPT_LIB").unwrap_or_else(|_| {
                 let home = std::env::home_dir().unwrap();
-                format!("{}/.local/share/alivescript{}/lib", home.display(), VERSION)
+                format!("{}/.local/share/alivescript{}/stdlib", home.display(), VERSION)
             });
 
             let search_dirs = env::var("ALIVESCRIPT_MODULES").unwrap_or_default();
@@ -328,10 +327,7 @@ impl VM {
         }
         for global_name in other_vm.exported_globals.iter() {
             let value = other_vm.global_table[global_name].clone();
-            members.insert(
-                global_name.to_string(),
-                value,
-            );
+            members.insert(global_name.to_string(), value);
         }
 
         let module = Arc::new(RwLock::new(ASModule {
@@ -376,10 +372,7 @@ impl VM {
         }
         for global_name in other_vm.exported_globals.iter() {
             let value = other_vm.global_table[global_name].clone();
-            members.insert(
-                global_name.to_string(),
-                value,
-            );
+            members.insert(global_name.to_string(), value);
         }
 
         Ok(Arc::new(RwLock::new(ASModule {
@@ -394,6 +387,18 @@ impl VM {
     }
 
     pub fn eval(&mut self, code: &str) -> Result<Value, RuntimeError> {
+        if self
+            .config
+            .permissions
+            .as_ref()
+            .is_none_or(|permission_set| !permission_set.includes(&VMAction::Eval))
+        {
+            return Err(RuntimeError::permission_error(
+                "éval",
+                "Ce programme n'a pas la permission d'évaluer du code arbitraire.",
+            ));
+        }
+
         let compiler = Compiler::new(&code, String::new());
         let module_closure = compiler
             .parse_and_compile_to_module()
@@ -1453,7 +1458,7 @@ impl VM {
 
                     self.call_fn(nbargs, func)?;
                 }
-                Opcode::Return => {
+                Opcode::Return | Opcode::Return0 => {
                     let frame = self
                         .frames
                         .pop()
@@ -1464,10 +1469,15 @@ impl VM {
                     // we don't truncate if self.frames is empty to allow for
                     // this vm to become a module
                     if self.frames.is_empty() {
+                        if op == Opcode::Return0 {
+                            return Ok(Value::Vide);
+                        }
                         return Ok(self.stack.last().cloned().unwrap_or(Value::Nul));
                     }
 
-                    let ret = if self.stack.len() > frame.base {
+                    let ret = if op == Opcode::Return0 {
+                        Value::Vide
+                    } else if self.stack.len() > frame.base {
                         self.pop().unwrap_or(Value::Nul)
                     } else {
                         Value::Nul
