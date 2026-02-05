@@ -37,6 +37,21 @@ as_module! {
                 }
             },
             as_module_fonction! {
+                crier(inst: {Texte}) {
+                    Ok(Value::Texte(inst.as_texte()?.to_uppercase()))
+                }
+            },
+            as_module_fonction! {
+                enMajuscule(inst: {Texte}) {
+                    Ok(Value::Texte(inst.as_texte()?.to_uppercase()))
+                }
+            },
+            as_module_fonction! {
+                enMinuscule(inst: {Texte}) {
+                    Ok(Value::Texte(inst.as_texte()?.to_lowercase()))
+                }
+            },
+            as_module_fonction! {
                 format(inst: {Texte}, args: {Liste(Tout)}) {
                     let inst = inst.as_texte().unwrap();
                     let args = args.as_liste().unwrap();

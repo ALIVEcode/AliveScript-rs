@@ -1256,13 +1256,18 @@ Si c'est intentionnel, utiliser la forme `sinon -> !`",
                 let len_rhs = rhs?;
 
                 if matches!(infix.as_rule(), Rule::Range | Rule::RangeEq) {
+                    let is_range_eq = infix.as_rule() == Rule::RangeEq;
                     let mut inner = infix.into_inner();
                     let step_size = if let Some(step) = inner.next() {
                         Some(Rc::clone(self).parse_top_expr(step)?)
                     } else {
                         None
                     };
-                    self.borrow_mut().code.emit_range(step_size.is_some());
+                    if is_range_eq {
+                        self.borrow_mut().code.emit_range_eq(step_size.is_some());
+                    } else {
+                        self.borrow_mut().code.emit_range(step_size.is_some());
+                    }
                     return Ok(len_lhs + len_rhs + 2 + step_size.unwrap_or(0));
                 }
 

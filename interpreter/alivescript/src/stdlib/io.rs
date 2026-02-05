@@ -15,7 +15,7 @@ use crate::{
         value::{ArcNativeObjet, NativeMethod, NativeObjet, Type},
     },
     runtime::err::RuntimeError,
-    stdlib::{path::ASPath, LazyModule},
+    stdlib::{LazyModule, path::ASPath},
     unpack, unpack_native,
 };
 
@@ -259,6 +259,40 @@ as_module! {
                     };
 
                     Ok(Value::Texte(s))
+                }
+            },
+            as_module_fonction! {
+                lireFichier(filename: {Texte | "Chemin.Chemin"}): Type::Texte => {
+                    unpack_native!(filename: &ASPath = filename => {
+                        filename.0.clone()
+                    } else {
+                        PathBuf::from(filename.as_texte()?)
+                    });
+
+                    let filename = &filename.display().to_string();
+
+                    let s = std::fs::read_to_string(filename).map_err(|err| RuntimeError::generic_err(format!(
+                            "Erreur lors de la lecture du fichier:\n{}", err
+                    )))?;
+
+                    Ok(Value::Texte(s))
+                }
+            },
+            as_module_fonction! {
+                écrireFichier(filename: {Texte | "Chemin.Chemin"}, contenu: {Texte}): Type::Texte => {
+                    unpack_native!(filename: &ASPath = filename => {
+                        filename.0.clone()
+                    } else {
+                        PathBuf::from(filename.as_texte()?)
+                    });
+
+                    let filename = &filename.display().to_string();
+
+                    std::fs::write(filename, contenu.as_texte()?).map_err(|err| RuntimeError::generic_err(format!(
+                            "Erreur lors de la lecture du fichier:\n{}", err
+                    )))?;
+
+                    Ok(Value::Nul)
                 }
             },
             as_module_fonction! {
