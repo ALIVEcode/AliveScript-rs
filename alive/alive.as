@@ -140,7 +140,7 @@ fonction gérerDepUrl(dep: dict)
     [out, err] = p.execAvecSortie()
     si err alors écrire err
     si out alors 
-      afficher out.diviser("\n").map(fn(ln): "  " + ln).joindre("\n")
+      afficher out.diviser("\n").map(fn(ln) = "  " + ln).joindre("\n")
     fin si
     
   sinon
