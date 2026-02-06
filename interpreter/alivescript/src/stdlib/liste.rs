@@ -41,6 +41,42 @@ as_module! {
                 }
             },
             as_module_fonction! {
+                insérer(inst: {Liste(Tout)}, index: {Entier}, val: {Tout}): Type::Nul => {
+                    unpack!(Value::Liste(lst) = inst);
+
+                    let mut index = index.as_entier()?;
+                    if index < 0 {
+                        index = lst.read().unwrap().len() as i64 - index;
+                    }
+
+                    if index < 0 || index >= lst.read().unwrap().len() as i64 {
+                        return Err(RuntimeError::generic_err("Index invalide"));
+                    }
+
+                    lst.write().unwrap().insert(index as usize, val.clone());
+
+                    Ok(Value::Nul)
+                }
+            },
+            as_module_fonction! {
+                retirer(inst: {Liste(Tout)}, index: {Entier} => Value::Entier(-1)): Type::Nul => {
+                    unpack!(Value::Liste(lst) = inst);
+
+                    let mut index = index.as_entier()?;
+                    if index < 0 {
+                        index = lst.read().unwrap().len() as i64 - index;
+                    }
+
+                    if index < 0 || index >= lst.read().unwrap().len() as i64 {
+                        return Err(RuntimeError::generic_err("Index invalide"));
+                    }
+
+                    lst.write().unwrap().remove(index as usize);
+
+                    Ok(Value::Nul)
+                }
+            },
+            as_module_fonction! {
                 joindre(inst: {Liste(Texte)}, sep: {Texte} => Value::Texte(String::from(" "))) {
                     unpack!(Value::Liste(lst) = inst);
 

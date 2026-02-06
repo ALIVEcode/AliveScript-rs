@@ -371,7 +371,7 @@ afficher label_carre(4)  # "Résultat : 16"
 ```alivescript
 # Création de listes
 var nombres = [1, 2, 3, 4, 5]
-var vide = []
+var listeVide = []
 var mixte = [1, "deux", 3.0, vrai]
 
 # Accès aux éléments
@@ -385,7 +385,7 @@ nombres[0] = 10
 nombres.ajouter(6)
 nombres.insérer(0, 0)
 var element = nombres.retirer()
-var taille = nombres.longueur()
+var taille = nombres.taille()
 ```
 
 ### Dictionnaires
@@ -526,8 +526,8 @@ Test.affirmer(vrai, "Ceci devrait être vrai")
 Test.affirmerÉgaux(2 + 2, 4, "L'addition échoue")
 
 # Tests complexes
-var liste = [1, 2, 3]
-Test.affirmerÉgaux(liste.longueur(), 3, "Longueur incorrecte")
+var lst = [1, 2, 3]
+Test.affirmerÉgaux(lst.taille(), 3, "Longueur incorrecte")
 ```
 
 ## Syntaxe avancée
